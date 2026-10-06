@@ -2925,16 +2925,29 @@ impl Root {
         let work = cx.background_spawn(async move {
             let session = Session::new(settings.clone());
             if settings.offline_mode {
-                return session
+                let cached = session
                     .cached_track(&work_track.id)
-                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"));
+                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"))?;
+                let gain = if settings.normalize_volume {
+                    sodam_core::loudness::analyze_gain(&cached.path).unwrap_or(1.0)
+                } else {
+                    1.0
+                };
+                return Ok((cached, gain));
             }
 
             // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
             let mut last_err = None;
             for attempt in 1..=3 {
                 match session.download_to_cache(&work_track) {
-                    Ok(cached) => return Ok(cached),
+                    Ok(cached) => {
+                        let gain = if settings.normalize_volume {
+                            sodam_core::loudness::analyze_gain(&cached.path).unwrap_or(1.0)
+                        } else {
+                            1.0
+                        };
+                        return Ok((cached, gain));
+                    }
                     Err(err) => {
                         if std::env::var("SODAM_PLAYER_LOG").is_ok() {
                             eprintln!("[player] 第 {attempt} 次拉流失败：{err}");
@@ -2964,9 +2977,23 @@ impl Root {
                     return;
                 }
                 match result {
-                    Ok(cached) => {
+                    Ok((cached, gain)) => {
+                        root.engine.set_transition(
+                            root.settings.gapless_playback,
+                            root.settings.crossfade_seconds,
+                        );
+                        root.engine.set_gain(gain);
                         root.engine
                             .load(track.clone(), cached.path.clone(), cached.quality);
+                        let _ = sodam_core::local_library::record(&track);
+                        if root.settings.system_notifications {
+                            let cover = root.cover_of(&track.cover);
+                            crate::system_audio::notify_track(
+                                &track.title,
+                                &track.artist,
+                                cover.as_deref(),
+                            );
+                        }
                         Arc::make_mut(&mut root.cached_ids).insert(track.id.clone());
 
                         let restore_seek = root.restore_seek_seconds.take();

@@ -162,6 +162,28 @@ impl Queue {
         Some(removed)
     }
 
+    /// 拖拽重排队列。当前曲目本身不能拖动，但其他曲目可以跨过它；
+    /// 重排后通过曲目 id 重新定位当前下标，保证引擎正在播的歌曲不变。
+    pub fn move_track(&mut self, from: usize, to: usize) -> bool {
+        if from >= self.tracks.len()
+            || to >= self.tracks.len()
+            || from == to
+            || from == self.index
+        {
+            return false;
+        }
+        let current_id = self.current().map(|track| track.id.clone());
+        let item = self.tracks.remove(from);
+        self.tracks.insert(to, item);
+        if let Some(current_id) = current_id {
+            if let Some(index) = self.tracks.iter().position(|track| track.id == current_id) {
+                self.index = index;
+            }
+        }
+        self.bump();
+        true
+    }
+
     /// 把一批曲目插到当前曲目的后面（歌单右键「下一首播放」）。
     ///
     /// 队列为空时等价于从这批曲目的第一首开始播放；否则保持当前曲目不变。
@@ -268,6 +290,25 @@ mod tests {
                 ..Default::default()
             })
             .collect()
+    }
+
+    #[test]
+    fn moving_upcoming_track_keeps_current_song() {
+        let tracks = (0..4)
+            .map(|index| TrackItem {
+                id: index.to_string(),
+                title: index.to_string(),
+                ..Default::default()
+            })
+            .collect();
+        let mut queue = Queue::new(tracks);
+        queue.jump(1);
+        assert!(queue.move_track(3, 1));
+        assert_eq!(queue.current().map(|track| track.id.as_str()), Some("1"));
+        assert_eq!(
+            queue.tracks().iter().map(|track| track.id.as_str()).collect::<Vec<_>>(),
+            vec!["0", "3", "1", "2"]
+        );
     }
 
     #[test]

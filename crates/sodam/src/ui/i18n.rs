@@ -101,6 +101,10 @@ impl Language {
             "打开目录" => "Open Folder",
             "恢复默认" => "Restore Default",
             "下载目录已更新" => "Download folder updated",
+            "下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量" => {
+                "The download folder is overridden by SODAM_DOWNLOAD_DIR; unset it before changing this setting"
+            }
+
             "下载目录已恢复默认" => "Download folder restored to default",
             "更改下载目录失败：{err}" => "Failed to change download folder: {err}",
             "恢复默认下载目录失败：{err}" => "Failed to restore default download folder: {err}",

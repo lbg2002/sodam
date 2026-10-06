@@ -109,7 +109,6 @@ fn settings_heading(title: &str, description: &str) -> AnyElement {
         .into_any_element()
 }
 
-
 fn toggle_setting_row(
     id: &'static str,
     title: &str,

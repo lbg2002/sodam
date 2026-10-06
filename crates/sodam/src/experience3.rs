@@ -255,6 +255,7 @@ impl Root {
         if tracks.is_empty() {
             return;
         }
+        self.queue_origin = crate::app::QueueOrigin::LocalPlaylist(id.to_string());
         self.play_from_arc(tracks, 0, cx);
     }
 

@@ -724,7 +724,7 @@ impl Root {
                 cx.background_executor()
                     .timer(std::time::Duration::from_millis(650))
                     .await;
-                let _ = this.update(cx, |root, cx| {
+                this.update(cx, |root, cx| {
                     if !root.settings.cookie.trim().is_empty() {
                         root.load_liked_ids(cx);
                     }

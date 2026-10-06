@@ -316,7 +316,9 @@ impl Root {
 
     pub fn choose_download_directory(&mut self, cx: &mut Context<Self>) {
         if !self.download_inflight.is_empty() {
-            self.status = self.tr("有下载任务正在处理，请稍后更改下载目录").to_string();
+            self.status = self
+                .tr("有下载任务正在处理，请稍后更改下载目录")
+                .to_string();
             cx.notify();
             return;
         }
@@ -350,8 +352,7 @@ impl Root {
                     }
                     Ok(None) => {}
                     Err(err) => {
-                        root.status =
-                            root.localized("更改下载目录失败：{err}", &[err.to_string()]);
+                        root.status = root.localized("更改下载目录失败：{err}", &[err.to_string()]);
                     }
                 }
                 cx.notify();
@@ -362,7 +363,9 @@ impl Root {
 
     pub fn reset_download_directory(&mut self, cx: &mut Context<Self>) {
         if !self.download_inflight.is_empty() {
-            self.status = self.tr("有下载任务正在处理，请稍后更改下载目录").to_string();
+            self.status = self
+                .tr("有下载任务正在处理，请稍后更改下载目录")
+                .to_string();
             cx.notify();
             return;
         }
@@ -2336,17 +2339,14 @@ impl Root {
                 self.status = self.tr("已清空最近播放").to_string();
             }
             Err(err) => {
-                self.status =
-                    self.localized("清空最近播放失败：{err}", &[err.to_string()]);
+                self.status = self.localized("清空最近播放失败：{err}", &[err.to_string()]);
             }
         }
         cx.notify();
     }
 
     fn record_recent_play(&mut self, track: TrackItem, cx: &mut Context<Self>) {
-        let work = cx.background_spawn(async move {
-            sodam_core::history::record_track(&track)
-        });
+        let work = cx.background_spawn(async move { sodam_core::history::record_track(&track) });
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |root, cx| {
@@ -2834,7 +2834,6 @@ fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<P
         let _ = initial;
         anyhow::bail!("Windows 目录选择暂未接入")
     }
-
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {

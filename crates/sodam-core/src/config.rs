@@ -20,7 +20,6 @@ pub struct Settings {
     /// 播放音质偏好：`best` / `lossless` / `highest` / `medium` / `low`。
     pub quality: String,
     /// 下载音质：`follow` / `lossless` / `highest` / `medium` / `low`。
-    /// `follow` 表示跟随播放音质设置。
     pub download_quality: String,
     /// 下载格式：`source` / `mp3` / `flac`。
     pub download_format: String,
@@ -34,23 +33,57 @@ pub struct Settings {
     pub lyrics_offset_ms: i64,
     /// 智能预加载前方曲目数；0 = 关闭。固定模式使用。
     pub prefetch_count: usize,
-    /// 是否启用自适应预加载；启用后按“至少若干首 + 至少若干分钟”动态扩展。
+    /// 是否启用自适应预加载。
     pub prefetch_adaptive: bool,
     /// 自适应预加载目标时长（分钟）。
     pub prefetch_minutes: u32,
-    /// 离线模式：只播放当前音质档位已有的本地缓存，不发起音频网络请求。
+    /// 离线模式：只播放当前音质档位已有的本地缓存。
     pub offline_mode: bool,
     /// 播放缓存上限（GB）；0 = 不限制。
     pub cache_limit_gb: u64,
+    /// 切歌系统通知。
+    pub system_notifications: bool,
+    /// 音频输出设备名；空 = 系统默认。
+    pub audio_output_device: String,
+    /// 自动响度标准化（ReplayGain-style / AGC）。
+    pub normalize_volume: bool,
+    /// 无缝衔接：提前准备下一首并尽量缩短曲目边界空白。
+    pub gapless_playback: bool,
+    /// Crossfade 时长（秒）；0 = 关闭。
+    pub crossfade_seconds: u32,
+    /// 启动时延迟加载非首屏内容。
+    pub lazy_startup: bool,
+    /// 播放栏低于该宽度时折叠次要功能。
+    pub player_bar_compact_width: u32,
+    /// 桌面歌词：单行模式。
+    pub desktop_lyrics_single_line: bool,
+    /// 桌面歌词：始终置顶。
+    pub desktop_lyrics_always_on_top: bool,
+    /// 桌面歌词：锁定位置。
+    pub desktop_lyrics_locked: bool,
+    /// 桌面歌词：鼠标穿透（Linux 下由窗口后端能力决定）。
+    pub desktop_lyrics_click_through: bool,
+    /// 桌面歌词背景透明度 0~100。
+    pub desktop_lyrics_opacity: u8,
+    /// 桌面歌词对齐：left / center / right。
+    pub desktop_lyrics_align: String,
+    /// 迷你播放器记忆窗口坐标/尺寸；0 表示使用默认。
+    pub mini_x: f32,
+    pub mini_y: f32,
+    pub mini_w: f32,
+    pub mini_h: f32,
+    /// 桌面歌词窗口记忆坐标/尺寸；0 表示使用默认。
+    pub desktop_lyrics_x: f32,
+    pub desktop_lyrics_y: f32,
+    pub desktop_lyrics_w: f32,
+    pub desktop_lyrics_h: f32,
     /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
     pub language: String,
 }
 
-/// 项目自建的签名服务（sodahub-org 部署）：开箱即用，可在设置里改成别的实例。
 pub const DEFAULT_SIGNER_URL: &str = "http://222.186.10.201:8921/sign";
-/// 上面那台服务的 token（等同取流能力，别外传；换服务时在设置里替换）。
 pub const DEFAULT_SIGNER_TOKEN: &str = "05f8089b8c5f60c63f2a6dcfe1028d28ee2725a504f3e59b";
 
 impl Default for Settings {
@@ -62,7 +95,6 @@ impl Default for Settings {
             device_id: String::new(),
             iid: String::new(),
             fp: String::new(),
-            // 空 = 自动：登录后按账号 VIP 情况挑能用的最高档（见 Session::refresh_quality）
             quality: String::new(),
             download_quality: "follow".to_string(),
             download_format: "source".to_string(),
@@ -75,6 +107,27 @@ impl Default for Settings {
             prefetch_minutes: 12,
             offline_mode: false,
             cache_limit_gb: 3,
+            system_notifications: true,
+            audio_output_device: String::new(),
+            normalize_volume: false,
+            gapless_playback: true,
+            crossfade_seconds: 0,
+            lazy_startup: true,
+            player_bar_compact_width: 900,
+            desktop_lyrics_single_line: false,
+            desktop_lyrics_always_on_top: true,
+            desktop_lyrics_locked: false,
+            desktop_lyrics_click_through: false,
+            desktop_lyrics_opacity: 86,
+            desktop_lyrics_align: "center".to_string(),
+            mini_x: 0.0,
+            mini_y: 0.0,
+            mini_w: 420.0,
+            mini_h: 148.0,
+            desktop_lyrics_x: 0.0,
+            desktop_lyrics_y: 0.0,
+            desktop_lyrics_w: 760.0,
+            desktop_lyrics_h: 150.0,
             theme: String::new(),
             language: String::new(),
         }
@@ -89,7 +142,6 @@ impl Settings {
             .join("config.json")
     }
 
-    /// 读配置；文件不存在时返回默认值（不报错）。
     pub fn load() -> Self {
         Self::load_from(&Self::config_path())
     }
@@ -101,7 +153,6 @@ impl Settings {
             .unwrap_or_default()
     }
 
-    /// 写配置（自动建目录）。
     pub fn save(&self) -> anyhow::Result<()> {
         self.save_to(&Self::config_path())
     }
@@ -114,13 +165,10 @@ impl Settings {
         Ok(())
     }
 
-    /// 是否已经具备"能放 VIP 整曲"的条件（cookie + 签名服务）。
     pub fn is_ready_for_vip(&self) -> bool {
         !self.cookie.trim().is_empty() && !self.signer_url.trim().is_empty()
     }
 
-    /// 用环境变量补全空字段（`SODA_COOKIE` / `QISHUI_SIGNER_URL` / `QISHUI_SIGNER_TOKEN`…），
-    /// 便于先用 shell 跑起来，再逐步落到配置文件。
     pub fn merged_with_env(mut self) -> Self {
         let pairs = [
             ("SODA_COOKIE", &mut self.cookie),
@@ -133,6 +181,7 @@ impl Settings {
             ("SODAM_DOWNLOAD_QUALITY", &mut self.download_quality),
             ("SODAM_DOWNLOAD_FORMAT", &mut self.download_format),
             ("SODAM_DOWNLOAD_DIR", &mut self.download_dir),
+            ("SODAM_AUDIO_DEVICE", &mut self.audio_output_device),
         ];
         for (key, slot) in pairs {
             if slot.trim().is_empty() {
@@ -175,6 +224,12 @@ mod tests {
         assert_eq!(loaded.prefetch_minutes, 12);
         assert!(!loaded.offline_mode);
         assert_eq!(loaded.cache_limit_gb, 3);
+        assert!(loaded.system_notifications);
+        assert!(loaded.gapless_playback);
+        assert_eq!(loaded.crossfade_seconds, 0);
+        assert!(loaded.lazy_startup);
+        assert_eq!(loaded.player_bar_compact_width, 900);
+        assert_eq!(loaded.desktop_lyrics_opacity, 86);
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
         assert!(loaded.download_dir.is_empty());
@@ -209,6 +264,11 @@ mod tests {
         assert_eq!(loaded.prefetch_minutes, 12);
         assert!(!loaded.offline_mode);
         assert_eq!(loaded.cache_limit_gb, 3);
+        assert!(loaded.system_notifications);
+        assert!(loaded.gapless_playback);
+        assert_eq!(loaded.crossfade_seconds, 0);
+        assert_eq!(loaded.audio_output_device, "");
+        assert!(!loaded.normalize_volume);
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());
         assert!(loaded.is_ready_for_vip());

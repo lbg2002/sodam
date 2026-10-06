@@ -29,6 +29,9 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
 
     let liked = root.liked_ids.contains(&track.id);
     let active = root.lyrics_active;
+    let lyric_font_size = root.settings.lyrics_font_size.clamp(14, 30) as f32;
+    let lyric_line_height = root.settings.lyrics_line_height.clamp(24, 52) as f32;
+    let lyric_row_height = (lyric_line_height * 2.0).max(lyric_font_size + 28.0);
     let lines = root.lyrics.clone();
     let list = if root.lyrics.is_empty() {
         None
@@ -41,7 +44,7 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                     range
                         .map(|index| {
                             let Some(line) = lines.get(index) else {
-                                return div().h(px(64.0)).into_any_element();
+                                return div().h(px(lyric_row_height)).into_any_element();
                             };
                             let is_active = active == Some(index);
                             let color = if is_active {
@@ -54,9 +57,9 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                                 .flex()
                                 .flex_wrap()
                                 .items_center()
-                                .h(px(64.0))
-                                .text_size(theme::Text::Large.size())
-                                .line_height(px(32.0))
+                                .h(px(lyric_row_height))
+                                .text_size(px(lyric_font_size))
+                                .line_height(px(lyric_line_height))
                                 .text_color(color)
                                 .when(is_active, |this| this.font_weight(gpui::FontWeight::BOLD))
                                 .child(line.text.clone())

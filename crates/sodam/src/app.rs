@@ -647,6 +647,7 @@ impl Root {
         }
         root.refresh_downloads(cx);
         root.refresh_audio_cache_index(cx);
+        root.trim_cache_if_needed(cx);
         Self::start_heartbeat(cx);
 
         // 开发验证用：`SODAM_AUTOPLAY=1` 进收藏页并自动播放第一首；

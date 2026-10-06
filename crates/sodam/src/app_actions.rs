@@ -195,6 +195,7 @@ impl Root {
                 root.prefetch_patrol = root.prefetch_patrol.wrapping_add(1);
                 if root.prefetch_patrol % 25 == 0 {
                     root.spawn_prefetch(cx);
+                    root.process_pending_downloads(cx);
                 }
                 root.load_more_recommendation(cx);
             });
@@ -1270,6 +1271,190 @@ impl Root {
         }
     }
 
+    /// 后台读取下载索引；渲染线程只读快照，不同步扫盘。
+    pub fn refresh_downloads(&mut self, cx: &mut Context<Self>) {
+        if self.downloads_loading {
+            return;
+        }
+        self.downloads_loading = true;
+        let work = cx.background_spawn(async { sodam_core::downloads::list_downloads() });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.downloads_loading = false;
+                match result {
+                    Ok(items) => {
+                        root.downloaded_ids = Arc::new(
+                            items.iter().map(|item| item.track_id.clone()).collect(),
+                        );
+                        root.downloads = Arc::new(items);
+                    }
+                    Err(err) => {
+                        root.status =
+                            root.localized("读取下载列表失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// 单曲下载按钮：已有播放缓存立即导出，否则进入“待下载”队列。
+    pub fn toggle_download(&mut self, track: TrackItem, cx: &mut Context<Self>) {
+        if self.downloaded_ids.contains(&track.id) {
+            self.status = self.localized("已下载：{}", std::slice::from_ref(&track.title));
+            cx.notify();
+            return;
+        }
+        if self.pending_downloads.remove(&track.id).is_some() {
+            self.status =
+                self.localized("已取消待下载：{}", std::slice::from_ref(&track.title));
+            cx.notify();
+            return;
+        }
+        if self.download_inflight.contains(&track.id) {
+            return;
+        }
+
+        self.download_inflight.insert(track.id.clone());
+        let quality = self.settings.quality.clone();
+        let work_track = track.clone();
+        let work = cx.background_spawn(async move {
+            sodam_core::downloads::export_cached_track(&work_track, &quality)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.download_inflight.remove(&track.id);
+                match result {
+                    Ok(Some(item)) => {
+                        root.pending_downloads.remove(&track.id);
+                        let mut items = root.downloads.as_ref().clone();
+                        items.retain(|old| old.track_id != item.track_id);
+                        items.insert(0, item.clone());
+                        root.downloads = Arc::new(items);
+                        Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
+                        root.status =
+                            root.localized("已下载：{}", std::slice::from_ref(&track.title));
+                    }
+                    Ok(None) => {
+                        root.pending_downloads
+                            .insert(track.id.clone(), track.clone());
+                        root.status = root.localized(
+                            "已加入待下载：{}；正常播放产生缓存后会自动保存",
+                            std::slice::from_ref(&track.title),
+                        );
+                    }
+                    Err(err) => {
+                        root.status = root.localized(
+                            "下载失败：{err}",
+                            &[err.to_string()],
+                        );
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// 定期尝试待下载项。这里只看本地播放缓存，不会主动触发取流或播放。
+    pub(crate) fn process_pending_downloads(&mut self, cx: &mut Context<Self>) {
+        let candidates: Vec<TrackItem> = self
+            .pending_downloads
+            .values()
+            .filter(|track| !self.download_inflight.contains(&track.id))
+            .take(2)
+            .cloned()
+            .collect();
+        if candidates.is_empty() {
+            return;
+        }
+
+        for track in candidates {
+            self.download_inflight.insert(track.id.clone());
+            let quality = self.settings.quality.clone();
+            let work_track = track.clone();
+            let work = cx.background_spawn(async move {
+                sodam_core::downloads::export_cached_track(&work_track, &quality)
+            });
+            cx.spawn(async move |this, cx| {
+                let result = work.await;
+                let _ = this.update(cx, |root, cx| {
+                    root.download_inflight.remove(&track.id);
+                    match result {
+                        Ok(Some(item)) => {
+                            root.pending_downloads.remove(&track.id);
+                            let mut items = root.downloads.as_ref().clone();
+                            items.retain(|old| old.track_id != item.track_id);
+                            items.insert(0, item.clone());
+                            root.downloads = Arc::new(items);
+                            Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
+                            root.status = root.localized(
+                                "待下载已完成：{}",
+                                std::slice::from_ref(&track.title),
+                            );
+                            cx.notify();
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            root.status =
+                                root.localized("下载失败：{err}", &[err.to_string()]);
+                            cx.notify();
+                        }
+                    }
+                });
+            })
+            .detach();
+        }
+    }
+
+    pub fn delete_download(
+        &mut self,
+        track_id: String,
+        title: String,
+        cx: &mut Context<Self>,
+    ) {
+        let id_for_work = track_id.clone();
+        let work = cx.background_spawn(async move {
+            sodam_core::downloads::delete_download(&id_for_work)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                match result {
+                    Ok(_) => {
+                        let mut items = root.downloads.as_ref().clone();
+                        items.retain(|item| item.track_id != track_id);
+                        root.downloads = Arc::new(items);
+                        Arc::make_mut(&mut root.downloaded_ids).remove(&track_id);
+                        root.status =
+                            root.localized("已删除下载：{}", std::slice::from_ref(&title));
+                    }
+                    Err(err) => {
+                        root.status = root.localized(
+                            "删除下载失败：{err}",
+                            &[err.to_string()],
+                        );
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn open_download_folder(&mut self, cx: &mut Context<Self>) {
+        let path = sodam_core::downloads::download_dir();
+        let _ = sodam_core::downloads::ensure_download_dir();
+        self.status = match system_open(&path.display().to_string()) {
+            Ok(_) => self.tr("已打开下载目录").to_string(),
+            Err(err) => self.localized("打开下载目录失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
     /// 统一页面切换：保留返回栈，详情页使用通用返回组件。
     pub(crate) fn set_nav(&mut self, nav: Nav, cx: &mut Context<Self>) {
         if self.nav == nav {
@@ -1282,6 +1467,9 @@ impl Root {
         self.nav = nav;
         if matches!(nav, Nav::Settings) {
             self.refresh_cache_stats(cx);
+        }
+        if matches!(nav, Nav::Downloads) {
+            self.refresh_downloads(cx);
         }
         self.on_nav_changed(cx);
         cx.notify();

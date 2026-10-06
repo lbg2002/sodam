@@ -34,10 +34,7 @@ impl Root {
         let work = cx.background_spawn(async move {
             if settings.offline_mode {
                 let tracks = if matches!(scope, SearchScope::All | SearchScope::Tracks) {
-                    sodam_core::local_library::tracks()
-                        .into_iter()
-                        .filter(|track| crate::experience3::fuzzy_matches(track, &work_keyword))
-                        .collect()
+                    sodam_core::local_library::search_tracks(&work_keyword)
                 } else {
                     Vec::new()
                 };
@@ -62,7 +59,14 @@ impl Root {
                                 results.total_count().to_string(),
                             ],
                         );
-                        root.results = Arc::new(results.all_tracks());
+                        let all_tracks = results.all_tracks();
+                        if !root.settings.offline_mode {
+                            let _ = sodam_core::local_library::record_many_with_alias(
+                                &all_tracks,
+                                Some(&results.keyword),
+                            );
+                        }
+                        root.results = Arc::new(all_tracks);
                         root.search_results = results;
                         let covers: Vec<String> = root
                             .search_results

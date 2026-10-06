@@ -775,7 +775,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     div()
                         .text_size(theme::Text::Tiny.size())
                         .text_color(theme::text_faint())
-                        .child(root.tr("开启后只播放当前音质档位已经缓存的歌曲，不发起音频网络请求")),
+                        .child(
+                            root.tr("开启后只播放当前音质档位已经缓存的歌曲，不发起音频网络请求"),
+                        ),
                 ),
         )
         .child(
@@ -1108,7 +1110,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 )
                 .child(settings_heading(
                     root.tr("智能预加载"),
-                    root.tr("播放开始后后台逐步缓存后续歌曲；自适应模式按未来播放时长动态决定缓存深度"),
+                    root.tr(
+                        "播放开始后后台逐步缓存后续歌曲；自适应模式按未来播放时长动态决定缓存深度",
+                    ),
                 ))
                 .child(adaptive_toggle)
                 .when(root.settings.prefetch_adaptive, |this| {

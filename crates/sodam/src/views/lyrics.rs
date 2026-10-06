@@ -30,8 +30,9 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
     let liked = root.liked_ids.contains(&track.id);
     let active = root.lyrics_active;
     let lyric_font_size = root.settings.lyrics_font_size.clamp(14, 30) as f32;
+    let active_font_size = (lyric_font_size + 7.0).min(38.0);
     let lyric_line_height = root.settings.lyrics_line_height.clamp(24, 52) as f32;
-    let lyric_row_height = (lyric_line_height * 2.0).max(lyric_font_size + 28.0);
+    let lyric_row_height = (lyric_line_height * 2.0).max(active_font_size + 32.0);
     let lines = root.lyrics.clone();
     let list = if root.lyrics.is_empty() {
         None
@@ -58,10 +59,19 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                                 .flex_wrap()
                                 .items_center()
                                 .h(px(lyric_row_height))
-                                .text_size(px(lyric_font_size))
+                                .text_size(px(if is_active {
+                                    active_font_size
+                                } else {
+                                    lyric_font_size
+                                }))
                                 .line_height(px(lyric_line_height))
                                 .text_color(color)
-                                .when(is_active, |this| this.font_weight(gpui::FontWeight::BOLD))
+                                .when(is_active, |this| {
+                                    this.font_weight(gpui::FontWeight::BOLD)
+                                        .px(px(theme::space::SM))
+                                        .rounded(px(theme::radius::ROW))
+                                        .bg(theme::accent_soft())
+                                })
                                 .child(line.text.clone())
                                 .into_any_element()
                         })

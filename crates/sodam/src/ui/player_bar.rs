@@ -678,68 +678,67 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .min_w(px(if compact { 150.0 } else { 300.0 }))
                 .flex_shrink(1.0)
                 .when(!compact, |this| {
-                    this
-                        .child(
-                            icon_button(
-                                "offline-toggle",
-                                "cloud-off",
-                                theme::ICON,
-                                if root.settings.offline_mode {
-                                    theme::accent()
-                                } else {
-                                    theme::text_muted()
-                                },
-                            )
-                            .on_click(cx.listener(
-                                |root, _event: &ClickEvent, _window, cx| {
-                                    root.set_offline_mode(!root.settings.offline_mode, cx);
-                                },
-                            )),
+                    this.child(
+                        icon_button(
+                            "offline-toggle",
+                            "cloud-off",
+                            theme::ICON,
+                            if root.settings.offline_mode {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
                         )
-                        .child(
-                            icon_button(
-                                "desktop-lyrics",
-                                "captions",
-                                theme::ICON,
-                                theme::text_muted(),
-                            )
-                            .on_click(cx.listener(
-                                |root, _event: &ClickEvent, _window, cx| {
-                                    root.open_desktop_lyrics(cx);
-                                },
-                            )),
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.set_offline_mode(!root.settings.offline_mode, cx);
+                            },
+                        )),
+                    )
+                    .child(
+                        icon_button(
+                            "desktop-lyrics",
+                            "captions",
+                            theme::ICON,
+                            theme::text_muted(),
                         )
-                        .child(
-                            icon_button(
-                                "mini-player",
-                                "picture-in-picture",
-                                theme::ICON,
-                                theme::text_muted(),
-                            )
-                            .on_click(cx.listener(
-                                |root, _event: &ClickEvent, _window, cx| {
-                                    root.open_mini_player(cx);
-                                },
-                            )),
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.open_desktop_lyrics(cx);
+                            },
+                        )),
+                    )
+                    .child(
+                        icon_button(
+                            "mini-player",
+                            "picture-in-picture",
+                            theme::ICON,
+                            theme::text_muted(),
                         )
-                        .child(
-                            icon_button(
-                                "sleep-timer",
-                                "moon",
-                                theme::ICON,
-                                if root.sleep_deadline.is_some() || root.sleep_after_current {
-                                    theme::accent()
-                                } else {
-                                    theme::text_muted()
-                                },
-                            )
-                            .on_click(cx.listener(
-                                |root, _event: &ClickEvent, _window, cx| {
-                                    root.sleep_menu_open = !root.sleep_menu_open;
-                                    cx.notify();
-                                },
-                            )),
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.open_mini_player(cx);
+                            },
+                        )),
+                    )
+                    .child(
+                        icon_button(
+                            "sleep-timer",
+                            "moon",
+                            theme::ICON,
+                            if root.sleep_deadline.is_some() || root.sleep_after_current {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
                         )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.sleep_menu_open = !root.sleep_menu_open;
+                                cx.notify();
+                            },
+                        )),
+                    )
                 })
                 .when(compact, |this| {
                     this.child(

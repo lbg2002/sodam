@@ -103,6 +103,26 @@ impl Language {
             "浅色" => "Light",
             "深色" => "Dark",
             "主题已切换，但保存失败：{err}" => "Theme switched, but saving failed: {err}",
+            "缓存管理" => "Cache Management",
+            "缓存使用情况" => "Cache Usage",
+            "达到上限后按最近使用顺序自动清理播放缓存；不会删除下载管理里的歌曲" => {
+                "When the limit is reached, old playback cache is removed by recent use; downloaded songs are never deleted."
+            }
+            "适合磁盘空间较小的设备" => "For devices with limited disk space",
+            "3 GB（推荐）" => "3 GB (Recommended)",
+            "兼顾无感切歌与磁盘占用" => "Balanced for seamless switching and disk usage",
+            "适合经常连续听歌，保留更多本地缓存" => {
+                "Keeps more local cache for long listening sessions"
+            }
+            "不限制" => "Unlimited",
+            "不自动清理播放缓存" => "Do not automatically prune playback cache",
+            "播放缓存上限：不限制" => "Playback cache limit: unlimited",
+            "播放缓存上限：{} GB" => "Playback cache limit: {} GB",
+            "缓存设置保存失败：{err}" => "Failed to save cache setting: {err}",
+            "已自动清理 {} 个旧缓存" => "Automatically removed {} old cache items",
+            "已恢复上次播放队列" => "Restored previous playback queue",
+            "已恢复：{}（暂停）" => "Restored: {} (paused)",
+            "已停止" => "Stopped",
             "智能预加载" => "Smart Prefetch",
             "播放开始后后台逐步缓存后续歌曲；任务完成会立即补位，减少切歌等待" => {
                 "Cache upcoming tracks progressively after playback starts and refill immediately to reduce track-switch delays."

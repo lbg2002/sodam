@@ -67,7 +67,7 @@ impl Session {
     /// 只检查「非空文件」会让被截断的半截下载永久冒充有效缓存，
     /// 表现为同一首歌每次都从中间开始/中途跳下一首。
     /// 旧格式 sidecar（只有音质、没记大小）视为 miss：重下一次完成自愈。
-    fn cached_track(&self, track_id: &str) -> Option<CachedTrack> {
+    pub fn cached_track(&self, track_id: &str) -> Option<CachedTrack> {
         let path = crate::audio::cache_dir().join(format!("{track_id}-{}.m4a", self.quality_tag()));
         let actual = std::fs::metadata(&path).ok()?.len();
         if actual == 0 {

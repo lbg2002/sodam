@@ -18,7 +18,7 @@ fn icon_name(nav: Nav) -> &'static str {
         Nav::Liked => "heart",
         Nav::Library => "list-music",
         Nav::LocalMusic => "disc-3",
-        Nav::LocalPlaylists => "folder",
+        Nav::LocalPlaylists => "folder-open",
         Nav::Recent => "history",
         Nav::Downloads => "download",
         Nav::Artist | Nav::Album => "search",

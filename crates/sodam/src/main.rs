@@ -155,6 +155,13 @@ fn start_mpris_service(
                             cx.notify();
                         })
                     }),
+                    mpris::MprisCommand::SeekAbsolute(position) => cx.update(|cx| {
+                        app.update(cx, |root, cx| {
+                            root.engine.seek(position.max(0) as f64 / 1_000_000.0);
+                            root.persist_playback_state(cx);
+                            cx.notify();
+                        })
+                    }),
                     mpris::MprisCommand::SetVolume(volume) => cx.update(|cx| {
                         app.update(cx, |root, cx| {
                             root.set_volume(volume.clamp(0.0, 1.0) as f32);

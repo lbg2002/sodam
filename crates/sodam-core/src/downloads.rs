@@ -3,11 +3,11 @@
 //! 这里不发起新的汽水取流请求，也不处理平台权限；播放缓存不存在时返回 `Ok(None)`，
 //! 由 UI 保持“待下载”状态，等正常播放产生缓存后再重试。
 
-use crate::{audio, models::TrackItem};
+use crate::{audio, config::Settings, models::TrackItem};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -32,14 +32,28 @@ struct CachedAsset {
     bytes: u64,
 }
 
-pub fn download_dir() -> PathBuf {
-    if let Some(path) = std::env::var_os("SODAM_DOWNLOAD_DIR") {
-        return PathBuf::from(path);
-    }
+pub fn default_download_dir() -> PathBuf {
     dirs::audio_dir()
         .map(|path| path.join("SodaM Downloads"))
         .or_else(|| dirs::home_dir().map(|path| path.join("Music").join("SodaM Downloads")))
         .unwrap_or_else(|| PathBuf::from("SodaM Downloads"))
+}
+
+pub fn download_dir_for(configured: &str) -> PathBuf {
+    if let Some(path) = std::env::var_os("SODAM_DOWNLOAD_DIR") {
+        return PathBuf::from(path);
+    }
+    let configured = configured.trim();
+    if configured.is_empty() {
+        default_download_dir()
+    } else {
+        PathBuf::from(configured)
+    }
+}
+
+pub fn download_dir() -> PathBuf {
+    let settings = Settings::load();
+    download_dir_for(&settings.download_dir)
 }
 
 fn metadata_dir() -> PathBuf {
@@ -129,6 +143,7 @@ pub fn export_cached_track(
     track: &TrackItem,
     quality_preference: &str,
     output_format: &str,
+    cover_path: Option<&Path>,
 ) -> Result<Option<DownloadedTrack>> {
     let assets = find_cached_assets(&track.id)?;
     let Some(asset) = pick_asset(&assets, quality_preference) else {
@@ -167,12 +182,7 @@ pub fn export_cached_track(
     let output = dir.join(format!("{stem}.{extension}"));
     let part = dir.join(format!(".{stem}.{}.tmp.{extension}", std::process::id()));
 
-    if format == "source" {
-        fs::copy(&asset.path, &part)
-            .with_context(|| format!("复制播放缓存失败：{}", asset.path.display()))?;
-    } else {
-        transcode_cached_asset(&asset.path, &part, format)?;
-    }
+    write_audio_output(&asset.path, &part, format, track, cover_path)?;
 
     let written = fs::metadata(&part).map(|meta| meta.len()).unwrap_or(0);
     if written == 0 {
@@ -204,51 +214,201 @@ pub fn export_cached_track(
     Ok(Some(item))
 }
 
-fn transcode_cached_asset(
-    input: &std::path::Path,
-    output: &std::path::Path,
+fn write_audio_output(
+    input: &Path,
+    output: &Path,
     format: &str,
+    track: &TrackItem,
+    cover_path: Option<&Path>,
 ) -> Result<()> {
-    let mut command = Command::new("ffmpeg");
-    command
-        .arg("-hide_banner")
-        .arg("-loglevel")
-        .arg("error")
-        .arg("-y")
-        .arg("-i")
-        .arg(input)
-        .arg("-vn");
-
-    match format {
-        "mp3" => {
-            command
-                .arg("-codec:a")
-                .arg("libmp3lame")
-                .arg("-q:a")
-                .arg("0");
+    if format == "source" {
+        // 原始格式优先用 ffmpeg 无损 remux 写入 Tag；系统没有 ffmpeg 或容器不接受
+        // 封面时自动退回纯复制，保证“原始格式”始终可用。
+        if ffmpeg_export(input, output, format, track, cover_path).is_ok() {
+            return Ok(());
         }
-        "flac" => {
-            command.arg("-codec:a").arg("flac");
-        }
-        other => anyhow::bail!("不支持的转码格式：{other}"),
+        let _ = fs::remove_file(output);
+        fs::copy(input, output)
+            .with_context(|| format!("复制播放缓存失败：{}", input.display()))?;
+        return Ok(());
     }
 
-    let result = command.arg(output).output().map_err(|err| {
-        anyhow::anyhow!("无法启动 ffmpeg：{err}。请先安装 ffmpeg，或把下载格式改为原始格式")
-    })?;
-    if !result.status.success() {
+    ffmpeg_export(input, output, format, track, cover_path)
+}
+
+fn ffmpeg_export(
+    input: &Path,
+    output: &Path,
+    format: &str,
+    track: &TrackItem,
+    cover_path: Option<&Path>,
+) -> Result<()> {
+    let attempt = |cover: Option<&Path>| -> Result<()> {
+        let mut command = Command::new("ffmpeg");
+        command
+            .arg("-hide_banner")
+            .arg("-loglevel")
+            .arg("error")
+            .arg("-y")
+            .arg("-i")
+            .arg(input);
+
+        if let Some(path) = cover {
+            command.arg("-i").arg(path);
+        }
+
+        command.arg("-map").arg("0:a:0");
+        if cover.is_some() {
+            command.arg("-map").arg("1:v:0");
+        }
+
+        match format {
+            "source" => {
+                command.arg("-codec:a").arg("copy");
+            }
+            "mp3" => {
+                command
+                    .arg("-codec:a")
+                    .arg("libmp3lame")
+                    .arg("-q:a")
+                    .arg("0")
+                    .arg("-id3v2_version")
+                    .arg("3");
+            }
+            "flac" => {
+                command.arg("-codec:a").arg("flac");
+            }
+            other => anyhow::bail!("不支持的转码格式：{other}"),
+        }
+
+        if cover.is_some() {
+            command
+                .arg("-codec:v")
+                .arg("copy")
+                .arg("-disposition:v:0")
+                .arg("attached_pic")
+                .arg("-metadata:s:v")
+                .arg("title=Album cover")
+                .arg("-metadata:s:v")
+                .arg("comment=Cover (front)");
+        }
+
+        command
+            .arg("-metadata")
+            .arg(format!("title={}", track.title))
+            .arg("-metadata")
+            .arg(format!("artist={}", track.artist))
+            .arg("-metadata")
+            .arg(format!("album={}", track.album));
+
+        let result = command.arg(output).output().map_err(|err| {
+            anyhow::anyhow!(
+                "无法启动 ffmpeg：{err}。MP3/FLAC 下载需要安装 ffmpeg"
+            )
+        })?;
+        if result.status.success() {
+            return Ok(());
+        }
         let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
         let _ = fs::remove_file(output);
         anyhow::bail!(
-            "ffmpeg 转码失败{}",
+            "ffmpeg 导出失败{}",
             if stderr.is_empty() {
                 String::new()
             } else {
                 format!("：{stderr}")
             }
-        );
+        )
+    };
+
+    if cover_path.is_some() {
+        if attempt(cover_path).is_ok() {
+            return Ok(());
+        }
+        // 个别容器/封面编码不接受 attached_pic；保留文本 Tag 再试一次。
+        return attempt(None);
+    }
+    attempt(None)
+}
+
+pub fn relocate_download_dir(old_dir: &Path, new_dir: &Path) -> Result<()> {
+    if old_dir == new_dir {
+        fs::create_dir_all(new_dir).context("创建下载目录失败")?;
+        return Ok(());
+    }
+    fs::create_dir_all(new_dir).context("创建新的下载目录失败")?;
+    if !old_dir.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(old_dir).context("读取旧下载目录失败")? {
+        let entry = entry?;
+        let source = entry.path();
+        let target = new_dir.join(entry.file_name());
+        if source.is_dir() {
+            copy_dir_recursive(&source, &target)?;
+            fs::remove_dir_all(&source).ok();
+        } else {
+            move_file_cross_device(&source, &target)?;
+        }
+    }
+    fs::remove_dir(old_dir).ok();
+
+    // 下载索引保存的是绝对路径；搬家后同步重写。
+    let meta_dir = new_dir.join(".sodam");
+    if let Ok(entries) = fs::read_dir(&meta_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("json")
+                || path.file_name().and_then(|name| name.to_str()) == Some("pending.json")
+            {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(&path) else {
+                continue;
+            };
+            let Ok(mut item) = serde_json::from_str::<DownloadedTrack>(&text) else {
+                continue;
+            };
+            if let Ok(relative) = item.path.strip_prefix(old_dir) {
+                item.path = new_dir.join(relative);
+                let _ = fs::write(&path, serde_json::to_vec_pretty(&item)?);
+            }
+        }
     }
     Ok(())
+}
+
+fn copy_dir_recursive(source: &Path, target: &Path) -> Result<()> {
+    fs::create_dir_all(target)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = target.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            move_file_cross_device(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+fn move_file_cross_device(source: &Path, target: &Path) -> Result<()> {
+    if target.exists() {
+        fs::remove_file(target)
+            .with_context(|| format!("替换目标文件失败：{}", target.display()))?;
+    }
+    match fs::rename(source, target) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            fs::copy(source, target)
+                .with_context(|| format!("复制到新下载目录失败：{}", target.display()))?;
+            fs::remove_file(source)
+                .with_context(|| format!("清理旧下载文件失败：{}", source.display()))?;
+            Ok(())
+        }
+    }
 }
 
 pub fn delete_download(track_id: &str) -> Result<bool> {

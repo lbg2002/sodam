@@ -17,6 +17,7 @@ fn icon_name(nav: Nav) -> &'static str {
         Nav::Search => "search",
         Nav::Liked => "heart",
         Nav::Library => "list-music",
+        Nav::Downloads => "download",
         Nav::Artist | Nav::Album => "search",
         Nav::Settings => "settings",
         Nav::Lyrics => "music",
@@ -115,6 +116,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         Nav::Search,
         Nav::Liked,
         Nav::Library,
+        Nav::Downloads,
         Nav::Settings,
     ]
     .into_iter()
@@ -131,7 +133,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
             nav_row(nav, labels[&nav].clone(), active, cx)
         })
         .collect();
-    let library_items: Vec<AnyElement> = [Nav::Liked, Nav::Library]
+    let library_items: Vec<AnyElement> = [Nav::Liked, Nav::Library, Nav::Downloads]
         .into_iter()
         .map(|nav| {
             let active = match nav {
@@ -143,6 +145,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         current == Nav::Library
                     }
                 }
+                Nav::Downloads => current == Nav::Downloads,
                 _ => current == nav,
             };
             nav_row(nav, labels[&nav].clone(), active, cx)

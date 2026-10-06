@@ -15,7 +15,7 @@ use sodam_core::{
     },
     queue::Queue,
     session::{AccountInfo, Session},
-    PlaybackEngine, Settings,
+    DownloadedTrack, PlaybackEngine, Settings,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -97,6 +97,7 @@ pub enum Nav {
     Search,
     Liked,
     Library,
+    Downloads,
     Artist,
     Album,
     Settings,
@@ -112,6 +113,7 @@ impl Root {
             Nav::Search => self.tr("搜索"),
             Nav::Liked => self.tr("我喜欢的音乐"),
             Nav::Library => self.tr("我的歌单"),
+            Nav::Downloads => self.tr("下载管理"),
             Nav::Artist => self.tr("音乐人"),
             Nav::Album => self.tr("专辑"),
             Nav::Settings => self.tr("设置"),
@@ -248,6 +250,14 @@ pub struct Root {
     pub liked: Arc<Vec<TrackItem>>,
     /// 「我喜欢的音乐」的曲目 id 集合（列表里的爱心状态）。
     pub liked_ids: Arc<HashSet<String>>,
+    /// 已导出到下载目录的曲目；列表、播放栏和下载管理页共享同一状态。
+    pub downloads: Arc<Vec<DownloadedTrack>>,
+    pub downloaded_ids: Arc<HashSet<String>>,
+    /// 用户点了下载但播放缓存尚未生成的曲目。
+    pub pending_downloads: HashMap<String, TrackItem>,
+    /// 正在执行本地导出的曲目，防止重复点击并发复制。
+    pub download_inflight: HashSet<String>,
+    pub downloads_loading: bool,
     liked_loading: bool,
     /// 收藏 ids 拉取失败（网络等）：置位后等网络就绪信号自动重试。
     pub liked_ids_failed: bool,
@@ -462,6 +472,11 @@ impl Root {
             playlists: Vec::new(),
             liked: Arc::new(Vec::new()),
             liked_ids: Arc::new(HashSet::new()),
+            downloads: Arc::new(Vec::new()),
+            downloaded_ids: Arc::new(HashSet::new()),
+            pending_downloads: HashMap::new(),
+            download_inflight: HashSet::new(),
+            downloads_loading: false,
             liked_loading: false,
             liked_ids_failed: false,
             loading_library: false,
@@ -525,6 +540,7 @@ impl Root {
                 "search" => Nav::Search,
                 "liked" => Nav::Liked,
                 "library" => Nav::Library,
+                "downloads" | "download" => Nav::Downloads,
                 "artist" => Nav::Artist,
                 "album" => Nav::Album,
                 "settings" => Nav::Settings,
@@ -573,6 +589,7 @@ impl Root {
             })
             .detach();
         }
+        root.refresh_downloads(cx);
         Self::start_heartbeat(cx);
 
         // 开发验证用：`SODAM_AUTOPLAY=1` 进收藏页并自动播放第一首；
@@ -953,6 +970,7 @@ impl Render for Root {
                     Nav::Search => self.results.len(),
                     Nav::Liked => self.liked.len(),
                     Nav::Library => self.playlists.len(),
+                    Nav::Downloads => self.downloads.len(),
                     _ => 0,
                 };
                 eprintln!("[frame] {elapsed}ms nav={:?} rows={rows}", self.nav);

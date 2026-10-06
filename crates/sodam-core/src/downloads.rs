@@ -302,9 +302,7 @@ fn ffmpeg_export(
             .arg(format!("album={}", track.album));
 
         let result = command.arg(output).output().map_err(|err| {
-            anyhow::anyhow!(
-                "无法启动 ffmpeg：{err}。MP3/FLAC 下载需要安装 ffmpeg"
-            )
+            anyhow::anyhow!("无法启动 ffmpeg：{err}。MP3/FLAC 下载需要安装 ffmpeg")
         })?;
         if result.status.success() {
             return Ok(());

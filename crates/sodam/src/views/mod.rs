@@ -1083,6 +1083,19 @@ fn subtitle_for(root: &Root) -> String {
                 root.localized("{} 首", &[root.liked.len().to_string()])
             }
         }
+        Nav::LocalMusic => {
+            let count = sodam_core::local_library::tracks()
+                .into_iter()
+                .filter(|track| {
+                    root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
+                })
+                .count();
+            root.localized("{} 首可离线播放", &[count.to_string()])
+        }
+        Nav::LocalPlaylists => root.localized(
+            "{} 个本地播放列表",
+            &[sodam_core::local_playlists::load().len().to_string()],
+        ),
         Nav::Recent => root.localized("{} 首", &[root.recent.len().to_string()]),
         Nav::Downloads => root.localized(
             "{} 首 · {} 待下载",
@@ -1317,6 +1330,181 @@ fn qr_canvas(matrix: Vec<Vec<bool>>) -> impl IntoElement {
     .h(px(240.0))
 }
 
+fn local_music_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let mut tracks = sodam_core::local_library::tracks();
+    tracks.retain(|track| {
+        root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
+    });
+    let cached = tracks
+        .iter()
+        .filter(|track| root.cached_ids.contains(&track.id))
+        .count();
+    let downloaded = tracks
+        .iter()
+        .filter(|track| root.downloaded_ids.contains(&track.id))
+        .count();
+    if tracks.is_empty() {
+        return empty_state(
+            "disc-3",
+            root.tr("这里会显示已经缓存或下载、可离线播放的歌曲"),
+        );
+    }
+    let tracks = std::sync::Arc::new(tracks);
+    div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_h(px(0.0))
+        .gap(px(theme::space::MD))
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::SM))
+                .child(
+                    div()
+                        .px(px(theme::space::MD))
+                        .py(px(theme::space::XS))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::surface_elevated())
+                        .text_size(theme::Text::Small.size())
+                        .child(root.localized("已缓存 {} 首", &[cached.to_string()])),
+                )
+                .child(
+                    div()
+                        .px(px(theme::space::MD))
+                        .py(px(theme::space::XS))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::surface_elevated())
+                        .text_size(theme::Text::Small.size())
+                        .child(root.localized("已下载 {} 首", &[downloaded.to_string()])),
+                ),
+        )
+        .child(track_list(
+            root,
+            tracks,
+            Nav::LocalMusic,
+            None,
+            root.liked_ids.clone(),
+            root.covers.clone(),
+            root.cover_requests.clone(),
+            cx,
+        ))
+        .into_any_element()
+}
+
+fn local_playlists_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let playlists = sodam_core::local_playlists::load();
+    let mut page = div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_h(px(0.0))
+        .gap(px(theme::space::MD))
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(root.localized("{} 个本地播放列表", &[playlists.len().to_string()])),
+                )
+                .child(action_pill(
+                    "save-queue-snapshot",
+                    root.tr("保存当前队列"),
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_save_queue_snapshot_auto(cx);
+                    }),
+                )),
+        );
+
+    if playlists.is_empty() {
+        return page
+            .child(empty_state(
+                "list-music",
+                root.tr("还没有本地播放列表，可先保存当前播放队列"),
+            ))
+            .into_any_element();
+    }
+
+    let cards = playlists
+        .into_iter()
+        .map(|playlist| {
+            let play_id = playlist.id.clone();
+            let delete_id = playlist.id.clone();
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .gap(px(theme::space::MD))
+                .px(px(theme::space::LG))
+                .py(px(theme::space::MD))
+                .rounded(px(theme::radius::ROW))
+                .bg(theme::surface_elevated())
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .min_w(px(0.0))
+                        .gap(px(theme::space::XS))
+                        .child(
+                            div()
+                                .truncate()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme::text())
+                                .child(playlist.name),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .child(root.localized(
+                                    "{} 首",
+                                    &[playlist.tracks.len().to_string()],
+                                )),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap(px(theme::space::SM))
+                        .child(action_pill(
+                            "play-local-playlist",
+                            root.tr("播放"),
+                            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                root.e3_play_local_playlist(&play_id, cx);
+                            }),
+                        ))
+                        .child(action_pill(
+                            "delete-local-playlist",
+                            root.tr("删除"),
+                            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                root.e3_delete_local_playlist(&delete_id, cx);
+                            }),
+                        )),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
+    page = page.child(
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(theme::space::SM))
+            .overflow_y_scroll()
+            .children(cards),
+    );
+    page.into_any_element()
+}
+
 /// 渲染内容区。
 pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl IntoElement {
     let settings = &root.settings;
@@ -1426,6 +1614,8 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
                 .child(playlist_grid(root, cx))
                 .into_any_element(),
         },
+        Nav::LocalMusic => local_music_page(root, cx),
+        Nav::LocalPlaylists => local_playlists_page(root, cx),
         Nav::Recent => {
             if root.recent.is_empty() {
                 empty_state("history", root.tr("还没有最近播放记录"))

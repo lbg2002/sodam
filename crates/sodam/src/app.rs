@@ -312,6 +312,8 @@ pub struct Root {
     pub queue_scroll: gpui::UniformListScrollHandle,
     /// 队列抽屉是否展开。
     pub queue_open: bool,
+    /// 窄窗口时底部播放栏的“更多”菜单。
+    pub player_more_open: bool,
     pub sleep_menu_open: bool,
     /// 定时暂停的绝对截止时刻。
     pub sleep_deadline: Option<std::time::Instant>,
@@ -584,6 +586,7 @@ impl Root {
             open_album: None,
             loading_album: false,
             queue_open: false,
+            player_more_open: false,
             sleep_menu_open: false,
             sleep_deadline: None,
             sleep_after_current: false,

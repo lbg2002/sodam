@@ -79,11 +79,19 @@ impl Root {
     /// （后者自动覆盖 append/remove 等队列变更，不必逐个调用点补）。
     pub(crate) fn spawn_prefetch(&mut self, cx: &mut Context<Self>) {
         let log = std::env::var("SODAM_PREFETCH_LOG").is_ok();
-        let ahead = prefetch_ahead_count();
+        let ahead = prefetch_ahead_count(self.settings.prefetch_count);
+        if ahead == 0 {
+            return;
+        }
         let max_inflight = prefetch_concurrency().max(1);
+        // 多看一些候选项：如果最近几首处于失败冷却，也继续把更后面的歌缓存起来，
+        // 避免一个坏条目让整个预加载窗口停住。
+        let scan_count = ahead
+            .saturating_mul(3)
+            .max(ahead.saturating_add(max_inflight));
         let candidates: Vec<TrackItem> = self
             .queue
-            .peek_ahead(ahead)
+            .peek_ahead(scan_count)
             .iter()
             .map(|track| (*track).clone())
             .collect();
@@ -93,20 +101,25 @@ impl Root {
             }
             return;
         }
+
+        // covered 表示“已经缓存或已经在准备”的前方曲目数。
+        // 目标不是单纯发 ahead 个请求，而是持续维持 ahead 首可快速切换的缓冲池。
+        let mut covered = 0usize;
         for next in candidates {
-            if self.prefetch_inflight.len() >= max_inflight {
+            if covered >= ahead {
                 break;
             }
-            // 已经在缓存里就不用再排（继续看更后面的：多首预取的意义）
+
             if let Some(session) = &self.session {
                 if session.is_cached(&next.id) {
+                    covered += 1;
                     if log {
-                        eprintln!("[prefetch] 跳过（已缓存）：{}", next.title);
+                        eprintln!("[prefetch] 已就绪：{}", next.title);
                     }
                     continue;
                 }
             }
-            // 正在预取 / 正在装载（播放下载中）的曲目不重复排
+
             if self.prefetch_inflight.contains(&next.id)
                 || self
                     .pending_track
@@ -114,17 +127,27 @@ impl Root {
                     .map(|track| track.id == next.id)
                     .unwrap_or(false)
             {
+                covered += 1;
                 continue;
             }
-            // 近期失败过的曲目进入冷却：巡检不能把永久失败的歌（下架/受限）
-            // 每 5 秒无限重试——那会持续打签名服务和网络
+
+            // 冷却中的坏条目不占缓冲名额，继续向后找可预取歌曲。
             if self
                 .prefetch_failed
                 .get(&next.id)
                 .is_some_and(|failed_at| failed_at.elapsed() < PREFETCH_RETRY_COOLDOWN)
             {
+                if log {
+                    eprintln!("[prefetch] 跳过冷却项：{}", next.title);
+                }
                 continue;
             }
+
+            if self.prefetch_inflight.len() >= max_inflight {
+                break;
+            }
+
+            covered += 1;
             if log {
                 eprintln!("[prefetch] 开始预取：{}", next.title);
             }
@@ -146,16 +169,18 @@ impl Root {
                         Err(err) => eprintln!("[prefetch] {} 失败: {err}", track.title),
                     }
                 }
-                let _ = this.update(cx, |root, _cx| {
-                    // 只删自己的：避免早先的完成回执误清后来排的曲目（单槽时代踩过）
+                let _ = this.update(cx, |root, cx| {
                     root.prefetch_inflight.remove(&track.id);
-                    // 成功清冷却；失败记时刻，冷却期内巡检不再重排
                     if succeeded {
                         root.prefetch_failed.remove(&track.id);
                     } else {
                         root.prefetch_failed
                             .insert(track.id.clone(), std::time::Instant::now());
                     }
+
+                    // 一个预取任务一结束就立刻补位，而不是最多再等 5 秒巡检。
+                    // 这样并发 2、目标 3 首时，第 3 首会紧跟着开始。
+                    root.spawn_prefetch(cx);
                 });
             })
             .detach();
@@ -263,6 +288,27 @@ impl Root {
             Ok(()) => self.tr("下载格式设置已保存").to_string(),
             Err(err) => self.localized("下载格式保存失败：{err}", &[err.to_string()]),
         };
+        cx.notify();
+    }
+
+    pub fn set_prefetch_count(&mut self, count: usize, cx: &mut Context<Self>) {
+        self.settings.prefetch_count = count.min(8);
+        self.status = match self.settings.save() {
+            Ok(()) => {
+                if self.settings.prefetch_count == 0 {
+                    self.tr("智能预加载已关闭").to_string()
+                } else {
+                    self.localized(
+                        "智能预加载：保持前方 {} 首",
+                        &[self.settings.prefetch_count.to_string()],
+                    )
+                }
+            }
+            Err(err) => self.localized("预加载设置保存失败：{err}", &[err.to_string()]),
+        };
+        if self.settings.prefetch_count > 0 {
+            self.spawn_prefetch(cx);
+        }
         cx.notify();
     }
 
@@ -2314,13 +2360,14 @@ fn system_open(target: &str) -> std::io::Result<std::process::Child> {
 /// 持续打签名服务和网络）。
 const PREFETCH_RETRY_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// 预取数量：环境变量 `SODAM_PREFETCH_COUNT`（默认 3，解析失败/为 0 用默认）。
-fn prefetch_ahead_count() -> usize {
+/// 预取数量：设置页为默认值；环境变量 `SODAM_PREFETCH_COUNT` 可临时覆盖。
+/// 设置值 0 表示关闭，环境变量允许显式写 0。
+fn prefetch_ahead_count(configured: usize) -> usize {
     std::env::var("SODAM_PREFETCH_COUNT")
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
-        .filter(|count| *count > 0)
-        .unwrap_or(3)
+        .map(|count| count.min(8))
+        .unwrap_or(configured.min(8))
 }
 
 /// 预取并发上限：环境变量 `SODAM_PREFETCH_CONCURRENCY`（默认 2）。

@@ -14,9 +14,9 @@ use crate::ui::theme;
 use crate::ui::theme::ThemeKind;
 
 pub use login::login_modal;
+pub mod downloads;
 pub mod login;
 pub mod lyrics;
-pub mod downloads;
 pub mod scenes;
 pub mod search;
 pub mod settings;
@@ -458,10 +458,16 @@ fn track_list(
     let current_track_id = root.queue.current().map(|track| track.id.clone());
     let downloaded_ids = root.downloaded_ids.clone();
     let pending_download_ids = std::sync::Arc::new(
-        root.pending_downloads.keys().cloned().collect::<std::collections::HashSet<_>>(),
+        root.pending_downloads
+            .keys()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>(),
     );
     let download_inflight_ids = std::sync::Arc::new(
-        root.download_inflight.iter().cloned().collect::<std::collections::HashSet<_>>(),
+        root.download_inflight
+            .iter()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>(),
     );
     let cols = columns_for(root.list_width.lock().map(|width| *width).unwrap_or(1200.0));
     let width_slot = root.list_width.clone();

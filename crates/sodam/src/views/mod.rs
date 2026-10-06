@@ -552,33 +552,30 @@ fn track_list(
         .when(matches!(nav, Nav::Liked | Nav::Recent), |this| {
             let tracks = bulk_tracks.clone();
             this.child(
-                div()
-                    .flex()
-                    .justify_end()
-                    .child(
-                        div()
-                            .id(("bulk-download-page", nav as usize))
-                            .flex()
-                            .flex_row()
-                            .items_center()
-                            .gap(px(theme::space::SM))
-                            .h(px(theme::size::CONTROL_SM))
-                            .px(px(theme::space::MD))
-                            .rounded(px(theme::radius::PILL))
-                            .bg(theme::surface_elevated())
-                            .cursor_pointer()
-                            .hover(|style| style.bg(theme::surface_hover()))
-                            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                                root.queue_batch_download(tracks.clone(), cx);
-                            }))
-                            .child(
-                                svg()
-                                    .path(icons::path("download"))
-                                    .size(px(theme::ICON_SM))
-                                    .text_color(theme::text_muted()),
-                            )
-                            .child(root.tr("下载全部")),
-                    ),
+                div().flex().justify_end().child(
+                    div()
+                        .id(("bulk-download-page", nav as usize))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .h(px(theme::size::CONTROL_SM))
+                        .px(px(theme::space::MD))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::surface_elevated())
+                        .cursor_pointer()
+                        .hover(|style| style.bg(theme::surface_hover()))
+                        .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.queue_batch_download(tracks.clone(), cx);
+                        }))
+                        .child(
+                            svg()
+                                .path(icons::path("download"))
+                                .size(px(theme::ICON_SM))
+                                .text_color(theme::text_muted()),
+                        )
+                        .child(root.tr("下载全部")),
+                ),
             )
         })
         .child(track_header(cols, root.language))

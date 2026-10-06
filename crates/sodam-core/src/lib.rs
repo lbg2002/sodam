@@ -11,6 +11,7 @@ pub mod library;
 pub mod local_library;
 pub mod local_playlists;
 pub mod login;
+pub mod loudness;
 pub mod models;
 pub mod playback_state;
 pub mod queue;

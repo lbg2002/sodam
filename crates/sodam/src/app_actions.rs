@@ -3018,6 +3018,7 @@ impl Root {
                         root.engine.set_gain(cached_gain);
                         root.engine
                             .load(track.clone(), cached.path.clone(), cached.quality);
+                        root.transition_triggered_track_id.clear();
                         let _ = sodam_core::local_library::record(&track);
 
                         // 首次响度分析不阻塞开播；完成后仅在同一首仍处于当前播放时应用。

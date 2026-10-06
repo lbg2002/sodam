@@ -353,6 +353,46 @@ pub fn touch_audio_cache(audio_path: &std::path::Path) {
     let _ = std::fs::write(access_path(audio_path), now.to_string());
 }
 
+/// 当前播放音质档位下的有效缓存 id。
+///
+/// 同时检查 `.quality` 边车记录的字节数，避免截断文件被 UI 标成“已准备”。
+pub fn cached_audio_ids_for_quality(quality: &str) -> std::collections::HashSet<String> {
+    let tag = {
+        let value = quality.trim().to_ascii_lowercase();
+        if value.is_empty() {
+            "auto".to_string()
+        } else {
+            value
+        }
+    };
+    let suffix = format!("-{tag}.m4a");
+    let Ok(entries) = std::fs::read_dir(cache_dir()) else {
+        return std::collections::HashSet::new();
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_str()?;
+            let track_id = name.strip_suffix(&suffix)?;
+            if track_id.is_empty() {
+                return None;
+            }
+            let actual = std::fs::metadata(&path).ok()?.len();
+            if actual == 0 {
+                return None;
+            }
+            let quality_path = path.with_extension("quality");
+            let text = std::fs::read_to_string(quality_path).ok()?;
+            let mut fields = text.split('\t');
+            let label = fields.next()?.trim();
+            let expected = fields.next()?.trim().parse::<u64>().ok()?;
+            (expected == actual && !label.is_empty()).then(|| track_id.to_string())
+        })
+        .collect()
+}
+
 /// 当前所有完整音频缓存对应的曲目 id。
 ///
 /// 这是同步扫盘函数，UI 应在后台线程调用后保存快照。

@@ -194,7 +194,7 @@ impl Root {
     pub(crate) fn start_heartbeat(cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
-                .timer(std::time::Duration::from_millis(200))
+                .timer(std::time::Duration::from_millis(100))
                 .await;
             let _ = this.update(cx, |root, cx| {
                 let snap = root.engine.snapshot();
@@ -207,6 +207,21 @@ impl Root {
                 if snap.playing || root.pending_track.is_some() {
                     cx.notify();
                 }
+                if snap.playing
+                    && snap.position_seconds >= 3.0
+                    && !snap.track_id.is_empty()
+                    && root.recent_recorded_track_id != snap.track_id
+                {
+                    if let Some(track) = root
+                        .queue
+                        .current()
+                        .filter(|track| track.id == snap.track_id)
+                        .cloned()
+                    {
+                        root.recent_recorded_track_id = snap.track_id.clone();
+                        root.record_recent_play(track, cx);
+                    }
+                }
                 // 播完自动下一首：按序号判断（循环同一首也不会漏切）。
                 // 注意：正在装载下一首（pending）时「播完」属于旧曲目，
                 // 只消费事件不推进——否则会把 pending 的那首跳过去（收尾瞬间
@@ -217,15 +232,15 @@ impl Root {
                         root.next_track(cx);
                     }
                 }
-                // 预取巡检：每 25 拍（约 5s）补一次，覆盖 append/remove 等
-                // 队列变更路径（spawn_prefetch 自身会去重，空转开销极小）
+                // 预取巡检：每 50 拍（约 5s）补一次，覆盖 append/remove 等；
+                // 心跳本身为 100ms，以更快响应歌曲自然播完后的切歌。
                 root.prefetch_patrol = root.prefetch_patrol.wrapping_add(1);
-                if root.prefetch_patrol % 25 == 0 {
+                if root.prefetch_patrol % 50 == 0 {
                     root.spawn_prefetch(cx);
                     root.process_pending_downloads(cx);
                     root.persist_playback_state(cx);
                 }
-                if root.prefetch_patrol % 150 == 0 {
+                if root.prefetch_patrol % 300 == 0 {
                     root.trim_cache_if_needed(cx);
                 }
                 root.load_more_recommendation(cx);
@@ -295,6 +310,127 @@ impl Root {
         self.status = match self.settings.save() {
             Ok(()) => self.tr("下载格式设置已保存").to_string(),
             Err(err) => self.localized("下载格式保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    pub fn choose_download_directory(&mut self, cx: &mut Context<Self>) {
+        if !self.download_inflight.is_empty() {
+            self.status = self
+                .tr("有下载任务正在处理，请稍后更改下载目录")
+                .to_string();
+            cx.notify();
+            return;
+        }
+        if std::env::var_os("SODAM_DOWNLOAD_DIR").is_some() {
+            self.status = self
+                .tr("下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量")
+                .to_string();
+            cx.notify();
+            return;
+        }
+        let old_dir = sodam_core::downloads::download_dir_for(&self.settings.download_dir);
+        let mut settings = self.settings.clone();
+        let initial = old_dir.clone();
+        let work = cx.background_spawn(async move {
+            let Some(selected) = choose_directory_dialog(&initial)? else {
+                return Ok::<Option<Settings>, anyhow::Error>(None);
+            };
+            sodam_core::downloads::relocate_download_dir(&old_dir, &selected)?;
+            settings.download_dir = selected.display().to_string();
+            settings.save()?;
+            Ok(Some(settings))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                match result {
+                    Ok(Some(settings)) => {
+                        root.settings = settings;
+                        root.status = root.tr("下载目录已更新").to_string();
+                        root.refresh_downloads(cx);
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        root.status = root.localized("更改下载目录失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn reset_download_directory(&mut self, cx: &mut Context<Self>) {
+        if !self.download_inflight.is_empty() {
+            self.status = self
+                .tr("有下载任务正在处理，请稍后更改下载目录")
+                .to_string();
+            cx.notify();
+            return;
+        }
+        if std::env::var_os("SODAM_DOWNLOAD_DIR").is_some() {
+            self.status = self
+                .tr("下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量")
+                .to_string();
+            cx.notify();
+            return;
+        }
+        let old_dir = sodam_core::downloads::download_dir_for(&self.settings.download_dir);
+        let new_dir = sodam_core::downloads::default_download_dir();
+        let mut settings = self.settings.clone();
+        let work = cx.background_spawn(async move {
+            sodam_core::downloads::relocate_download_dir(&old_dir, &new_dir)?;
+            settings.download_dir.clear();
+            settings.save()?;
+            Ok::<Settings, anyhow::Error>(settings)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                match result {
+                    Ok(settings) => {
+                        root.settings = settings;
+                        root.status = root.tr("下载目录已恢复默认").to_string();
+                        root.refresh_downloads(cx);
+                    }
+                    Err(err) => {
+                        root.status =
+                            root.localized("恢复默认下载目录失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn set_lyrics_font_size(&mut self, size: u32, cx: &mut Context<Self>) {
+        self.settings.lyrics_font_size = size.clamp(14, 30);
+        self.status = match self.settings.save() {
+            Ok(()) => self.tr("歌词字号设置已保存").to_string(),
+            Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    pub fn set_lyrics_line_height(&mut self, height: u32, cx: &mut Context<Self>) {
+        self.settings.lyrics_line_height = height.clamp(24, 52);
+        self.status = match self.settings.save() {
+            Ok(()) => self.tr("歌词行距设置已保存").to_string(),
+            Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    pub fn set_lyrics_offset_ms(&mut self, offset: i64, cx: &mut Context<Self>) {
+        self.settings.lyrics_offset_ms = offset.clamp(-3000, 3000);
+        self.status = match self.settings.save() {
+            Ok(()) => self.localized(
+                "歌词偏移：{} ms",
+                &[self.settings.lyrics_offset_ms.to_string()],
+            ),
+            Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
         cx.notify();
     }
@@ -1171,6 +1307,9 @@ impl Root {
     pub(crate) fn pause_pending(&mut self, cx: &mut Context<Self>) {
         self.playing = true;
         self.play_seq = self.play_seq.wrapping_add(1);
+        // 每次真正开始一轮曲目装载都允许“最近播放”在 3 秒阈值后重新计数，
+        // 包括单曲循环或用户主动重播同一首。
+        self.recent_recorded_track_id.clear();
         let request_seq = self.play_seq;
         let Some(track) = self.queue.current().cloned() else {
             return;
@@ -1621,9 +1760,19 @@ impl Root {
         self.download_inflight.insert(track.id.clone());
         let quality = self.download_quality_preference();
         let format = self.download_output_format();
+        let cover_path = self
+            .original_covers
+            .get(&track.cover)
+            .cloned()
+            .or_else(|| self.cover_of(&track.cover));
         let work_track = track.clone();
         let work = cx.background_spawn(async move {
-            sodam_core::downloads::export_cached_track(&work_track, &quality, &format)
+            sodam_core::downloads::export_cached_track(
+                &work_track,
+                &quality,
+                &format,
+                cover_path.as_deref(),
+            )
         });
         cx.spawn(async move |this, cx| {
             let result = work.await;
@@ -1677,9 +1826,19 @@ impl Root {
             self.download_inflight.insert(track.id.clone());
             let quality = self.download_quality_preference();
             let format = self.download_output_format();
+            let cover_path = self
+                .original_covers
+                .get(&track.cover)
+                .cloned()
+                .or_else(|| self.cover_of(&track.cover));
             let work_track = track.clone();
             let work = cx.background_spawn(async move {
-                sodam_core::downloads::export_cached_track(&work_track, &quality, &format)
+                sodam_core::downloads::export_cached_track(
+                    &work_track,
+                    &quality,
+                    &format,
+                    cover_path.as_deref(),
+                )
             });
             cx.spawn(async move |this, cx| {
                 let result = work.await;
@@ -1721,9 +1880,19 @@ impl Root {
 
         let quality = self.download_quality_preference();
         let format = self.download_output_format();
+        let cover_path = self
+            .original_covers
+            .get(&track.cover)
+            .cloned()
+            .or_else(|| self.cover_of(&track.cover));
         let work_track = track.clone();
         let work = cx.background_spawn(async move {
-            sodam_core::downloads::export_cached_track(&work_track, &quality, &format)
+            sodam_core::downloads::export_cached_track(
+                &work_track,
+                &quality,
+                &format,
+                cover_path.as_deref(),
+            )
         });
         cx.spawn(async move |this, cx| {
             let result = work.await;
@@ -2163,6 +2332,33 @@ impl Root {
         .detach();
     }
 
+    pub fn clear_recent_history(&mut self, cx: &mut Context<Self>) {
+        match sodam_core::history::clear() {
+            Ok(()) => {
+                self.recent = Arc::new(Vec::new());
+                self.status = self.tr("已清空最近播放").to_string();
+            }
+            Err(err) => {
+                self.status = self.localized("清空最近播放失败：{err}", &[err.to_string()]);
+            }
+        }
+        cx.notify();
+    }
+
+    fn record_recent_play(&mut self, track: TrackItem, cx: &mut Context<Self>) {
+        let work = cx.background_spawn(async move { sodam_core::history::record_track(&track) });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                if let Ok(tracks) = result {
+                    root.recent = Arc::new(tracks);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     /// 点列表行播放（列表以 `Arc` 共享，避免每次点击都深拷贝整张表）。
     pub fn play_from_arc(
         &mut self,
@@ -2215,6 +2411,7 @@ impl Root {
                 .map(|detail| QueueOrigin::Album(detail.album.id.clone()))
                 .unwrap_or(QueueOrigin::Search),
             Nav::Search => QueueOrigin::Search,
+            Nav::Recent => QueueOrigin::Recent,
             Nav::Home => QueueOrigin::Feed,
             _ => self.queue_origin.clone(),
         };
@@ -2497,7 +2694,7 @@ impl Root {
                         }
                         root.consecutive_failures = 0;
                         root.playback_error = None;
-                        // 记录真实播放历史（去重最近一条，避免重复刷屏）
+                        // 记录队列内历史；持久化“最近播放”由心跳在实际播放满 3 秒后写入。
                         if root.played_history.last().map(String::as_str) != Some(track.id.as_str())
                         {
                             root.played_history.push(track.id.clone());
@@ -2582,6 +2779,66 @@ impl Root {
                 self.session = Some(Session::new(self.settings.clone()));
             }
         }
+    }
+}
+
+fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<PathBuf>> {
+    #[cfg(target_os = "linux")]
+    {
+        let initial = initial.display().to_string();
+        let initial_arg = format!("--filename={initial}/");
+        let zenity = std::process::Command::new("zenity")
+            .args([
+                "--file-selection",
+                "--directory",
+                "--title=选择 SodaM 下载目录",
+                initial_arg.as_str(),
+            ])
+            .output();
+        if let Ok(output) = zenity {
+            if output.status.success() {
+                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+            }
+            return Ok(None);
+        }
+
+        let kdialog = std::process::Command::new("kdialog")
+            .args(["--getexistingdirectory", &initial])
+            .output();
+        if let Ok(output) = kdialog {
+            if output.status.success() {
+                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+            }
+            return Ok(None);
+        }
+        anyhow::bail!("未找到目录选择器，请安装 zenity 或 kdialog")
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = r#"POSIX path of (choose folder with prompt "Choose SodaM download folder")"#;
+        let output = std::process::Command::new("osascript")
+            .args(["-e", script])
+            .output()?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = initial;
+        anyhow::bail!("Windows 目录选择暂未接入")
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    {
+        let _ = initial;
+        anyhow::bail!("当前平台暂不支持目录选择器")
     }
 }
 

@@ -653,7 +653,7 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
                         .min_w(px(0.0))
                         .truncate()
                         .text_color(theme::accent())
-                        .child(query),
+                        .child(query.clone()),
                 )
                 .into_any_element()
         })

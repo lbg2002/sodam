@@ -1462,11 +1462,11 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .text_color(theme::text())
                         .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
                             let removed = sodam_core::audio::clear_cache();
-                            root.status =
+                            let message =
                                 root.localized("已清理缓存：{} 个文件", &[removed.to_string()]);
                             root.refresh_cache_stats(cx);
                             root.refresh_audio_cache_index(cx);
-                            cx.notify();
+                            root.toast(message, cx);
                         }))
                         .child(root.tr("清除歌曲缓存")),
                 )

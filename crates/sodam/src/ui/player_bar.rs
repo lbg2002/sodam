@@ -347,8 +347,13 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .is_some_and(|track| root.download_inflight.contains(&track.id));
     let download_track = track.clone();
     let cover_path = track.as_ref().and_then(|track| root.cover_of(&track.cover));
-    let measured_width = root.list_width.lock().map(|width| *width).unwrap_or(1200.0);
+    let measured_width = root
+        .player_bar_width
+        .lock()
+        .map(|width| *width)
+        .unwrap_or(1200.0);
     let compact = measured_width < root.settings.player_bar_compact_width as f32;
+    let player_width_slot = root.player_bar_width.clone();
 
     div()
         .relative()
@@ -364,6 +369,27 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .bg(theme::bg())
         .border_t_1()
         .border_color(theme::border())
+        .child(
+            canvas(
+                move |bounds, window, _cx| {
+                    let width = f32::from(bounds.size.width);
+                    let changed = player_width_slot
+                        .lock()
+                        .map(|mut slot| {
+                            let changed = (*slot - width).abs() > 1.0;
+                            *slot = width;
+                            changed
+                        })
+                        .unwrap_or(false);
+                    if changed {
+                        window.refresh();
+                    }
+                },
+                |_bounds, _state, _window, _cx| {},
+            )
+            .absolute()
+            .size_full(),
+        )
         // 左：封面 + 标题/歌手/进度文案
         .child(
             div()

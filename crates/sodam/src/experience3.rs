@@ -257,6 +257,9 @@ impl Root {
 
     pub fn e3_set_normalize_volume(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.settings.normalize_volume = enabled;
+        if !enabled {
+            self.engine.set_gain(1.0);
+        }
         let _ = self.settings.save();
         self.toast(
             if enabled { self.tr("响度标准化已开启") } else { self.tr("响度标准化已关闭") },
@@ -266,6 +269,8 @@ impl Root {
 
     pub fn e3_set_gapless(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.settings.gapless_playback = enabled;
+        self.engine
+            .set_transition(enabled, self.settings.crossfade_seconds);
         let _ = self.settings.save();
         self.toast(
             if enabled { self.tr("无缝衔接已开启") } else { self.tr("无缝衔接已关闭") },
@@ -275,6 +280,10 @@ impl Root {
 
     pub fn e3_set_crossfade(&mut self, seconds: u32, cx: &mut Context<Self>) {
         self.settings.crossfade_seconds = seconds.min(8);
+        self.engine.set_transition(
+            self.settings.gapless_playback,
+            self.settings.crossfade_seconds,
+        );
         let _ = self.settings.save();
         self.toast(
             if seconds == 0 { self.tr("交叉淡化已关闭").to_string() } else { format!("交叉淡化：{} 秒", seconds.min(8)) },

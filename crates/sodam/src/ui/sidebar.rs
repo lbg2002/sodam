@@ -113,6 +113,11 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     } else {
         current == Nav::Liked
     };
+    let recent_active = if playing {
+        matches!(active_origin, crate::app::QueueOrigin::Recent)
+    } else {
+        current == Nav::Recent
+    };
     let labels: std::collections::HashMap<Nav, String> = [
         Nav::Home,
         Nav::Scenes,
@@ -149,7 +154,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         current == Nav::Library
                     }
                 }
-                Nav::Recent => current == Nav::Recent,
+                Nav::Recent => recent_active,
                 Nav::Downloads => current == Nav::Downloads,
                 _ => current == nav,
             };

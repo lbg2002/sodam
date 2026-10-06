@@ -39,7 +39,7 @@ pub fn load() -> Vec<LocalTrackRecord> {
             return records.clone();
         }
     }
-    let records = fs::read_to_string(catalog_path())
+    let records: Vec<LocalTrackRecord> = fs::read_to_string(catalog_path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();

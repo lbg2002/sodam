@@ -2987,9 +2987,7 @@ impl Root {
             if let Some(cached) = session.cached_track(&work_track.id) {
                 return Ok(cached);
             }
-            if let Ok(Some(downloaded)) =
-                sodam_core::downloads::downloaded_track(&work_track.id)
-            {
+            if let Ok(Some(downloaded)) = sodam_core::downloads::downloaded_track(&work_track.id) {
                 return Ok(sodam_core::session::CachedTrack {
                     path: downloaded.path,
                     quality: format!("本地下载 · {}", downloaded.quality),

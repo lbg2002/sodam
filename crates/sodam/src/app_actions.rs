@@ -369,14 +369,12 @@ impl Root {
     }
 
     pub fn open_desktop_lyrics(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.offline_mode {
-            if let Some(track) = self
-                .pending_track
-                .clone()
-                .or_else(|| self.queue.current().cloned())
-            {
-                self.load_lyrics(track, false, cx);
-            }
+        if let Some(track) = self
+            .pending_track
+            .clone()
+            .or_else(|| self.queue.current().cloned())
+        {
+            self.load_lyrics(track, false, cx);
         }
         let root = cx.entity();
         cx.defer(move |cx| crate::ui::desktop_lyrics::open(root, cx));
@@ -1178,18 +1176,7 @@ impl Root {
             self.lyrics_return_nav = Some(self.nav);
         }
         self.set_nav(Nav::Lyrics, cx);
-        if !self.settings.offline_mode {
-            self.load_lyrics(track, false, cx);
-        } else if self.lyrics_track_id != track.id {
-            self.lyrics = Arc::new(Vec::new());
-            self.lyrics_active = None;
-            self.lyrics_track_id = track.id.clone();
-            self.lyrics_title = track.title.clone();
-            self.lyrics_artist = track.artist.clone();
-            self.lyrics_cover = track.cover.clone();
-            self.lyrics_error = Some(self.tr("离线模式：未加载的歌词不会联网获取").to_string());
-            cx.notify();
-        }
+        self.load_lyrics(track, false, cx);
     }
 
     pub(crate) fn ensure_original_cover(&mut self, url: &str, cx: &mut Context<Self>) {
@@ -1246,8 +1233,18 @@ impl Root {
         cx.notify();
 
         let settings = self.settings.clone();
+        let offline = settings.offline_mode;
         let work_track = track.clone();
-        let work = cx.background_spawn(async move { Session::new(settings).lyrics(&work_track) });
+        let work = cx.background_spawn(async move {
+            let session = Session::new(settings);
+            if offline {
+                session
+                    .cached_lyrics(&work_track.id)
+                    .ok_or_else(|| anyhow::anyhow!("离线模式：这首歌没有本地歌词缓存"))
+            } else {
+                session.lyrics(&work_track)
+            }
+        });
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |root, cx| {
@@ -2911,7 +2908,7 @@ impl Root {
         self.progress_preview = None;
         self.set_status("正在准备播放：{}…", std::slice::from_ref(&track.title));
         self.ensure_covers(std::slice::from_ref(&track.cover), cx);
-        if self.nav == Nav::Lyrics && !self.settings.offline_mode {
+        if self.nav == Nav::Lyrics {
             self.load_lyrics(track.clone(), false, cx);
         }
         cx.notify();

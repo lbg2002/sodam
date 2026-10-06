@@ -207,6 +207,21 @@ impl Root {
                 if snap.playing || root.pending_track.is_some() {
                     cx.notify();
                 }
+                if snap.playing
+                    && snap.position_seconds >= 3.0
+                    && !snap.track_id.is_empty()
+                    && root.recent_recorded_track_id != snap.track_id
+                {
+                    if let Some(track) = root
+                        .queue
+                        .current()
+                        .filter(|track| track.id == snap.track_id)
+                        .cloned()
+                    {
+                        root.recent_recorded_track_id = snap.track_id.clone();
+                        root.record_recent_play(track, cx);
+                    }
+                }
                 // 播完自动下一首：按序号判断（循环同一首也不会漏切）。
                 // 注意：正在装载下一首（pending）时「播完」属于旧曲目，
                 // 只消费事件不推进——否则会把 pending 的那首跳过去（收尾瞬间
@@ -2652,8 +2667,7 @@ impl Root {
                         }
                         root.consecutive_failures = 0;
                         root.playback_error = None;
-                        // 记录真实播放历史（队列内）以及持久化的“最近播放”。
-                        root.record_recent_play(track.clone(), cx);
+                        // 记录队列内历史；持久化“最近播放”由心跳在实际播放满 3 秒后写入。
                         if root.played_history.last().map(String::as_str) != Some(track.id.as_str())
                         {
                             root.played_history.push(track.id.clone());

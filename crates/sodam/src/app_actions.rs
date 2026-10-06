@@ -267,17 +267,36 @@ impl Root {
     }
 
     fn download_quality_preference(&self) -> String {
-        match self.settings.download_quality.trim().to_ascii_lowercase().as_str() {
+        match self
+            .settings
+            .download_quality
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "" | "follow" => {
                 let playback = self.settings.quality.trim();
-                format!("follow:{}", if playback.is_empty() { "auto" } else { playback })
+                format!(
+                    "follow:{}",
+                    if playback.is_empty() {
+                        "auto"
+                    } else {
+                        playback
+                    }
+                )
             }
             value => value.to_string(),
         }
     }
 
     fn download_output_format(&self) -> String {
-        match self.settings.download_format.trim().to_ascii_lowercase().as_str() {
+        match self
+            .settings
+            .download_format
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
             "mp3" => "mp3".to_string(),
             "flac" => "flac".to_string(),
             _ => "source".to_string(),
@@ -1479,16 +1498,12 @@ impl Root {
                         items.insert(0, item.clone());
                         root.downloads = Arc::new(items);
                         Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
-                        root.status = root.localized(
-                            "下载已完成：{}",
-                            std::slice::from_ref(&track.title),
-                        );
+                        root.status =
+                            root.localized("下载已完成：{}", std::slice::from_ref(&track.title));
                     }
                     Ok(None) => {
-                        root.status = root.localized(
-                            "仍在等待播放缓存：{}",
-                            std::slice::from_ref(&track.title),
-                        );
+                        root.status = root
+                            .localized("仍在等待播放缓存：{}", std::slice::from_ref(&track.title));
                     }
                     Err(err) => {
                         root.status = root.localized("下载失败：{err}", &[err.to_string()]);

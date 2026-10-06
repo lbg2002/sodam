@@ -24,7 +24,7 @@ fn download_search_box(root: &Root, window: &Window, cx: &mut Context<Root>) -> 
     div()
         .id("download-search-input")
         .relative()
-        .track_focus(&root.search_focus)
+        .track_focus(&root.download_search_focus)
         .flex()
         .flex_row()
         .items_center()
@@ -281,6 +281,7 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
             .children(items.into_iter().map(|item| {
                 let id = item.track_id.clone();
                 let title = item.title.clone();
+                let file_path = item.path.clone();
                 let cover_path = root.cover_of(&item.cover);
                 if cover_path.is_none() && !item.cover.is_empty() {
                     if let Ok(mut queue) = root.cover_requests.lock() {
@@ -351,11 +352,8 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                             .rounded(px(theme::radius::PILL))
                             .cursor_pointer()
                             .hover(|style| style.bg(theme::surface_hover()))
-                            .on_click(cx.listener({
-                                let path = item.path.clone();
-                                move |root, _event: &ClickEvent, _window, cx| {
-                                    root.open_download_file(path.clone(), cx);
-                                }
+                            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                root.open_download_file(file_path.clone(), cx);
                             }))
                             .child(root.tr("打开")),
                     )

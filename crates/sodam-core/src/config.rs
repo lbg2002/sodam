@@ -24,6 +24,14 @@ pub struct Settings {
     pub download_quality: String,
     /// 下载格式：`source` / `mp3` / `flac`。
     pub download_format: String,
+    /// 自定义下载目录；空 = 系统音乐目录下的 `SodaM Downloads`。
+    pub download_dir: String,
+    /// 歌词字号（px）。
+    pub lyrics_font_size: u32,
+    /// 歌词行高（px）。
+    pub lyrics_line_height: u32,
+    /// 歌词时间偏移（毫秒）；正值表示歌词更晚出现。
+    pub lyrics_offset_ms: i64,
     /// 智能预加载前方曲目数；0 = 关闭。
     pub prefetch_count: usize,
     /// 播放缓存上限（GB）；0 = 不限制。
@@ -52,6 +60,10 @@ impl Default for Settings {
             quality: String::new(),
             download_quality: "follow".to_string(),
             download_format: "source".to_string(),
+            download_dir: String::new(),
+            lyrics_font_size: 18,
+            lyrics_line_height: 32,
+            lyrics_offset_ms: 0,
             prefetch_count: 3,
             cache_limit_gb: 3,
             theme: String::new(),
@@ -111,6 +123,7 @@ impl Settings {
             ("SODAM_QUALITY", &mut self.quality),
             ("SODAM_DOWNLOAD_QUALITY", &mut self.download_quality),
             ("SODAM_DOWNLOAD_FORMAT", &mut self.download_format),
+            ("SODAM_DOWNLOAD_DIR", &mut self.download_dir),
         ];
         for (key, slot) in pairs {
             if slot.trim().is_empty() {
@@ -152,6 +165,10 @@ mod tests {
         assert_eq!(loaded.cache_limit_gb, 3);
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
+        assert!(loaded.download_dir.is_empty());
+        assert_eq!(loaded.lyrics_font_size, 18);
+        assert_eq!(loaded.lyrics_line_height, 32);
+        assert_eq!(loaded.lyrics_offset_ms, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -171,6 +188,10 @@ mod tests {
         assert_eq!(loaded.cookie, settings.cookie);
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
+        assert!(loaded.download_dir.is_empty());
+        assert_eq!(loaded.lyrics_font_size, 18);
+        assert_eq!(loaded.lyrics_line_height, 32);
+        assert_eq!(loaded.lyrics_offset_ms, 0);
         assert_eq!(loaded.prefetch_count, 3);
         assert_eq!(loaded.cache_limit_gb, 3);
         assert!(loaded.theme.is_empty());

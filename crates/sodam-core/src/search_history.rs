@@ -2,9 +2,19 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 const MAX_HISTORY: usize = 30;
+
+fn memory_cache() -> &'static Mutex<Option<Vec<SearchHistoryItem>>> {
+    static CACHE: OnceLock<Mutex<Option<Vec<SearchHistoryItem>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SearchHistoryItem {
@@ -20,10 +30,19 @@ fn path() -> PathBuf {
 }
 
 pub fn load() -> Vec<SearchHistoryItem> {
-    fs::read_to_string(path())
+    if let Ok(cache) = memory_cache().lock() {
+        if let Some(history) = cache.as_ref() {
+            return history.clone();
+        }
+    }
+    let history = fs::read_to_string(path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if let Ok(mut cache) = memory_cache().lock() {
+        *cache = Some(history.clone());
+    }
+    history
 }
 
 pub fn record(query: &str) -> Result<Vec<SearchHistoryItem>> {
@@ -44,11 +63,17 @@ pub fn record(query: &str) -> Result<Vec<SearchHistoryItem>> {
 }
 
 pub fn clear() -> Result<()> {
-    match fs::remove_file(path()) {
+    let result = match fs::remove_file(path()) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err).context("清理搜索历史失败"),
+    };
+    if result.is_ok() {
+        if let Ok(mut cache) = memory_cache().lock() {
+            *cache = Some(Vec::new());
+        }
     }
+    result
 }
 
 fn save(history: &[SearchHistoryItem]) -> Result<()> {
@@ -56,5 +81,9 @@ fn save(history: &[SearchHistoryItem]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).context("创建搜索历史目录失败")?;
     }
-    fs::write(path, serde_json::to_vec_pretty(history)?).context("保存搜索历史失败")
+    fs::write(path, serde_json::to_vec_pretty(history)?).context("保存搜索历史失败")?;
+    if let Ok(mut cache) = memory_cache().lock() {
+        *cache = Some(history.to_vec());
+    }
+    Ok(())
 }

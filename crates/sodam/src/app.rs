@@ -190,12 +190,6 @@ pub enum QueueOrigin {
     Search,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UiCommand {
-    OpenMiniPlayer,
-    OpenDesktopLyrics,
-}
-
 /// 歌曲右键菜单状态：目标曲目与弹出位置。
 pub struct TrackMenu {
     pub track: TrackItem,
@@ -215,7 +209,6 @@ pub struct Root {
     pub settings: Settings,
     /// 设置页二级分类；切换分类只影响展示，不触发配置重载。
     pub settings_section: SettingsSection,
-    pub(crate) ui_tx: std::sync::mpsc::Sender<UiCommand>,
     pub session: Option<Session>,
     pub queue: Queue,
     pub queue_origin: QueueOrigin,
@@ -402,10 +395,7 @@ pub struct Root {
 }
 
 impl Root {
-    pub fn new(
-        cx: &mut Context<Self>,
-        ui_tx: std::sync::mpsc::Sender<UiCommand>,
-    ) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let settings = Settings::load().merged_with_env();
         // 首次运行就把配置落盘：用户可以直接编辑 ~/.config/sodam/config.json
         // 换签名服务 / 钉死设备指纹（默认值已内置，见 sodam_core::config）
@@ -476,7 +466,6 @@ impl Root {
             language_follows_system,
             settings,
             settings_section: SettingsSection::General,
-            ui_tx,
             session: Some(session),
             queue,
             queue_origin: QueueOrigin::None,

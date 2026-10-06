@@ -318,6 +318,173 @@ pub fn cache_dir() -> std::path::PathBuf {
         .join("audio")
 }
 
+/// 从缓存文件名中提取曲目 id。
+///
+/// 正常文件名为 `<track-id>-<quality>.m4a`。优先匹配已知音质后缀，
+/// 兼容 track id 自身包含 `-` 的情况。
+fn cache_track_id(path: &std::path::Path) -> Option<String> {
+    let stem = path.file_stem()?.to_str()?;
+    for tag in ["lossless", "highest", "medium", "low", "best", "auto"] {
+        let suffix = format!("-{tag}");
+        if let Some(id) = stem.strip_suffix(&suffix) {
+            if !id.is_empty() {
+                return Some(id.to_string());
+            }
+        }
+    }
+    stem.rsplit_once('-')
+        .map(|(id, _)| id.to_string())
+        .filter(|id| !id.is_empty())
+}
+
+fn access_path(audio_path: &std::path::Path) -> std::path::PathBuf {
+    audio_path.with_extension("access")
+}
+
+/// 标记一个播放缓存刚刚被实际使用。
+///
+/// 不修改音频文件本身，避免播放器打开文件时额外触碰内容；LRU 时间单独放在
+/// 很小的 `.access` 边车里。
+pub fn touch_audio_cache(audio_path: &std::path::Path) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    let _ = std::fs::write(access_path(audio_path), now.to_string());
+}
+
+/// 当前所有完整音频缓存对应的曲目 id。
+///
+/// 这是同步扫盘函数，UI 应在后台线程调用后保存快照。
+pub fn cached_audio_ids() -> std::collections::HashSet<String> {
+    let Ok(entries) = std::fs::read_dir(cache_dir()) else {
+        return std::collections::HashSet::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            (path.extension().and_then(|ext| ext.to_str()) == Some("m4a"))
+                .then(|| cache_track_id(&path))
+                .flatten()
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CacheTrimResult {
+    pub removed_assets: usize,
+    pub removed_bytes: u64,
+    pub remaining_bytes: u64,
+}
+
+#[derive(Debug)]
+struct CacheAsset {
+    audio: std::path::PathBuf,
+    quality: std::path::PathBuf,
+    access: std::path::PathBuf,
+    track_id: String,
+    bytes: u64,
+    last_used: u64,
+}
+
+fn file_bytes(path: &std::path::Path) -> u64 {
+    std::fs::metadata(path).map(|meta| meta.len()).unwrap_or(0)
+}
+
+fn asset_last_used(audio: &std::path::Path, access: &std::path::Path) -> u64 {
+    std::fs::read_to_string(access)
+        .ok()
+        .and_then(|text| text.trim().parse::<u64>().ok())
+        .or_else(|| {
+            std::fs::metadata(audio)
+                .ok()?
+                .modified()
+                .ok()?
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|value| value.as_secs())
+        })
+        .unwrap_or(0)
+}
+
+/// 按最近使用顺序把**播放缓存**裁剪到给定上限。
+///
+/// 下载目录与播放缓存完全分离，所以这里不会删除用户主动下载的歌曲。
+/// `protected_ids` 用于保护正在播放、加载或预取的曲目。
+pub fn trim_audio_cache(
+    max_bytes: u64,
+    protected_ids: &std::collections::HashSet<String>,
+) -> CacheTrimResult {
+    if max_bytes == 0 {
+        let (bytes, _, _, _) = cache_stats();
+        return CacheTrimResult {
+            remaining_bytes: bytes,
+            ..Default::default()
+        };
+    }
+
+    let dir = cache_dir();
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return CacheTrimResult::default();
+    };
+
+    let mut assets = Vec::new();
+    let mut total = 0u64;
+    for entry in entries.flatten() {
+        let audio = entry.path();
+        if audio.extension().and_then(|ext| ext.to_str()) != Some("m4a") {
+            continue;
+        }
+        let Some(track_id) = cache_track_id(&audio) else {
+            continue;
+        };
+        let quality = audio.with_extension("quality");
+        let access = access_path(&audio);
+        let bytes = file_bytes(&audio) + file_bytes(&quality) + file_bytes(&access);
+        total = total.saturating_add(bytes);
+        assets.push(CacheAsset {
+            last_used: asset_last_used(&audio, &access),
+            audio,
+            quality,
+            access,
+            track_id,
+            bytes,
+        });
+    }
+
+    if total <= max_bytes {
+        return CacheTrimResult {
+            remaining_bytes: total,
+            ..Default::default()
+        };
+    }
+
+    assets.sort_by_key(|asset| asset.last_used);
+    let mut result = CacheTrimResult {
+        remaining_bytes: total,
+        ..Default::default()
+    };
+    for asset in assets {
+        if result.remaining_bytes <= max_bytes {
+            break;
+        }
+        if protected_ids.contains(&asset.track_id) {
+            continue;
+        }
+
+        let removed_audio = std::fs::remove_file(&asset.audio).is_ok();
+        let _ = std::fs::remove_file(&asset.quality);
+        let _ = std::fs::remove_file(&asset.access);
+        if removed_audio {
+            result.removed_assets += 1;
+            result.removed_bytes = result.removed_bytes.saturating_add(asset.bytes);
+            result.remaining_bytes = result.remaining_bytes.saturating_sub(asset.bytes);
+        }
+    }
+    result
+}
+
 /// 封面缓存目录。
 pub fn cover_cache_dir() -> std::path::PathBuf {
     dirs::cache_dir()
@@ -419,6 +586,18 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn cache_track_id_handles_quality_suffixes() {
+        assert_eq!(
+            cache_track_id(std::path::Path::new("123-lossless.m4a")).as_deref(),
+            Some("123")
+        );
+        assert_eq!(
+            cache_track_id(std::path::Path::new("abc-def-highest.m4a")).as_deref(),
+            Some("abc-def")
+        );
+    }
+
     fn dir_usage_and_count_extension_classify_files_correctly() {
         let dir = std::env::temp_dir().join(format!("sodam-cache-stats-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

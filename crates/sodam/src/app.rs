@@ -359,7 +359,7 @@ pub struct Root {
     /// 预取失败冷却表（曲目 id → 最近失败时刻）：巡检不能把永久失败的歌
     /// （下架/地区受限）每 5 秒无限重试，60s 内不再排。
     pub(crate) prefetch_failed: HashMap<String, std::time::Instant>,
-    /// 预取巡检节拍：心跳每 200ms 自增，每 25 拍（约 5s）补一次预取。
+    /// 预取巡检节拍：心跳每 100ms 自增，每 50 拍（约 5s）补一次预取。
     pub(crate) prefetch_patrol: u32,
     /// 缓存统计快照（音频字节, 歌曲数, 封面字节, 封面张数）：
     /// 后台扫盘后回填，设置页只读它（渲染路径不做同步 IO）。

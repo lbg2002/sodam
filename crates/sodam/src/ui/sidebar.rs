@@ -17,6 +17,7 @@ fn icon_name(nav: Nav) -> &'static str {
         Nav::Search => "search",
         Nav::Liked => "heart",
         Nav::Library => "list-music",
+        Nav::Recent => "history",
         Nav::Downloads => "download",
         Nav::Artist | Nav::Album => "search",
         Nav::Settings => "settings",
@@ -54,7 +55,7 @@ fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> A
         .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
             // 未登录时只放行「设置」，其他入口都拦回去（登录在设置 → 账户）
             if root.settings.cookie.trim().is_empty()
-                && !matches!(nav, Nav::Settings | Nav::Downloads)
+                && !matches!(nav, Nav::Settings | Nav::Downloads | Nav::Recent)
             {
                 root.set_nav(Nav::Settings, cx);
                 root.set_status("请先在「设置 → 账户」扫码登录", &[]);
@@ -118,6 +119,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         Nav::Search,
         Nav::Liked,
         Nav::Library,
+        Nav::Recent,
         Nav::Downloads,
         Nav::Settings,
     ]
@@ -135,7 +137,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
             nav_row(nav, labels[&nav].clone(), active, cx)
         })
         .collect();
-    let library_items: Vec<AnyElement> = [Nav::Liked, Nav::Library, Nav::Downloads]
+    let library_items: Vec<AnyElement> = [Nav::Liked, Nav::Library, Nav::Recent, Nav::Downloads]
         .into_iter()
         .map(|nav| {
             let active = match nav {
@@ -147,6 +149,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         current == Nav::Library
                     }
                 }
+                Nav::Recent => current == Nav::Recent,
                 Nav::Downloads => current == Nav::Downloads,
                 _ => current == nav,
             };

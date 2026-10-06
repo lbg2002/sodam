@@ -9,6 +9,7 @@ pub mod downloads;
 pub mod library;
 pub mod login;
 pub mod models;
+pub mod playback_state;
 pub mod queue;
 pub mod session;
 
@@ -16,5 +17,6 @@ pub use audio::{PlaybackEngine, PlaybackSnapshot};
 pub use config::Settings;
 pub use downloads::{download_dir, DownloadedTrack};
 pub use models::{PlaylistItem, SceneItem, TrackItem};
+pub use playback_state::PlaybackState;
 pub use queue::{PlayMode, Queue};
 pub use session::Session;

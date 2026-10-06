@@ -3,15 +3,19 @@
 use super::*;
 
 fn download_search_box(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl IntoElement {
-    let focused = root.search_focus.is_focused(window);
-    let input_focus = root.search_focus.clone();
+    let focused = root.download_search_focus.is_focused(window);
+    let input_focus = root.download_search_focus.clone();
     let input_entity = cx.entity();
-    let text = if root.search_input.is_empty() {
+    let text = if root.download_search_input.is_empty() {
         root.tr("搜索已下载歌曲 / 歌手").to_string()
     } else {
-        format!("{}{}", root.search_input, if focused { "▌" } else { "" })
+        format!(
+            "{}{}",
+            root.download_search_input,
+            if focused { "▌" } else { "" }
+        )
     };
-    let color = if root.search_input.is_empty() {
+    let color = if root.download_search_input.is_empty() {
         theme::text_muted()
     } else {
         theme::text()
@@ -40,17 +44,17 @@ fn download_search_box(root: &Root, window: &Window, cx: &mut Context<Root>) -> 
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(|root, _event, window, cx| {
-                window.focus(&root.search_focus, cx);
+                window.focus(&root.download_search_focus, cx);
             }),
         )
         .on_key_down(cx.listener(|root, event: &KeyDownEvent, _window, cx| {
             match event.keystroke.key.as_str() {
                 "backspace" => {
-                    let _ = root.search_input.pop();
+                    let _ = root.download_search_input.pop();
                     cx.notify();
                 }
                 "escape" => {
-                    root.search_input.clear();
+                    root.download_search_input.clear();
                     cx.notify();
                 }
                 _ => {}
@@ -90,7 +94,7 @@ fn bytes_label(bytes: u64) -> String {
 }
 
 pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> AnyElement {
-    let query = root.search_input.trim().to_lowercase();
+    let query = root.download_search_input.trim().to_lowercase();
     let pending_items: Vec<_> = root
         .pending_downloads
         .values()
@@ -216,6 +220,27 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                     .child(
                         div()
                             .id(gpui::ElementId::Name(
+                                format!("retry-download-{}", track.id).into(),
+                            ))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .h(px(theme::size::CONTROL_SM))
+                            .px(px(theme::space::MD))
+                            .rounded(px(theme::radius::PILL))
+                            .cursor_pointer()
+                            .hover(|style| style.bg(theme::surface_hover()))
+                            .on_click(cx.listener({
+                                let retry_track = track.clone();
+                                move |root, _event: &ClickEvent, _window, cx| {
+                                    root.retry_pending_download(retry_track.clone(), cx);
+                                }
+                            }))
+                            .child(root.tr("立即重试")),
+                    )
+                    .child(
+                        div()
+                            .id(gpui::ElementId::Name(
                                 format!("cancel-download-{}", track.id).into(),
                             ))
                             .flex()
@@ -312,6 +337,27 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                             .text_size(theme::Text::Small.size())
                             .text_color(theme::text_faint())
                             .child(format!("{} · {}", item.quality, bytes_label(item.bytes))),
+                    )
+                    .child(
+                        div()
+                            .id(gpui::ElementId::Name(
+                                format!("open-download-{id}").into(),
+                            ))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .h(px(theme::size::CONTROL_SM))
+                            .px(px(theme::space::MD))
+                            .rounded(px(theme::radius::PILL))
+                            .cursor_pointer()
+                            .hover(|style| style.bg(theme::surface_hover()))
+                            .on_click(cx.listener({
+                                let path = item.path.clone();
+                                move |root, _event: &ClickEvent, _window, cx| {
+                                    root.open_download_file(path.clone(), cx);
+                                }
+                            }))
+                            .child(root.tr("打开")),
                     )
                     .child(
                         div()

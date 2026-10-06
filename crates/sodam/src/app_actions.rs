@@ -275,6 +275,8 @@ impl Root {
         if let Some(session) = self.session.as_mut() {
             let _ = session.apply(self.settings.clone());
         }
+        // 切档后旧档位缓存不能再显示为“已准备”，先重建当前档位索引。
+        self.refresh_audio_cache_index(cx);
         // 切档后按新档位重新预取下一首（正在播的这首不受影响）
         self.spawn_prefetch(cx);
     }
@@ -340,7 +342,10 @@ impl Root {
             return;
         }
         self.cache_index_loading = true;
-        let work = cx.background_spawn(async { sodam_core::audio::cached_audio_ids() });
+        let quality = self.settings.quality.clone();
+        let work = cx.background_spawn(async move {
+            sodam_core::audio::cached_audio_ids_for_quality(&quality)
+        });
         cx.spawn(async move |this, cx| {
             let ids = work.await;
             let _ = this.update(cx, |root, cx| {
@@ -390,7 +395,10 @@ impl Root {
 
     /// 把队列、当前曲目和进度写到独立状态文件，供下次启动恢复。
     pub(crate) fn persist_playback_state(&mut self, cx: &mut Context<Self>) {
-        if self.playback_state_save_inflight || self.queue.is_empty() {
+        if self.playback_state_save_inflight
+            || self.queue.is_empty()
+            || self.restore_seek_seconds.is_some()
+        {
             return;
         }
         self.playback_state_save_inflight = true;
@@ -406,7 +414,7 @@ impl Root {
             index: self.queue.index(),
             mode: self.queue.mode,
             position_seconds,
-            was_playing: snapshot.playing || self.pending_track.is_some(),
+            was_playing: self.playing || self.pending_track.is_some(),
             ..Default::default()
         };
         let work = cx.background_spawn(async move { state.save() });

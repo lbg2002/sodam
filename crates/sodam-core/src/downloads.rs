@@ -336,6 +336,9 @@ pub fn relocate_download_dir(old_dir: &Path, new_dir: &Path) -> Result<()> {
         fs::create_dir_all(new_dir).context("创建下载目录失败")?;
         return Ok(());
     }
+    if new_dir.starts_with(old_dir) {
+        anyhow::bail!("新的下载目录不能位于当前下载目录内部");
+    }
     fs::create_dir_all(new_dir).context("创建新的下载目录失败")?;
     if !old_dir.exists() {
         return Ok(());

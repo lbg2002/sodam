@@ -315,6 +315,13 @@ impl Root {
     }
 
     pub fn choose_download_directory(&mut self, cx: &mut Context<Self>) {
+        if std::env::var_os("SODAM_DOWNLOAD_DIR").is_some() {
+            self.status = self
+                .tr("下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量")
+                .to_string();
+            cx.notify();
+            return;
+        }
         let old_dir = sodam_core::downloads::download_dir_for(&self.settings.download_dir);
         let mut settings = self.settings.clone();
         let initial = old_dir.clone();
@@ -349,6 +356,13 @@ impl Root {
     }
 
     pub fn reset_download_directory(&mut self, cx: &mut Context<Self>) {
+        if std::env::var_os("SODAM_DOWNLOAD_DIR").is_some() {
+            self.status = self
+                .tr("下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量")
+                .to_string();
+            cx.notify();
+            return;
+        }
         let old_dir = sodam_core::downloads::download_dir_for(&self.settings.download_dir);
         let new_dir = sodam_core::downloads::default_download_dir();
         let mut settings = self.settings.clone();

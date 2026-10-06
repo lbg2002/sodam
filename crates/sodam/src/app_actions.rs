@@ -584,6 +584,9 @@ impl Root {
 
     pub fn set_offline_mode(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.settings.offline_mode = enabled;
+        if enabled {
+            self.cover_pool.clear_pending();
+        }
         self.status = match self.settings.save() {
             Ok(()) => {
                 if enabled {
@@ -2363,6 +2366,9 @@ impl Root {
 
     /// 驱动请求池：保持最多 `MAX_CONCURRENCY` 个下载在飞，完成一个补一个。
     pub(crate) fn pump_covers(&mut self, cx: &mut Context<Self>) {
+        if self.settings.offline_mode {
+            return;
+        }
         while let Some(url) = self.cover_pool.next() {
             let settings = self.settings.clone();
             let fetch_url = url.clone();

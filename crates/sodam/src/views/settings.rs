@@ -562,6 +562,65 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     })
     .collect();
 
+    let cache_limit_rows: Vec<AnyElement> = [
+        (1u64, "1 GB", root.tr("适合磁盘空间较小的设备")),
+        (3u64, root.tr("3 GB（推荐）"), root.tr("兼顾无感切歌与磁盘占用")),
+        (5u64, "5 GB", root.tr("适合经常连续听歌，保留更多本地缓存")),
+        (0u64, root.tr("不限制"), root.tr("不自动清理播放缓存")),
+    ]
+    .iter()
+    .map(|(value, title, hint)| {
+        let chosen = root.settings.cache_limit_gb == *value;
+        let value = *value;
+        div()
+            .id(gpui::ElementId::Name(format!("cache-limit-{value}").into()))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(theme::space::LG))
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_cache_limit_gb(value, cx);
+            }))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .text_size(theme::Text::Body.size())
+                            .text_color(if chosen {
+                                theme::text()
+                            } else {
+                                theme::text_muted()
+                            })
+                            .child(title.to_string()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_faint())
+                            .child(hint.to_string()),
+                    ),
+            )
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
     let account_card = account_section(root, cx);
 
     div()
@@ -809,6 +868,34 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .gap(px(theme::space::XS))
                 .children(prefetch_rows),
         )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Large.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::text())
+                        .child(root.tr("缓存管理")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(root.tr(
+                            "达到上限后按最近使用顺序自动清理播放缓存；不会删除下载管理里的歌曲",
+                        )),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .children(cache_limit_rows),
+        )
         .child({
             // 缓存：显示占用大小 + 一键清理（统计读后台快照，不在渲染路径扫盘）
             let (audio_bytes, audio_files, cover_bytes, cover_files) = root.cache_summary;
@@ -822,7 +909,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .text_size(theme::Text::Large.size())
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::text())
-                        .child(root.tr("缓存")),
+                        .child(root.tr("缓存使用情况")),
                 )
                 .child(
                     div()
@@ -868,8 +955,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                             let removed = sodam_core::audio::clear_cache();
                             root.status =
                                 root.localized("已清理缓存：{} 个文件", &[removed.to_string()]);
-                            // 清理后立即刷新统计（后台扫盘）
+                            // 清理后立即刷新统计与缓存 id 快照（后台扫盘）
                             root.refresh_cache_stats(cx);
+                            root.refresh_audio_cache_index(cx);
                             cx.notify();
                         }))
                         .child(root.tr("清除歌曲缓存")),

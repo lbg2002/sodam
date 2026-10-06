@@ -6045,6 +6045,8 @@ name = "sodam"
 version = "0.1.7"
 dependencies = [
  "anyhow",
+ "dbus",
+ "dbus-tree",
  "gpui",
  "gpui_platform",
  "image",

@@ -1519,8 +1519,11 @@ fn local_playlists_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 
     page = page.child(
         div()
+            .id("local-playlists-scroll")
             .flex()
             .flex_col()
+            .flex_1()
+            .min_h(px(0.0))
             .gap(px(theme::space::SM))
             .overflow_y_scroll()
             .children(cards),

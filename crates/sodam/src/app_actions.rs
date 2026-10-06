@@ -248,6 +248,39 @@ impl Root {
         self.spawn_prefetch(cx);
     }
 
+    pub fn set_download_quality(&mut self, quality: &str, cx: &mut Context<Self>) {
+        self.settings.download_quality = quality.to_string();
+        self.status = match self.settings.save() {
+            Ok(()) => self.tr("下载音质设置已保存").to_string(),
+            Err(err) => self.localized("下载音质保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    pub fn set_download_format(&mut self, format: &str, cx: &mut Context<Self>) {
+        self.settings.download_format = format.to_string();
+        self.status = match self.settings.save() {
+            Ok(()) => self.tr("下载格式设置已保存").to_string(),
+            Err(err) => self.localized("下载格式保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    fn download_quality_preference(&self) -> String {
+        match self.settings.download_quality.trim().to_ascii_lowercase().as_str() {
+            "" | "follow" => self.settings.quality.clone(),
+            value => value.to_string(),
+        }
+    }
+
+    fn download_output_format(&self) -> String {
+        match self.settings.download_format.trim().to_ascii_lowercase().as_str() {
+            "mp3" => "mp3".to_string(),
+            "flac" => "flac".to_string(),
+            _ => "source".to_string(),
+        }
+    }
+
     /// 按比例跳转播放位置（0.0~1.0）。
     pub fn seek_fraction(&mut self, fraction: f32) {
         let snapshot = self.engine.snapshot();
@@ -1324,10 +1357,11 @@ impl Root {
         }
 
         self.download_inflight.insert(track.id.clone());
-        let quality = self.settings.quality.clone();
+        let quality = self.download_quality_preference();
+        let format = self.download_output_format();
         let work_track = track.clone();
         let work = cx.background_spawn(async move {
-            sodam_core::downloads::export_cached_track(&work_track, &quality)
+            sodam_core::downloads::export_cached_track(&work_track, &quality, &format)
         });
         cx.spawn(async move |this, cx| {
             let result = work.await;
@@ -1422,10 +1456,11 @@ impl Root {
         self.persist_pending_downloads();
         self.download_inflight.insert(track.id.clone());
 
-        let quality = self.settings.quality.clone();
+        let quality = self.download_quality_preference();
+        let format = self.download_output_format();
         let work_track = track.clone();
         let work = cx.background_spawn(async move {
-            sodam_core::downloads::export_cached_track(&work_track, &quality)
+            sodam_core::downloads::export_cached_track(&work_track, &quality, &format)
         });
         cx.spawn(async move |this, cx| {
             let result = work.await;

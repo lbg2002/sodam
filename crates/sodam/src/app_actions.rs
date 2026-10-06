@@ -2706,9 +2706,17 @@ impl Root {
 
         let settings = self.settings.clone();
         let work_track = track.clone();
-        // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
+        // 离线模式严格只读已经校验通过的本地缓存；在线模式缓存命中时同样
+        // 直接返回，只有真正 miss 才发起网络请求。
         let work = cx.background_spawn(async move {
-            let session = Session::new(settings);
+            let session = Session::new(settings.clone());
+            if settings.offline_mode {
+                return session.cached_track(&work_track.id).ok_or_else(|| {
+                    anyhow::anyhow!("离线模式下这首歌尚未缓存")
+                });
+            }
+
+            // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
             let mut last_err = None;
             for attempt in 1..=3 {
                 match session.download_to_cache(&work_track) {
@@ -2797,7 +2805,14 @@ impl Root {
                         );
                         root.status = message.clone();
                         root.playback_error = Some(message);
-                        if root.consecutive_failures >= 3 {
+                        if root.settings.offline_mode {
+                            root.playing = false;
+                            root.status = root
+                                .localized(
+                                    "离线不可播放：{} 尚未缓存",
+                                    std::slice::from_ref(&track.title),
+                                );
+                        } else if root.consecutive_failures >= 3 {
                             root.playing = false;
                             root.status = root
                                 .tr("连续 3 首拉流失败，已暂停（检查网络或签名服务）")
@@ -2816,9 +2831,31 @@ impl Root {
     }
 
     pub fn next_track(&mut self, cx: &mut Context<Self>) {
-        // 切歌时丢掉进度预览，避免「拖到一半换歌」把 seek 用到新歌上。
-        // 队列当前项不会被移除（remove 拒绝当前项），所以直接推进即可。
         self.progress_preview = None;
+        if self.settings.offline_mode {
+            let len = self.queue.len();
+            for _ in 0..len {
+                self.queue.advance();
+                let cached = self
+                    .queue
+                    .current()
+                    .and_then(|track| {
+                        self.session
+                            .as_ref()
+                            .and_then(|session| session.cached_track(&track.id))
+                    })
+                    .is_some();
+                if cached {
+                    self.sync_queue_cache();
+                    self.start_track(cx);
+                    return;
+                }
+            }
+            self.playing = false;
+            self.status = self.tr("离线模式：队列中没有更多已缓存歌曲").to_string();
+            cx.notify();
+            return;
+        }
         self.queue.advance();
         self.sync_queue_cache();
         self.start_track(cx);
@@ -2826,6 +2863,30 @@ impl Root {
 
     pub fn prev_track(&mut self, cx: &mut Context<Self>) {
         self.progress_preview = None;
+        if self.settings.offline_mode {
+            let len = self.queue.len();
+            for _ in 0..len {
+                self.queue.rewind();
+                let cached = self
+                    .queue
+                    .current()
+                    .and_then(|track| {
+                        self.session
+                            .as_ref()
+                            .and_then(|session| session.cached_track(&track.id))
+                    })
+                    .is_some();
+                if cached {
+                    self.sync_queue_cache();
+                    self.start_track(cx);
+                    return;
+                }
+            }
+            self.playing = false;
+            self.status = self.tr("离线模式：队列中没有其他已缓存歌曲").to_string();
+            cx.notify();
+            return;
+        }
         self.queue.rewind();
         self.sync_queue_cache();
         self.start_track(cx);

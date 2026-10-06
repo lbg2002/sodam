@@ -163,16 +163,11 @@ fn toggle_setting_row(
                 .px(px(3.0))
                 .justify_end()
                 .when(!enabled, |this| this.justify_start())
-                .child(
-                    div()
-                        .size(px(16.0))
-                        .rounded_full()
-                        .bg(if enabled {
-                            theme::accent_foreground()
-                        } else {
-                            theme::text_faint()
-                        }),
-                ),
+                .child(div().size(px(16.0)).rounded_full().bg(if enabled {
+                    theme::accent_foreground()
+                } else {
+                    theme::text_faint()
+                })),
         )
         .into_any_element()
 }
@@ -1641,11 +1636,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 .bg(theme::surface_elevated())
                                 .cursor_pointer()
                                 .hover(|style| style.bg(theme::surface_hover()))
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.e3_adjust_lyrics_offset(-250, cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_adjust_lyrics_offset(-250, cx);
+                                }))
                                 .child(root.tr("提前 250 ms")),
                         )
                         .child(
@@ -1657,11 +1650,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 .bg(theme::surface_elevated())
                                 .cursor_pointer()
                                 .hover(|style| style.bg(theme::surface_hover()))
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.set_lyrics_offset_ms(0, cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.set_lyrics_offset_ms(0, cx);
+                                }))
                                 .child(root.tr("偏移归零")),
                         )
                         .child(
@@ -1673,11 +1664,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 .bg(theme::surface_elevated())
                                 .cursor_pointer()
                                 .hover(|style| style.bg(theme::surface_hover()))
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.e3_adjust_lyrics_offset(250, cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_adjust_lyrics_offset(250, cx);
+                                }))
                                 .child(root.tr("延后 250 ms")),
                         ),
                 )

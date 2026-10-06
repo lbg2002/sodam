@@ -101,6 +101,9 @@ impl Language {
             "打开目录" => "Open Folder",
             "恢复默认" => "Restore Default",
             "下载目录已更新" => "Download folder updated",
+            "有下载任务正在处理，请稍后更改下载目录" => {
+                "A download is currently being processed; change the download folder after it finishes"
+            }
             "下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量" => {
                 "The download folder is overridden by SODAM_DOWNLOAD_DIR; unset it before changing this setting"
             }

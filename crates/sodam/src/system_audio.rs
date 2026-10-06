@@ -21,7 +21,10 @@ pub fn list_output_devices() -> Vec<AudioOutputDevice> {
             .filter(|out| out.status.success())
             .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
             .unwrap_or_default();
-        if let Ok(out) = Command::new("pactl").args(["list", "short", "sinks"]).output() {
+        if let Ok(out) = Command::new("pactl")
+            .args(["list", "short", "sinks"])
+            .output()
+        {
             if out.status.success() {
                 let mut devices = Vec::new();
                 for line in String::from_utf8_lossy(&out.stdout).lines() {
@@ -103,7 +106,12 @@ pub fn notify_track(title: &str, artist: &str, cover: Option<&std::path::Path>) 
     #[cfg(target_os = "linux")]
     {
         let mut command = Command::new("notify-send");
-        command.args(["-a", "SodaM", "-h", "string:x-canonical-private-synchronous:sodam-track"]);
+        command.args([
+            "-a",
+            "SodaM",
+            "-h",
+            "string:x-canonical-private-synchronous:sodam-track",
+        ]);
         if let Some(path) = cover {
             command.arg("-i").arg(path);
         }

@@ -369,6 +369,15 @@ impl Root {
     }
 
     pub fn open_desktop_lyrics(&mut self, cx: &mut Context<Self>) {
+        if !self.settings.offline_mode {
+            if let Some(track) = self
+                .pending_track
+                .clone()
+                .or_else(|| self.queue.current().cloned())
+            {
+                self.load_lyrics(track, false, cx);
+            }
+        }
         let root = cx.entity();
         cx.defer(move |cx| crate::ui::desktop_lyrics::open(root, cx));
         self.status = self.tr("已打开桌面歌词").to_string();
@@ -538,6 +547,9 @@ impl Root {
 
     pub fn set_prefetch_adaptive(&mut self, enabled: bool, cx: &mut Context<Self>) {
         self.settings.prefetch_adaptive = enabled;
+        if enabled && self.settings.prefetch_count == 0 {
+            self.settings.prefetch_count = 3;
+        }
         self.status = match self.settings.save() {
             Ok(()) => {
                 if enabled {
@@ -2118,6 +2130,9 @@ impl Root {
                             } else {
                                 root.status = root
                                     .localized("待下载已完成：{}", std::slice::from_ref(&track.title));
+                            }
+                            if !root.batch_download_paused {
+                                root.process_pending_downloads(cx);
                             }
                             cx.notify();
                         }

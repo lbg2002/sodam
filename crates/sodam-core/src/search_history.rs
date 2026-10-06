@@ -56,7 +56,13 @@ pub fn record(query: &str) -> Result<Vec<SearchHistoryItem>> {
         .unwrap_or(0);
     let mut history = load();
     history.retain(|item| !item.query.eq_ignore_ascii_case(query));
-    history.insert(0, SearchHistoryItem { query: query.to_string(), used_at: now });
+    history.insert(
+        0,
+        SearchHistoryItem {
+            query: query.to_string(),
+            used_at: now,
+        },
+    );
     history.truncate(MAX_HISTORY);
     save(&history)?;
     Ok(history)

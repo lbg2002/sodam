@@ -16,6 +16,7 @@ use crate::ui::theme::ThemeKind;
 pub use login::login_modal;
 pub mod login;
 pub mod lyrics;
+pub mod downloads;
 pub mod scenes;
 pub mod search;
 pub mod settings;
@@ -35,6 +36,7 @@ const COL_TIME: f32 = 60.0;
 /// 标题列保底宽度：固定列再多也不能把标题挤没。
 const COL_TITLE_MIN: f32 = 160.0;
 const COL_LIKE: f32 = 28.0;
+const COL_DOWNLOAD: f32 = 32.0;
 
 fn vip_badge() -> AnyElement {
     div()
@@ -71,7 +73,7 @@ struct Columns {
 
 fn columns_for(width: f32) -> Columns {
     let usable = (width - ROW_PAD * 2.0).max(0.0);
-    let base = COL_INDEX + COL_LIKE + theme::size::ROW_ART;
+    let base = COL_INDEX + COL_LIKE + theme::size::ROW_ART + COL_DOWNLOAD;
     let candidate = |artist: bool, album: bool, time: bool| -> Option<f32> {
         let mut fixed = base;
         let mut count = 3.0;
@@ -179,6 +181,14 @@ fn track_header(cols: Columns, language: crate::ui::i18n::Language) -> AnyElemen
                 .child(language.text("时长")),
         );
     }
+    header = header.child(
+        div()
+            .w(px(COL_DOWNLOAD))
+            .flex_none()
+            .text_center()
+            .whitespace_nowrap()
+            .child(language.text("下载")),
+    );
     header.into_any_element()
 }
 
@@ -194,6 +204,9 @@ fn track_row(
     covers: std::sync::Arc<std::collections::HashMap<String, std::path::PathBuf>>,
     cover_requests: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     current_track_id: Option<String>,
+    downloaded_ids: std::sync::Arc<std::collections::HashSet<String>>,
+    pending_download_ids: std::sync::Arc<std::collections::HashSet<String>>,
+    download_inflight_ids: std::sync::Arc<std::collections::HashSet<String>>,
 ) -> AnyElement {
     let play_entity = entity.clone();
     let like_entity = entity.clone();
@@ -201,6 +214,11 @@ fn track_row(
     let menu_track = track.clone();
     let title_entity = entity.clone();
     let artist_entity = entity.clone();
+    let download_entity = entity.clone();
+    let downloaded = downloaded_ids.contains(&track.id);
+    let pending_download = pending_download_ids.contains(&track.id);
+    let download_inflight = download_inflight_ids.contains(&track.id);
+    let download_track = track.clone();
     div()
         .id(("track", index))
         .group(TRACK_GROUP)
@@ -385,6 +403,37 @@ fn track_row(
                     .child(track.duration_label()),
             )
         })
+        .child(
+            div()
+                .id(("download", index))
+                .w(px(COL_DOWNLOAD))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+                    cx.stop_propagation();
+                })
+                .on_click(move |_event: &ClickEvent, _window, cx: &mut gpui::App| {
+                    let track = download_track.clone();
+                    download_entity.update(cx, |root, cx| {
+                        root.toggle_download(track, cx);
+                    });
+                })
+                .child(
+                    svg()
+                        .path(icons::path(if downloaded { "check" } else { "download" }))
+                        .size(px(theme::ICON_SM))
+                        .text_color(if downloaded || pending_download {
+                            theme::accent()
+                        } else if download_inflight {
+                            theme::text_faint()
+                        } else {
+                            theme::text_muted()
+                        }),
+                ),
+        )
         .into_any_element()
 }
 
@@ -406,6 +455,13 @@ fn track_list(
     let entity = cx.entity();
     let count = tracks.len();
     let current_track_id = root.queue.current().map(|track| track.id.clone());
+    let downloaded_ids = root.downloaded_ids.clone();
+    let pending_download_ids = std::sync::Arc::new(
+        root.pending_downloads.keys().cloned().collect::<std::collections::HashSet<_>>(),
+    );
+    let download_inflight_ids = std::sync::Arc::new(
+        root.download_inflight.iter().cloned().collect::<std::collections::HashSet<_>>(),
+    );
     let cols = columns_for(root.list_width.lock().map(|width| *width).unwrap_or(1200.0));
     let width_slot = root.list_width.clone();
 
@@ -426,6 +482,9 @@ fn track_list(
                         covers.clone(),
                         cover_requests.clone(),
                         current_track_id.clone(),
+                        downloaded_ids.clone(),
+                        pending_download_ids.clone(),
+                        download_inflight_ids.clone(),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -796,6 +855,7 @@ fn subtitle_for(root: &Root) -> String {
                 root.localized("{} 首", &[root.liked.len().to_string()])
             }
         }
+        Nav::Downloads => root.localized("{} 首", &[root.downloads.len().to_string()]),
         Nav::Library => match &root.open_playlist {
             Some((_, _, tracks)) => root.localized("{} 首", &[tracks.len().to_string()]),
             None => {
@@ -1133,6 +1193,7 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
         },
         Nav::Artist => search::artist_page(root, cx),
         Nav::Album => search::album_page(root, cx),
+        Nav::Downloads => downloads::downloads_view(root, window, cx),
         Nav::Settings => settings::settings_view(root, cx),
         Nav::Lyrics => lyrics::lyrics_view(root, window, cx),
     };

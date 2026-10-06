@@ -103,6 +103,28 @@ impl Language {
             "浅色" => "Light",
             "深色" => "Dark",
             "主题已切换，但保存失败：{err}" => "Theme switched, but saving failed: {err}",
+            "智能预加载" => "Smart Prefetch",
+            "播放开始后后台逐步缓存后续歌曲；任务完成会立即补位，减少切歌等待" => {
+                "Cache upcoming tracks progressively after playback starts and refill immediately to reduce track-switch delays."
+            }
+            "前方 1 首" => "1 Track Ahead",
+            "前方 3 首（推荐）" => "3 Tracks Ahead (Recommended)",
+            "前方 5 首" => "5 Tracks Ahead",
+            "不提前缓存后续歌曲；切歌时可能需要等待加载" => {
+                "Do not pre-cache upcoming tracks; switching may require loading."
+            }
+            "最省流量，只保证下一首优先缓存" => {
+                "Lowest bandwidth usage; prioritize only the next track."
+            }
+            "兼顾无感切歌、网络占用与缓存空间" => {
+                "Balanced for seamless switching, bandwidth, and cache usage."
+            }
+            "网络稳定时切歌更从容，但会增加缓存和流量" => {
+                "More headroom on stable networks, with higher cache and bandwidth use."
+            }
+            "智能预加载已关闭" => "Smart prefetch disabled",
+            "智能预加载：保持前方 {} 首" => "Smart prefetch: keep {} tracks ahead",
+            "预加载设置保存失败：{err}" => "Failed to save prefetch setting: {err}",
             "播放音质偏好" => "Playback Quality",
             "下载设置" => "Download Settings",
             "下载音质" => "Download Quality",

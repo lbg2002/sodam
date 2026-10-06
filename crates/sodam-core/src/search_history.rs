@@ -35,7 +35,7 @@ pub fn load() -> Vec<SearchHistoryItem> {
             return history.clone();
         }
     }
-    let history = fs::read_to_string(path())
+    let history: Vec<SearchHistoryItem> = fs::read_to_string(path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();

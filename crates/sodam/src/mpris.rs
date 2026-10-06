@@ -6,7 +6,7 @@
 #![cfg(target_os = "linux")]
 
 use dbus::arg::{PropMap, RefArg, Variant};
-use dbus::blocking::Connection;
+use dbus::blocking::LocalConnection;
 use dbus_tree::{Access, Factory};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -125,7 +125,7 @@ fn run_server(
     state: Arc<Mutex<MprisState>>,
     commands: mpsc::Sender<MprisCommand>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let connection = Connection::new_session()?;
+    let connection = LocalConnection::new_session()?;
     connection.request_name("org.mpris.MediaPlayer2.sodam", false, true, false)?;
 
     let factory = Factory::new_fn::<()>();

@@ -1487,6 +1487,37 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     )
                 })
                 .collect::<Vec<_>>();
+            let font_rows = [24u32, 30, 36, 42]
+                .into_iter()
+                .map(|value| {
+                    choice_setting_row(
+                        format!("desktop-font-{value}"),
+                        format!("{value} px"),
+                        root.tr("桌面歌词独立字号").to_string(),
+                        root.settings.desktop_lyrics_font_size == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_desktop_font_size(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let color_rows = [
+                ("accent", root.tr("跟随强调色")),
+                ("text", root.tr("跟随主题文字色")),
+            ]
+            .into_iter()
+            .map(|(value, label)| {
+                choice_setting_row(
+                    format!("desktop-color-{value}"),
+                    label.to_string(),
+                    String::new(),
+                    root.settings.desktop_lyrics_color == value,
+                    cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_color(value, cx);
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
             let align_rows = [
                 ("left", root.tr("左对齐")),
                 ("center", root.tr("居中")),
@@ -1568,6 +1599,87 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .flex_col()
                         .gap(px(theme::space::XS))
                         .children(opacity_rows),
+                )
+                .child(settings_heading(
+                    root.tr("桌面歌词字号"),
+                    root.tr("独立于主播放页歌词字号，适合远距离查看"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(font_rows),
+                )
+                .child(settings_heading(
+                    root.tr("桌面歌词颜色"),
+                    root.tr("使用动态强调色，或跟随当前主题文字颜色"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(color_rows),
+                )
+                .child(settings_heading(
+                    root.tr("歌词偏移快捷调整"),
+                    root.tr("快速提前或延后桌面歌词；与播放页歌词偏移共用"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(
+                            div()
+                                .id("desktop-offset-earlier")
+                                .px(px(theme::space::MD))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(
+                                    |root, _event: &ClickEvent, _window, cx| {
+                                        root.e3_adjust_lyrics_offset(-250, cx);
+                                    },
+                                ))
+                                .child(root.tr("提前 250 ms")),
+                        )
+                        .child(
+                            div()
+                                .id("desktop-offset-zero")
+                                .px(px(theme::space::MD))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(
+                                    |root, _event: &ClickEvent, _window, cx| {
+                                        root.set_lyrics_offset_ms(0, cx);
+                                    },
+                                ))
+                                .child(root.tr("偏移归零")),
+                        )
+                        .child(
+                            div()
+                                .id("desktop-offset-later")
+                                .px(px(theme::space::MD))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(
+                                    |root, _event: &ClickEvent, _window, cx| {
+                                        root.e3_adjust_lyrics_offset(250, cx);
+                                    },
+                                ))
+                                .child(root.tr("延后 250 ms")),
+                        ),
                 )
                 .child(settings_heading(
                     root.tr("歌词对齐"),

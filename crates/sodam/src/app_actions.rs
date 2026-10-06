@@ -299,6 +299,100 @@ impl Root {
         cx.notify();
     }
 
+    pub fn choose_download_directory(&mut self, cx: &mut Context<Self>) {
+        let old_dir = sodam_core::downloads::download_dir_for(&self.settings.download_dir);
+        let mut settings = self.settings.clone();
+        let initial = old_dir.clone();
+        let work = cx.background_spawn(async move {
+            let Some(selected) = choose_directory_dialog(&initial)? else {
+                return Ok::<Option<Settings>, anyhow::Error>(None);
+            };
+            sodam_core::downloads::relocate_download_dir(&old_dir, &selected)?;
+            settings.download_dir = selected.display().to_string();
+            settings.save()?;
+            Ok(Some(settings))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                match result {
+                    Ok(Some(settings)) => {
+                        root.settings = settings;
+                        root.status = root.tr("下载目录已更新").to_string();
+                        root.refresh_downloads(cx);
+                    }
+                    Ok(None) => {}
+                    Err(err) => {
+                        root.status =
+                            root.localized("更改下载目录失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn reset_download_directory(&mut self, cx: &mut Context<Self>) {
+        let old_dir = sodam_core::downloads::download_dir_for(&self.settings.download_dir);
+        let new_dir = sodam_core::downloads::default_download_dir();
+        let mut settings = self.settings.clone();
+        let work = cx.background_spawn(async move {
+            sodam_core::downloads::relocate_download_dir(&old_dir, &new_dir)?;
+            settings.download_dir.clear();
+            settings.save()?;
+            Ok::<Settings, anyhow::Error>(settings)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                match result {
+                    Ok(settings) => {
+                        root.settings = settings;
+                        root.status = root.tr("下载目录已恢复默认").to_string();
+                        root.refresh_downloads(cx);
+                    }
+                    Err(err) => {
+                        root.status =
+                            root.localized("恢复默认下载目录失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn set_lyrics_font_size(&mut self, size: u32, cx: &mut Context<Self>) {
+        self.settings.lyrics_font_size = size.clamp(14, 30);
+        self.status = match self.settings.save() {
+            Ok(()) => self.tr("歌词字号设置已保存").to_string(),
+            Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    pub fn set_lyrics_line_height(&mut self, height: u32, cx: &mut Context<Self>) {
+        self.settings.lyrics_line_height = height.clamp(24, 52);
+        self.status = match self.settings.save() {
+            Ok(()) => self.tr("歌词行距设置已保存").to_string(),
+            Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
+    pub fn set_lyrics_offset_ms(&mut self, offset: i64, cx: &mut Context<Self>) {
+        self.settings.lyrics_offset_ms = offset.clamp(-3000, 3000);
+        self.status = match self.settings.save() {
+            Ok(()) => self.localized(
+                "歌词偏移：{} ms",
+                &[self.settings.lyrics_offset_ms.to_string()],
+            ),
+            Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
+    }
+
     pub fn set_prefetch_count(&mut self, count: usize, cx: &mut Context<Self>) {
         self.settings.prefetch_count = count.min(8);
         self.status = match self.settings.save() {
@@ -2612,6 +2706,59 @@ impl Root {
                 self.session = Some(Session::new(self.settings.clone()));
             }
         }
+    }
+}
+
+fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<PathBuf>> {
+    #[cfg(target_os = "linux")]
+    {
+        let initial = initial.display().to_string();
+        let zenity = std::process::Command::new("zenity")
+            .args([
+                "--file-selection",
+                "--directory",
+                "--title=选择 SodaM 下载目录",
+                &format!("--filename={initial}/"),
+            ])
+            .output();
+        if let Ok(output) = zenity {
+            if output.status.success() {
+                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+            }
+            return Ok(None);
+        }
+
+        let kdialog = std::process::Command::new("kdialog")
+            .args(["--getexistingdirectory", &initial])
+            .output();
+        if let Ok(output) = kdialog {
+            if output.status.success() {
+                let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+            }
+            return Ok(None);
+        }
+        anyhow::bail!("未找到目录选择器，请安装 zenity 或 kdialog")
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let script = r#"POSIX path of (choose folder with prompt "Choose SodaM download folder")"#;
+        let output = std::process::Command::new("osascript")
+            .args(["-e", script])
+            .output()?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = initial;
+        anyhow::bail!("Windows 目录选择暂未接入")
     }
 }
 

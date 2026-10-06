@@ -1265,7 +1265,11 @@ impl Root {
                     Err(err) => {
                         root.lyrics = Arc::new(Vec::new());
                         root.lyrics_active = None;
-                        root.lyrics_error = Some(err.to_string());
+                        root.lyrics_error = Some(if root.settings.offline_mode {
+                            root.tr("离线模式：这首歌没有本地歌词缓存").to_string()
+                        } else {
+                            err.to_string()
+                        });
                     }
                 }
                 cx.notify();

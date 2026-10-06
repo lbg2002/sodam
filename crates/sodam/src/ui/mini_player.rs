@@ -1,11 +1,33 @@
 //! 独立迷你播放器窗口。
 
 use gpui::prelude::*;
-use gpui::{div, px, svg, ClickEvent, Context, Entity, IntoElement, Render, Window};
+use gpui::{
+    div, px, size, svg, App, Bounds, ClickEvent, Context, Entity, IntoElement, Render, TitlebarOptions,
+    Window, WindowBounds, WindowKind, WindowOptions,
+};
 
 use crate::app::Root;
 use crate::ui::artwork::cover;
 use crate::ui::{icons, theme};
+
+pub fn open(root: Entity<Root>, cx: &mut App) {
+    let bounds = Bounds::centered(None, size(px(430.0), px(142.0)), cx);
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(380.0), px(130.0))),
+        kind: WindowKind::Floating,
+        is_resizable: false,
+        titlebar: Some(TitlebarOptions {
+            title: Some("SodaM Mini".into()),
+            ..Default::default()
+        }),
+        app_id: Some("SodaM".into()),
+        ..Default::default()
+    };
+    let _ = cx.open_window(options, move |_window, cx| {
+        cx.new(|_| MiniPlayer::new(root))
+    });
+}
 
 pub struct MiniPlayer {
     root: Entity<Root>,
@@ -195,7 +217,6 @@ impl Render for MiniPlayer {
                     .when(root.settings.offline_mode, |this| {
                         this.child(
                             div()
-                                .ml_auto()
                                 .px(px(theme::space::SM))
                                 .py(px(1.0))
                                 .rounded(px(theme::radius::PILL))

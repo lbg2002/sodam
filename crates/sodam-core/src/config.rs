@@ -65,6 +65,10 @@ pub struct Settings {
     pub desktop_lyrics_click_through: bool,
     /// 桌面歌词背景透明度 0~100。
     pub desktop_lyrics_opacity: u8,
+    /// 桌面歌词独立字号（px）。
+    pub desktop_lyrics_font_size: u32,
+    /// 桌面歌词颜色：accent / text。
+    pub desktop_lyrics_color: String,
     /// 桌面歌词对齐：left / center / right。
     pub desktop_lyrics_align: String,
     /// 迷你播放器记忆窗口坐标/尺寸；0 表示使用默认。
@@ -119,6 +123,8 @@ impl Default for Settings {
             desktop_lyrics_locked: false,
             desktop_lyrics_click_through: false,
             desktop_lyrics_opacity: 86,
+            desktop_lyrics_font_size: 30,
+            desktop_lyrics_color: "accent".to_string(),
             desktop_lyrics_align: "center".to_string(),
             mini_x: 0.0,
             mini_y: 0.0,
@@ -230,6 +236,8 @@ mod tests {
         assert!(loaded.lazy_startup);
         assert_eq!(loaded.player_bar_compact_width, 900);
         assert_eq!(loaded.desktop_lyrics_opacity, 86);
+        assert_eq!(loaded.desktop_lyrics_font_size, 30);
+        assert_eq!(loaded.desktop_lyrics_color, "accent");
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
         assert!(loaded.download_dir.is_empty());

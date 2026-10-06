@@ -10,6 +10,15 @@ use crate::app::Root;
 use crate::ui::theme;
 
 pub fn open(root: Entity<Root>, cx: &mut App) {
+    if let Some(handle) = cx
+        .windows()
+        .iter()
+        .find_map(|window| window.downcast::<DesktopLyrics>())
+    {
+        let _ = handle.update(cx, |_view, window, _cx| window.activate_window());
+        cx.activate(true);
+        return;
+    }
     let bounds = Bounds::centered(None, size(px(760.0), px(170.0)), cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),

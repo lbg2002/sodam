@@ -412,7 +412,9 @@ impl Root {
     pub(crate) fn sync_queue_cache(&mut self) {
         let revision = self.queue.revision();
         if self.queue_cache.0 != revision {
-            self.queue_cache = (revision, Arc::new(self.queue.tracks().to_vec()));
+            let tracks = self.queue.tracks().to_vec();
+            let _ = sodam_core::local_library::record_many(&tracks);
+            self.queue_cache = (revision, Arc::new(tracks));
         }
     }
 

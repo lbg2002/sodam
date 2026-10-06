@@ -247,6 +247,30 @@ impl Root {
                     }
                 }
 
+                // Gapless / Crossfade：在自然播完前提前装载下一首。
+                // Crossfade 使用用户配置秒数；仅 Gapless 时提前约 80ms，
+                // 配合已经完成的智能预取可消除 UI finished -> Load 的人为缝隙。
+                let transition_lead = if root.settings.crossfade_seconds > 0 {
+                    root.settings.crossfade_seconds as f64
+                } else if root.settings.gapless_playback {
+                    0.08
+                } else {
+                    0.0
+                };
+                if transition_lead > 0.0
+                    && snap.playing
+                    && snap.duration_seconds > transition_lead
+                    && root.pending_track.is_none()
+                    && !root.sleep_after_current
+                    && root.sleep_deadline.is_none()
+                    && root.transition_triggered_track_id != snap.track_id
+                    && snap.duration_seconds - snap.position_seconds <= transition_lead
+                {
+                    root.transition_triggered_track_id = snap.track_id.clone();
+                    root.next_track(cx);
+                    return;
+                }
+
                 if snap.finished && snap.finished_seq != root.last_finished_seq {
                     root.last_finished_seq = snap.finished_seq;
                     if root.pending_track.is_none() {

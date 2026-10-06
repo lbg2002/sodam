@@ -171,26 +171,26 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         Nav::Recent,
         Nav::Downloads,
     ]
-        .into_iter()
-        .map(|nav| {
-            let active = match nav {
-                Nav::Liked => liked_active,
-                Nav::Library => {
-                    if playing {
-                        matches!(origin, crate::app::QueueOrigin::Playlist(_))
-                    } else {
-                        current == Nav::Library
-                    }
+    .into_iter()
+    .map(|nav| {
+        let active = match nav {
+            Nav::Liked => liked_active,
+            Nav::Library => {
+                if playing {
+                    matches!(origin, crate::app::QueueOrigin::Playlist(_))
+                } else {
+                    current == Nav::Library
                 }
-                Nav::LocalMusic => local_music_active,
-                Nav::LocalPlaylists => local_playlists_active,
-                Nav::Recent => recent_active,
-                Nav::Downloads => current == Nav::Downloads,
-                _ => current == nav,
-            };
-            nav_row(nav, labels[&nav].clone(), active, cx)
-        })
-        .collect();
+            }
+            Nav::LocalMusic => local_music_active,
+            Nav::LocalPlaylists => local_playlists_active,
+            Nav::Recent => recent_active,
+            Nav::Downloads => current == Nav::Downloads,
+            _ => current == nav,
+        };
+        nav_row(nav, labels[&nav].clone(), active, cx)
+    })
+    .collect();
     let footer_items: Vec<AnyElement> = [Nav::Settings]
         .into_iter()
         .map(|nav| nav_row(nav, labels[&nav].clone(), nav == current, cx))

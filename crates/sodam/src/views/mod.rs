@@ -1416,13 +1416,34 @@ fn local_playlists_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .text_color(theme::text_muted())
                         .child(root.localized("{} 个本地播放列表", &[playlists.len().to_string()])),
                 )
-                .child(action_pill(
-                    "save-queue-snapshot",
-                    root.tr("保存当前队列"),
-                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.e3_save_queue_snapshot_auto(cx);
-                    }),
-                )),
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(action_pill(
+                            "save-later-playlist",
+                            root.tr("稍后听"),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_save_queue_snapshot(root.tr("稍后听"), cx);
+                            }),
+                        ))
+                        .child(action_pill(
+                            "save-work-playlist",
+                            root.tr("工作音乐"),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_save_queue_snapshot(root.tr("工作音乐"), cx);
+                            }),
+                        ))
+                        .child(action_pill(
+                            "save-queue-snapshot",
+                            root.tr("保存快照"),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_save_queue_snapshot_auto(cx);
+                            }),
+                        )),
+                ),
         );
 
     if playlists.is_empty() {

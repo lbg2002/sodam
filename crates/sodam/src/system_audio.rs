@@ -54,19 +54,30 @@ pub fn list_output_devices() -> Vec<AudioOutputDevice> {
 }
 
 pub fn set_output_device(id: &str) -> anyhow::Result<()> {
-    let id = id.trim();
-    if id.is_empty() {
-        return Ok(());
-    }
+    let requested = id.trim();
     #[cfg(target_os = "linux")]
     {
-        let status = Command::new("pactl")
-            .args(["set-default-sink", id])
-            .status()?;
-        if !status.success() {
-            anyhow::bail!("pactl 切换输出设备失败");
+        let target = if requested.is_empty() {
+            let output = Command::new("pactl").args(["get-default-sink"]).output()?;
+            if !output.status.success() {
+                anyhow::bail!("读取系统默认音频输出失败");
+            }
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        } else {
+            let status = Command::new("pactl")
+                .args(["set-default-sink", requested])
+                .status()?;
+            if !status.success() {
+                anyhow::bail!("pactl 切换输出设备失败");
+            }
+            requested.to_string()
+        };
+
+        if target.is_empty() {
+            anyhow::bail!("系统没有可用的默认音频输出");
         }
-        // 把现有播放流一起迁移到新 sink；失败不影响默认设备设置。
+
+        // 把现有播放流一起迁移到目标 sink；失败不影响默认设备设置。
         if let Ok(out) = Command::new("pactl")
             .args(["list", "short", "sink-inputs"])
             .output()
@@ -74,7 +85,7 @@ pub fn set_output_device(id: &str) -> anyhow::Result<()> {
             for line in String::from_utf8_lossy(&out.stdout).lines() {
                 if let Some(index) = line.split('\t').next() {
                     let _ = Command::new("pactl")
-                        .args(["move-sink-input", index, id])
+                        .args(["move-sink-input", index, target.as_str()])
                         .status();
                 }
             }
@@ -82,7 +93,10 @@ pub fn set_output_device(id: &str) -> anyhow::Result<()> {
         return Ok(());
     }
     #[cfg(not(target_os = "linux"))]
-    anyhow::bail!("当前平台暂不支持应用内切换音频输出设备")
+    {
+        let _ = requested;
+        anyhow::bail!("当前平台暂不支持应用内切换音频输出设备")
+    }
 }
 
 pub fn notify_track(title: &str, artist: &str, cover: Option<&std::path::Path>) {

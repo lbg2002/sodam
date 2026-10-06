@@ -618,9 +618,8 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
     let local_matches = if !query.is_empty()
         && matches!(root.search_tab, SearchScope::All | SearchScope::Tracks)
     {
-        sodam_core::local_library::tracks()
+        sodam_core::local_library::search_tracks(&query)
             .into_iter()
-            .filter(|track| crate::experience3::fuzzy_matches(track, &query))
             .filter(|track| {
                 root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
             })

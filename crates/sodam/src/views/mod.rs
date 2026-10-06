@@ -1116,7 +1116,9 @@ fn subtitle_for(root: &Root) -> String {
                 }
             }
         },
-        Nav::Settings => root.tr("外观、播放、歌词、下载、存储与账户").to_string(),
+        Nav::Settings => root
+            .tr("外观、播放、歌词、下载、存储、桌面、高级与账户")
+            .to_string(),
         Nav::Lyrics => root.tr("正在播放").to_string(),
         Nav::Home => root.tr("来自汽水的推荐").to_string(),
         Nav::Scenes => root.tr("按场景选歌").to_string(),

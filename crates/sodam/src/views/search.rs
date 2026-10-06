@@ -615,19 +615,18 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
     }
     let query = root.search_keyword.trim().to_string();
     let history = sodam_core::search_history::load();
-    let local_matches = if !query.is_empty()
-        && matches!(root.search_tab, SearchScope::All | SearchScope::Tracks)
-    {
-        sodam_core::local_library::search_tracks(&query)
-            .into_iter()
-            .filter(|track| {
-                root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
-            })
-            .take(8)
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
+    let local_matches =
+        if !query.is_empty() && matches!(root.search_tab, SearchScope::All | SearchScope::Tracks) {
+            sodam_core::local_library::search_tracks(&query)
+                .into_iter()
+                .filter(|track| {
+                    root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
+                })
+                .take(8)
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
     let local_tracks = std::sync::Arc::new(local_matches);
     div()
         .flex()

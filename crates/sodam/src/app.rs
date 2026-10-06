@@ -635,7 +635,11 @@ impl Root {
                     .queue
                     .tracks()
                     .iter()
-                    .take(if root.settings.lazy_startup { 4 } else { usize::MAX })
+                    .take(if root.settings.lazy_startup {
+                        4
+                    } else {
+                        usize::MAX
+                    })
                     .map(|track| track.cover.clone())
                     .collect();
                 root.ensure_covers(&covers, cx);

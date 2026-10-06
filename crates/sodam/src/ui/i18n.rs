@@ -99,6 +99,9 @@ impl Language {
             "离线不可播放：{} 尚未缓存" => "Unavailable offline: {} is not cached",
             "离线模式：队列中没有更多已缓存歌曲" => "Offline mode: no more cached songs in the queue",
             "离线模式：队列中没有其他已缓存歌曲" => "Offline mode: no other cached songs in the queue",
+            "离线模式：这首歌没有本地歌词缓存" => {
+                "Offline mode: this track has no local lyric cache"
+            }
             "离线模式：未加载的歌词不会联网获取" => {
                 "Offline mode: lyrics that are not already loaded will not be fetched"
             }

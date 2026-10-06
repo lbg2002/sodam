@@ -85,8 +85,7 @@ mod tests {
 
     #[test]
     fn playback_state_round_trip_clamps_index() {
-        let dir =
-            std::env::temp_dir().join(format!("sodam-playback-state-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("sodam-playback-state-{}", std::process::id()));
         let path = dir.join("state.json");
         let state = PlaybackState {
             queue: vec![TrackItem {

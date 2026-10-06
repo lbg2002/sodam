@@ -164,7 +164,12 @@ impl Root {
             let track = next.clone();
             let work_track = track.clone();
             let result = cx.background_spawn(async move {
-                Session::new(settings).download_to_cache(&work_track)
+                let normalize = settings.normalize_volume;
+                let cached = Session::new(settings).download_to_cache(&work_track)?;
+                if normalize {
+                    let _ = sodam_core::loudness::analyze_gain(&cached.path);
+                }
+                Ok::<_, anyhow::Error>(cached)
             });
             cx.spawn(async move |this, cx| {
                 let outcome = result.await;
@@ -245,6 +250,30 @@ impl Root {
                         root.persist_playback_state(cx);
                         cx.notify();
                     }
+                }
+
+                // Gapless / Crossfade：在自然播完前提前装载下一首。
+                // Crossfade 使用用户配置秒数；仅 Gapless 时提前约 80ms，
+                // 配合已经完成的智能预取可消除 UI finished -> Load 的人为缝隙。
+                let transition_lead = if root.settings.crossfade_seconds > 0 {
+                    root.settings.crossfade_seconds as f64
+                } else if root.settings.gapless_playback {
+                    0.08
+                } else {
+                    0.0
+                };
+                if transition_lead > 0.0
+                    && snap.playing
+                    && snap.duration_seconds > transition_lead
+                    && root.pending_track.is_none()
+                    && !root.sleep_after_current
+                    && root.sleep_deadline.is_none()
+                    && root.transition_triggered_track_id != snap.track_id
+                    && snap.duration_seconds - snap.position_seconds <= transition_lead
+                {
+                    root.transition_triggered_track_id = snap.track_id.clone();
+                    root.next_track(cx);
+                    return;
                 }
 
                 if snap.finished && snap.finished_seq != root.last_finished_seq {
@@ -383,7 +412,9 @@ impl Root {
     pub(crate) fn sync_queue_cache(&mut self) {
         let revision = self.queue.revision();
         if self.queue_cache.0 != revision {
-            self.queue_cache = (revision, Arc::new(self.queue.tracks().to_vec()));
+            let tracks = self.queue.tracks().to_vec();
+            let _ = sodam_core::local_library::record_many(&tracks);
+            self.queue_cache = (revision, Arc::new(tracks));
         }
     }
 
@@ -516,7 +547,8 @@ impl Root {
             Ok(()) => self.tr("歌词字号设置已保存").to_string(),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
-        cx.notify();
+        let message = self.status.clone();
+        self.toast(message, cx);
     }
 
     pub fn set_lyrics_line_height(&mut self, height: u32, cx: &mut Context<Self>) {
@@ -525,7 +557,8 @@ impl Root {
             Ok(()) => self.tr("歌词行距设置已保存").to_string(),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
-        cx.notify();
+        let message = self.status.clone();
+        self.toast(message, cx);
     }
 
     pub fn set_lyrics_offset_ms(&mut self, offset: i64, cx: &mut Context<Self>) {
@@ -537,7 +570,8 @@ impl Root {
             ),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
-        cx.notify();
+        let message = self.status.clone();
+        self.toast(message, cx);
     }
 
     pub fn set_prefetch_adaptive(&mut self, enabled: bool, cx: &mut Context<Self>) {
@@ -597,7 +631,8 @@ impl Root {
         if !enabled {
             self.spawn_prefetch(cx);
         }
-        cx.notify();
+        let message = self.status.clone();
+        self.toast(message, cx);
     }
 
     pub fn set_prefetch_count(&mut self, count: usize, cx: &mut Context<Self>) {
@@ -1918,6 +1953,23 @@ impl Root {
                     Ok(items) => {
                         root.downloaded_ids =
                             Arc::new(items.iter().map(|item| item.track_id.clone()).collect());
+                        let existing: HashSet<String> = sodam_core::local_library::tracks()
+                            .into_iter()
+                            .map(|track| track.id)
+                            .collect();
+                        let missing = items
+                            .iter()
+                            .filter(|item| !existing.contains(&item.track_id))
+                            .map(|item| TrackItem {
+                                id: item.track_id.clone(),
+                                title: item.title.clone(),
+                                artist: item.artist.clone(),
+                                album: item.album.clone(),
+                                cover: item.cover.clone(),
+                                ..Default::default()
+                            })
+                            .collect::<Vec<_>>();
+                        let _ = sodam_core::local_library::record_many(&missing);
                         root.downloads = Arc::new(items);
                     }
                     Err(err) => {
@@ -1932,6 +1984,7 @@ impl Root {
 
     /// 单曲下载按钮：已有播放缓存立即导出，否则进入“待下载”队列。
     pub fn toggle_download(&mut self, track: TrackItem, cx: &mut Context<Self>) {
+        let _ = sodam_core::local_library::record(&track);
         if self.downloaded_ids.contains(&track.id) {
             self.status = self.localized("已下载：{}", std::slice::from_ref(&track.title));
             cx.notify();
@@ -2003,6 +2056,7 @@ impl Root {
         if tracks.is_empty() {
             return;
         }
+        let _ = sodam_core::local_library::record_many(tracks.as_ref());
         self.batch_download_ids = tracks.iter().map(|track| track.id.clone()).collect();
         self.batch_download_total = self.batch_download_ids.len();
         self.batch_download_paused = false;
@@ -2133,7 +2187,8 @@ impl Root {
                             if !root.batch_download_paused {
                                 root.process_pending_downloads(cx);
                             }
-                            cx.notify();
+                            let message = root.status.clone();
+                            root.toast(message, cx);
                         }
                         Ok(None) => {}
                         Err(err) => {
@@ -2196,7 +2251,8 @@ impl Root {
                         root.status = root.localized("下载失败：{err}", &[err.to_string()]);
                     }
                 }
-                cx.notify();
+                let message = root.status.clone();
+                root.toast(message, cx);
             });
         })
         .detach();
@@ -2256,6 +2312,7 @@ impl Root {
             self.nav_history.remove(0);
         }
         self.nav = nav;
+        crate::experience3::clear_selection();
         if matches!(nav, Nav::Settings) {
             self.refresh_cache_stats(cx);
         }
@@ -2301,6 +2358,7 @@ impl Root {
         };
         let nav = self.nav_history.pop().unwrap_or(fallback);
         self.nav = nav;
+        crate::experience3::clear_selection();
         self.on_nav_changed(cx);
         cx.notify();
     }
@@ -2696,6 +2754,8 @@ impl Root {
                 .unwrap_or(QueueOrigin::Search),
             Nav::Search => QueueOrigin::Search,
             Nav::Recent => QueueOrigin::Recent,
+            Nav::LocalMusic => QueueOrigin::LocalMusic,
+            Nav::LocalPlaylists => self.queue_origin.clone(),
             Nav::Home => QueueOrigin::Feed,
             _ => self.queue_origin.clone(),
         };
@@ -2924,10 +2984,17 @@ impl Root {
         // 直接返回，只有真正 miss 才发起网络请求。
         let work = cx.background_spawn(async move {
             let session = Session::new(settings.clone());
+            if let Some(cached) = session.cached_track(&work_track.id) {
+                return Ok(cached);
+            }
+            if let Ok(Some(downloaded)) = sodam_core::downloads::downloaded_track(&work_track.id) {
+                return Ok(sodam_core::session::CachedTrack {
+                    path: downloaded.path,
+                    quality: format!("本地下载 · {}", downloaded.quality),
+                });
+            }
             if settings.offline_mode {
-                return session
-                    .cached_track(&work_track.id)
-                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"));
+                anyhow::bail!("离线模式下这首歌尚未缓存或下载");
             }
 
             // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
@@ -2965,8 +3032,55 @@ impl Root {
                 }
                 match result {
                     Ok(cached) => {
+                        root.engine.set_transition(
+                            root.settings.gapless_playback,
+                            root.settings.crossfade_seconds,
+                        );
+                        let cached_gain = if root.settings.normalize_volume {
+                            sodam_core::loudness::cached_gain(&cached.path).unwrap_or(1.0)
+                        } else {
+                            1.0
+                        };
+                        root.engine.set_gain(cached_gain);
                         root.engine
                             .load(track.clone(), cached.path.clone(), cached.quality);
+                        root.transition_triggered_track_id.clear();
+                        let _ = sodam_core::local_library::record(&track);
+
+                        // 首次响度分析不阻塞开播；完成后仅在同一首仍处于当前播放时应用。
+                        if root.settings.normalize_volume
+                            && sodam_core::loudness::cached_gain(&cached.path).is_none()
+                        {
+                            let analyze_path = cached.path.clone();
+                            let analyze_track_id = track.id.clone();
+                            let analyze = cx.background_spawn(async move {
+                                sodam_core::loudness::analyze_gain(&analyze_path)
+                            });
+                            cx.spawn(async move |this, cx| {
+                                let result = analyze.await;
+                                let _ = this.update(cx, |root, cx| {
+                                    if let Ok(gain) = result {
+                                        let snapshot = root.engine.snapshot();
+                                        if root.settings.normalize_volume
+                                            && snapshot.track_id == analyze_track_id
+                                        {
+                                            root.engine.set_gain(gain);
+                                            cx.notify();
+                                        }
+                                    }
+                                });
+                            })
+                            .detach();
+                        }
+
+                        if root.settings.system_notifications {
+                            let cover = root.cover_of(&track.cover);
+                            crate::system_audio::notify_track(
+                                &track.title,
+                                &track.artist,
+                                cover.as_deref(),
+                            );
+                        }
                         Arc::make_mut(&mut root.cached_ids).insert(track.id.clone());
 
                         let restore_seek = root.restore_seek_seconds.take();
@@ -3049,16 +3163,14 @@ impl Root {
             let len = self.queue.len();
             for _ in 0..len {
                 self.queue.advance();
-                let cached = self
-                    .queue
-                    .current()
-                    .and_then(|track| {
-                        self.session
-                            .as_ref()
-                            .and_then(|session| session.cached_track(&track.id))
-                    })
-                    .is_some();
-                if cached {
+                let available = self.queue.current().is_some_and(|track| {
+                    self.session
+                        .as_ref()
+                        .and_then(|session| session.cached_track(&track.id))
+                        .is_some()
+                        || self.downloaded_ids.contains(&track.id)
+                });
+                if available {
                     self.sync_queue_cache();
                     self.start_track(cx);
                     return;
@@ -3080,16 +3192,14 @@ impl Root {
             let len = self.queue.len();
             for _ in 0..len {
                 self.queue.rewind();
-                let cached = self
-                    .queue
-                    .current()
-                    .and_then(|track| {
-                        self.session
-                            .as_ref()
-                            .and_then(|session| session.cached_track(&track.id))
-                    })
-                    .is_some();
-                if cached {
+                let available = self.queue.current().is_some_and(|track| {
+                    self.session
+                        .as_ref()
+                        .and_then(|session| session.cached_track(&track.id))
+                        .is_some()
+                        || self.downloaded_ids.contains(&track.id)
+                });
+                if available {
                     self.sync_queue_cache();
                     self.start_track(cx);
                     return;

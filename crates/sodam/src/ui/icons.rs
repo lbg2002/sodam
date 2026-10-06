@@ -143,6 +143,7 @@ icon_set!(
     "minus",
     "square",
     "disc-3",
+    "ellipsis",
 );
 
 /// 听歌模式内置图标路径。

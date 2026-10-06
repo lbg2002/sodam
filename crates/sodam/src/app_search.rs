@@ -22,6 +22,7 @@ impl Root {
         if self.searching {
             return;
         }
+        let _ = sodam_core::search_history::record(&keyword);
         let scope = self.search_tab;
         let settings = self.settings.clone();
         self.searching = true;
@@ -31,6 +32,18 @@ impl Root {
 
         let work_keyword = keyword.clone();
         let work = cx.background_spawn(async move {
+            if settings.offline_mode {
+                let tracks = if matches!(scope, SearchScope::All | SearchScope::Tracks) {
+                    sodam_core::local_library::search_tracks(&work_keyword)
+                } else {
+                    Vec::new()
+                };
+                return Ok(SearchResults {
+                    keyword: work_keyword,
+                    tracks,
+                    ..Default::default()
+                });
+            }
             Session::new(settings).search_scope(&work_keyword, scope)
         });
         cx.spawn(async move |this, cx| {
@@ -46,7 +59,14 @@ impl Root {
                                 results.total_count().to_string(),
                             ],
                         );
-                        root.results = Arc::new(results.all_tracks());
+                        let all_tracks = results.all_tracks();
+                        if !root.settings.offline_mode {
+                            let _ = sodam_core::local_library::record_many_with_alias(
+                                &all_tracks,
+                                Some(&results.keyword),
+                            );
+                        }
+                        root.results = Arc::new(all_tracks);
                         root.search_results = results;
                         let covers: Vec<String> = root
                             .search_results

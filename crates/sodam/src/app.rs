@@ -101,6 +101,8 @@ pub enum Nav {
     Search,
     Liked,
     Library,
+    LocalMusic,
+    LocalPlaylists,
     Recent,
     Downloads,
     Artist,
@@ -116,6 +118,8 @@ pub enum SettingsSection {
     Lyrics,
     Downloads,
     Storage,
+    Desktop,
+    Advanced,
     Account,
 }
 
@@ -128,6 +132,8 @@ impl Root {
             Nav::Search => self.tr("搜索"),
             Nav::Liked => self.tr("我喜欢的音乐"),
             Nav::Library => self.tr("我的歌单"),
+            Nav::LocalMusic => self.tr("本地音乐"),
+            Nav::LocalPlaylists => self.tr("本地播放列表"),
             Nav::Recent => self.tr("最近播放"),
             Nav::Downloads => self.tr("下载管理"),
             Nav::Artist => self.tr("音乐人"),
@@ -188,6 +194,8 @@ pub enum QueueOrigin {
     Radio(String),
     Liked,
     Recent,
+    LocalMusic,
+    LocalPlaylist(String),
     Playlist(String),
     Artist(String),
     Album(String),
@@ -300,10 +308,14 @@ pub struct Root {
     pub liked_scroll: gpui::UniformListScrollHandle,
     /// 列表可用宽度（由画布测量）：决定折叠哪些列。
     pub list_width: Arc<Mutex<f32>>,
+    /// 底部播放栏可用宽度：低于设置阈值时折叠次要按钮。
+    pub player_bar_width: Arc<Mutex<f32>>,
     /// 队列抽屉的滚动句柄（打开时锚到「正在播放」）。
     pub queue_scroll: gpui::UniformListScrollHandle,
     /// 队列抽屉是否展开。
     pub queue_open: bool,
+    /// 窄窗口时底部播放栏的“更多”菜单。
+    pub player_more_open: bool,
     pub sleep_menu_open: bool,
     /// 定时暂停的绝对截止时刻。
     pub sleep_deadline: Option<std::time::Instant>,
@@ -377,6 +389,8 @@ pub struct Root {
     pub pending_track: Option<TrackItem>,
     /// 已处理过的「播完」序号（配合引擎的 finished_seq 自动切歌）。
     pub(crate) last_finished_seq: u64,
+    /// 当前曲目是否已经触发过提前衔接，避免 50/100ms 心跳重复切歌。
+    pub(crate) transition_triggered_track_id: String,
     /// 拖动进度条时的预览位置（0.0~1.0）：拖动中只改它，松手才真跳。
     pub progress_preview: Option<f32>,
     /// 队列快照（含版本号）：避免抽屉每帧深拷贝整条队列。
@@ -563,6 +577,7 @@ impl Root {
             liked_loaded: false,
             liked_scroll: gpui::UniformListScrollHandle::new(),
             list_width: Arc::new(Mutex::new(1200.0)),
+            player_bar_width: Arc::new(Mutex::new(1200.0)),
             queue_scroll: gpui::UniformListScrollHandle::new(),
             open_playlist: None,
             loading_playlist: false,
@@ -574,6 +589,7 @@ impl Root {
             open_album: None,
             loading_album: false,
             queue_open: false,
+            player_more_open: false,
             sleep_menu_open: false,
             sleep_deadline: None,
             sleep_after_current: false,
@@ -593,6 +609,7 @@ impl Root {
             playback_state_save_inflight: false,
             pending_track: None,
             last_finished_seq: 0,
+            transition_triggered_track_id: String::new(),
             progress_preview: None,
             queue_cache,
             cover_attempted: Arc::new(Mutex::new(HashSet::new())),
@@ -608,7 +625,9 @@ impl Root {
         };
         if logged_in {
             root.refresh_account(cx);
-            root.load_liked_ids(cx);
+            if !root.settings.lazy_startup {
+                root.load_liked_ids(cx);
+            }
             if root.queue.is_empty() {
                 root.start_recommendation(false, cx);
             } else {
@@ -616,6 +635,11 @@ impl Root {
                     .queue
                     .tracks()
                     .iter()
+                    .take(if root.settings.lazy_startup {
+                        4
+                    } else {
+                        usize::MAX
+                    })
                     .map(|track| track.cover.clone())
                     .collect();
                 root.ensure_covers(&covers, cx);
@@ -642,6 +666,8 @@ impl Root {
                 "search" => Nav::Search,
                 "liked" => Nav::Liked,
                 "library" => Nav::Library,
+                "local" | "local-music" => Nav::LocalMusic,
+                "local-playlists" => Nav::LocalPlaylists,
                 "recent" => Nav::Recent,
                 "downloads" | "download" => Nav::Downloads,
                 "artist" => Nav::Artist,
@@ -692,9 +718,27 @@ impl Root {
             })
             .detach();
         }
-        root.refresh_downloads(cx);
-        root.refresh_audio_cache_index(cx);
-        root.trim_cache_if_needed(cx);
+        if root.settings.lazy_startup {
+            let this = cx.entity();
+            cx.spawn(async move |_this, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(650))
+                    .await;
+                this.update(cx, |root, cx| {
+                    if !root.settings.cookie.trim().is_empty() {
+                        root.load_liked_ids(cx);
+                    }
+                    root.refresh_downloads(cx);
+                    root.refresh_audio_cache_index(cx);
+                    root.trim_cache_if_needed(cx);
+                });
+            })
+            .detach();
+        } else {
+            root.refresh_downloads(cx);
+            root.refresh_audio_cache_index(cx);
+            root.trim_cache_if_needed(cx);
+        }
         Self::start_heartbeat(cx);
 
         // 开发验证用：`SODAM_AUTOPLAY=1` 进收藏页并自动播放第一首；
@@ -1129,6 +1173,34 @@ impl Render for Root {
                     }),
             )
             .child(ui::player_bar::render(self, cx))
+            .when_some(crate::experience3::toast_message(), |this, message| {
+                this.child(
+                    gpui::deferred(
+                        div()
+                            .absolute()
+                            .left(px(theme::SIDEBAR_W + theme::space::XL))
+                            .right(px(theme::space::XL))
+                            .bottom(px(theme::PLAYER_H + theme::space::LG))
+                            .flex()
+                            .justify_center()
+                            .child(
+                                div()
+                                    .max_w(px(560.0))
+                                    .px(px(theme::space::LG))
+                                    .py(px(theme::space::SM))
+                                    .rounded(px(theme::radius::PILL))
+                                    .bg(theme::surface_elevated())
+                                    .border_1()
+                                    .border_color(theme::border())
+                                    .shadow_lg()
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::text())
+                                    .child(message),
+                            ),
+                    )
+                    .with_priority(10),
+                )
+            })
             .when(self.track_menu.is_some(), |this| {
                 this.child(crate::views::track_menu(self, cx))
             })
@@ -1171,6 +1243,8 @@ impl Render for Root {
                     Nav::Search => self.results.len(),
                     Nav::Liked => self.liked.len(),
                     Nav::Library => self.playlists.len(),
+                    Nav::LocalMusic => sodam_core::local_library::tracks().len(),
+                    Nav::LocalPlaylists => sodam_core::local_playlists::load().len(),
                     Nav::Recent => self.recent.len(),
                     Nav::Downloads => self.downloads.len(),
                     _ => 0,

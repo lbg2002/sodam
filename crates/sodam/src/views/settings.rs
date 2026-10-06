@@ -109,6 +109,120 @@ fn settings_heading(title: &str, description: &str) -> AnyElement {
         .into_any_element()
 }
 
+fn toggle_setting_row(
+    id: &'static str,
+    title: &str,
+    description: &str,
+    enabled: bool,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id)
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(listener)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_muted())
+                        .child(description.to_string()),
+                ),
+        )
+        .child(
+            div()
+                .w(px(40.0))
+                .h(px(22.0))
+                .rounded(px(theme::radius::PILL))
+                .bg(if enabled {
+                    theme::accent()
+                } else {
+                    theme::surface_hover()
+                })
+                .flex()
+                .items_center()
+                .px(px(3.0))
+                .justify_end()
+                .when(!enabled, |this| this.justify_start())
+                .child(div().size(px(16.0)).rounded_full().bg(if enabled {
+                    theme::accent_foreground()
+                } else {
+                    theme::text_faint()
+                })),
+        )
+        .into_any_element()
+}
+
+fn choice_setting_row(
+    id: String,
+    title: String,
+    description: String,
+    selected: bool,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    div()
+        .id(gpui::ElementId::Name(id.into()))
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .when(selected, |this| this.bg(theme::surface_selected()))
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(listener)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(title),
+                )
+                .when(!description.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_muted())
+                            .child(description),
+                    )
+                }),
+        )
+        .when(selected, |this| {
+            this.child(
+                svg()
+                    .path(icons::path("check"))
+                    .size(px(theme::ICON))
+                    .text_color(theme::accent()),
+            )
+        })
+        .into_any_element()
+}
+
 /// 设置页：音质偏好选择 + 账号信息 + 其他。
 /// 设置页 → 账户板块：头像 + 昵称/ID/VIP；未登录给「去登录」并弹二维码 modal。
 fn account_section(root: &Root, cx: &mut Context<Root>) -> AnyElement {
@@ -1342,13 +1456,367 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .text_color(theme::text())
                         .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
                             let removed = sodam_core::audio::clear_cache();
-                            root.status =
+                            let message =
                                 root.localized("已清理缓存：{} 个文件", &[removed.to_string()]);
                             root.refresh_cache_stats(cx);
                             root.refresh_audio_cache_index(cx);
-                            cx.notify();
+                            root.toast(message, cx);
                         }))
                         .child(root.tr("清除歌曲缓存")),
+                )
+                .into_any_element()
+        }
+        SettingsSection::Desktop => {
+            let opacity_rows = [60u8, 75, 86, 100]
+                .into_iter()
+                .map(|value| {
+                    choice_setting_row(
+                        format!("desktop-opacity-{value}"),
+                        format!("{value}%"),
+                        root.tr("桌面歌词背景透明度").to_string(),
+                        root.settings.desktop_lyrics_opacity == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_desktop_opacity(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let font_rows = [24u32, 30, 36, 42]
+                .into_iter()
+                .map(|value| {
+                    choice_setting_row(
+                        format!("desktop-font-{value}"),
+                        format!("{value} px"),
+                        root.tr("桌面歌词独立字号").to_string(),
+                        root.settings.desktop_lyrics_font_size == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_desktop_font_size(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let color_rows = [
+                ("accent", root.tr("跟随强调色")),
+                ("text", root.tr("跟随主题文字色")),
+            ]
+            .into_iter()
+            .map(|(value, label)| {
+                choice_setting_row(
+                    format!("desktop-color-{value}"),
+                    label.to_string(),
+                    String::new(),
+                    root.settings.desktop_lyrics_color == value,
+                    cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_color(value, cx);
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+            let align_rows = [
+                ("left", root.tr("左对齐")),
+                ("center", root.tr("居中")),
+                ("right", root.tr("右对齐")),
+            ]
+            .into_iter()
+            .map(|(value, label)| {
+                choice_setting_row(
+                    format!("desktop-align-{value}"),
+                    label.to_string(),
+                    String::new(),
+                    root.settings.desktop_lyrics_align == value,
+                    cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_align(value, cx);
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XL))
+                .child(settings_heading(
+                    root.tr("桌面歌词"),
+                    root.tr("调整独立歌词窗口的显示方式、透明度和交互"),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-single-line",
+                    root.tr("单行歌词"),
+                    root.tr("关闭时显示当前行和下一行"),
+                    root.settings.desktop_lyrics_single_line,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_single_line(
+                            !root.settings.desktop_lyrics_single_line,
+                            cx,
+                        );
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-always-top",
+                    root.tr("始终置顶"),
+                    root.tr("桌面歌词窗口保持在其他窗口上方"),
+                    root.settings.desktop_lyrics_always_on_top,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_always_on_top(
+                            !root.settings.desktop_lyrics_always_on_top,
+                            cx,
+                        );
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-lock",
+                    root.tr("锁定位置"),
+                    root.tr("锁定后禁止拖动和调整窗口尺寸"),
+                    root.settings.desktop_lyrics_locked,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_locked(!root.settings.desktop_lyrics_locked, cx);
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-click-through",
+                    root.tr("鼠标穿透"),
+                    root.tr("受当前 Linux/窗口后端能力限制；不支持时保持普通窗口交互"),
+                    root.settings.desktop_lyrics_click_through,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_click_through(
+                            !root.settings.desktop_lyrics_click_through,
+                            cx,
+                        );
+                    }),
+                ))
+                .child(settings_heading(
+                    root.tr("背景透明度"),
+                    root.tr("降低背景存在感，让歌词更适合悬浮在桌面"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(opacity_rows),
+                )
+                .child(settings_heading(
+                    root.tr("桌面歌词字号"),
+                    root.tr("独立于主播放页歌词字号，适合远距离查看"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(font_rows),
+                )
+                .child(settings_heading(
+                    root.tr("桌面歌词颜色"),
+                    root.tr("使用动态强调色，或跟随当前主题文字颜色"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(color_rows),
+                )
+                .child(settings_heading(
+                    root.tr("歌词偏移快捷调整"),
+                    root.tr("快速提前或延后桌面歌词；与播放页歌词偏移共用"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(
+                            div()
+                                .id("desktop-offset-earlier")
+                                .px(px(theme::space::MD))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_adjust_lyrics_offset(-250, cx);
+                                }))
+                                .child(root.tr("提前 250 ms")),
+                        )
+                        .child(
+                            div()
+                                .id("desktop-offset-zero")
+                                .px(px(theme::space::MD))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.set_lyrics_offset_ms(0, cx);
+                                }))
+                                .child(root.tr("偏移归零")),
+                        )
+                        .child(
+                            div()
+                                .id("desktop-offset-later")
+                                .px(px(theme::space::MD))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_adjust_lyrics_offset(250, cx);
+                                }))
+                                .child(root.tr("延后 250 ms")),
+                        ),
+                )
+                .child(settings_heading(
+                    root.tr("歌词对齐"),
+                    root.tr("设置桌面歌词文字的水平对齐方式"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(align_rows),
+                )
+                .into_any_element()
+        }
+        SettingsSection::Advanced => {
+            let devices = crate::system_audio::list_output_devices();
+            let device_rows = devices
+                .into_iter()
+                .map(|device| {
+                    let id = device.id.clone();
+                    let selected = if root.settings.audio_output_device.trim().is_empty() {
+                        device.default
+                    } else {
+                        root.settings.audio_output_device == device.id
+                    };
+                    choice_setting_row(
+                        format!("audio-device-{}", device.id),
+                        device.name,
+                        if device.default {
+                            root.tr("系统默认输出").to_string()
+                        } else {
+                            String::new()
+                        },
+                        selected,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_audio_device(id.clone(), cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let crossfade_rows = [0u32, 2, 3, 5, 8]
+                .into_iter()
+                .map(|value| {
+                    let label = if value == 0 {
+                        root.tr("关闭").to_string()
+                    } else {
+                        root.localized("{} 秒", &[value.to_string()])
+                    };
+                    choice_setting_row(
+                        format!("crossfade-{value}"),
+                        label,
+                        String::new(),
+                        root.settings.crossfade_seconds == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_crossfade(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let compact_rows = [760u32, 900, 1080]
+                .into_iter()
+                .map(|value| {
+                    choice_setting_row(
+                        format!("compact-width-{value}"),
+                        format!("{value} px"),
+                        root.tr("低于此宽度时折叠次要播放栏按钮").to_string(),
+                        root.settings.player_bar_compact_width == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_compact_width(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XL))
+                .child(settings_heading(
+                    root.tr("音频输出设备"),
+                    root.tr("Ubuntu / PipeWire-Pulse 下可直接切换扬声器、耳机、HDMI 或蓝牙输出"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(device_rows),
+                )
+                .child(settings_heading(
+                    root.tr("播放增强"),
+                    root.tr("响度标准化和歌曲衔接均可独立关闭"),
+                ))
+                .child(toggle_setting_row(
+                    "system-notifications",
+                    root.tr("系统切歌通知"),
+                    root.tr("切歌时显示封面、歌曲名和歌手"),
+                    root.settings.system_notifications,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_notifications(!root.settings.system_notifications, cx);
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "normalize-volume",
+                    root.tr("响度标准化"),
+                    root.tr("使用本地 ffmpeg 分析并缓存增益，减少歌曲之间忽大忽小"),
+                    root.settings.normalize_volume,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_normalize_volume(!root.settings.normalize_volume, cx);
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "gapless-playback",
+                    root.tr("无缝播放 Gapless"),
+                    root.tr("提前衔接下一首，尽量消除曲目边界的短暂空白"),
+                    root.settings.gapless_playback,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_gapless(!root.settings.gapless_playback, cx);
+                    }),
+                ))
+                .child(settings_heading(
+                    root.tr("交叉淡化 Crossfade"),
+                    root.tr("让上一首淡出、下一首淡入；0 秒表示关闭"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(crossfade_rows),
+                )
+                .child(settings_heading(
+                    root.tr("性能与布局"),
+                    root.tr("控制启动时的后台工作和底部播放栏的响应式折叠"),
+                ))
+                .child(toggle_setting_row(
+                    "lazy-startup",
+                    root.tr("启动延迟加载"),
+                    root.tr("优先打开界面和恢复播放，再延迟加载收藏、下载索引和缓存统计"),
+                    root.settings.lazy_startup,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_lazy_startup(!root.settings.lazy_startup, cx);
+                    }),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(compact_rows),
                 )
                 .into_any_element()
         }
@@ -1513,6 +1981,20 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             SettingsSection::Storage,
             root.tr("存储"),
             "hard-drive",
+            cx,
+        ))
+        .child(settings_nav_item(
+            root,
+            SettingsSection::Desktop,
+            root.tr("桌面"),
+            "captions",
+            cx,
+        ))
+        .child(settings_nav_item(
+            root,
+            SettingsSection::Advanced,
+            root.tr("高级"),
+            "settings",
             cx,
         ))
         .child(settings_nav_item(

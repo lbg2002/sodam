@@ -354,9 +354,7 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                     )
                     .child(
                         div()
-                            .id(gpui::ElementId::Name(
-                                format!("open-download-{id}").into(),
-                            ))
+                            .id(gpui::ElementId::Name(format!("open-download-{id}").into()))
                             .flex()
                             .items_center()
                             .justify_center()

@@ -24,6 +24,10 @@ pub struct Settings {
     pub download_quality: String,
     /// 下载格式：`source` / `mp3` / `flac`。
     pub download_format: String,
+    /// 智能预加载前方曲目数；0 = 关闭。
+    pub prefetch_count: usize,
+    /// 播放缓存上限（GB）；0 = 不限制。
+    pub cache_limit_gb: u64,
     /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
@@ -48,6 +52,8 @@ impl Default for Settings {
             quality: String::new(),
             download_quality: "follow".to_string(),
             download_format: "source".to_string(),
+            prefetch_count: 3,
+            cache_limit_gb: 3,
             theme: String::new(),
             language: String::new(),
         }
@@ -124,6 +130,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn older_config_gets_new_playback_defaults() {
+        let dir = std::env::temp_dir().join(format!("sodam-old-cfg-{}", std::process::id()));
+        let path = dir.join("config.json");
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        std::fs::write(
+            &path,
+            r#"{
+  "cookie": "sessionid_ss=x",
+  "quality": "highest",
+  "theme": "dark",
+  "language": "zh"
+}"#,
+        )
+        .expect("write");
+
+        let loaded = Settings::load_from(&path);
+        assert_eq!(loaded.cookie, "sessionid_ss=x");
+        assert_eq!(loaded.quality, "highest");
+        assert_eq!(loaded.prefetch_count, 3);
+        assert_eq!(loaded.cache_limit_gb, 3);
+        assert_eq!(loaded.download_quality, "follow");
+        assert_eq!(loaded.download_format, "source");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn round_trip_and_defaults() {
         let dir = std::env::temp_dir().join(format!("sodam-cfg-{}", std::process::id()));
         let path = dir.join("config.json");
@@ -139,6 +171,8 @@ mod tests {
         assert_eq!(loaded.cookie, settings.cookie);
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
+        assert_eq!(loaded.prefetch_count, 3);
+        assert_eq!(loaded.cache_limit_gb, 3);
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());
         assert!(loaded.is_ready_for_vip());

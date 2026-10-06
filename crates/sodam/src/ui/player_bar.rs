@@ -743,9 +743,37 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
     let covers = root.covers.clone();
     let cover_requests = root.cover_requests.clone();
     let liked_ids = root.liked_ids.clone();
+    let cached_ids = root.cached_ids.clone();
+    let prefetch_inflight = std::sync::Arc::new(root.prefetch_inflight.clone());
     let entity = cx.entity();
     let count = slots.len();
     let total = root.queue.len();
+    let (ready_count, prefetching_count, target_count) = root.prefetch_buffer_status();
+    let queue_title = if target_count > 0 {
+        if language.resolved().is_zh() {
+            format!(
+                "播放队列 · {total} 首 · 已准备 {ready_count}/{target_count}{}",
+                if prefetching_count > 0 {
+                    format!(" · {prefetching_count} 首缓存中")
+                } else {
+                    String::new()
+                }
+            )
+        } else {
+            format!(
+                "Queue · {total} · Ready {ready_count}/{target_count}{}",
+                if prefetching_count > 0 {
+                    format!(" · {prefetching_count} caching")
+                } else {
+                    String::new()
+                }
+            )
+        }
+    } else if language.resolved().is_zh() {
+        format!("播放队列 · {total} 首")
+    } else {
+        format!("Queue · {total}")
+    };
 
     let list = uniform_list("queue-drawer-list", count, move |range, _window, _cx| {
         range
@@ -776,6 +804,8 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                         let title = track.title.clone();
                         let artist = track.artist.clone();
                         let duration = track.duration_label();
+                        let audio_cached = cached_ids.contains(&track.id);
+                        let prefetching = prefetch_inflight.contains(&track.id);
                         let entity = entity.clone();
                         div()
                             .id(("queue-slot", slot_index))
@@ -853,6 +883,28 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                                     .text_size(theme::Text::Small.size())
                                     .text_color(theme::text_faint())
                                     .child(duration),
+                            )
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .size(px(theme::size::CONTROL_SM))
+                                    .when(prefetching, |this| {
+                                        this.child(crate::ui::spinner::spinner(
+                                            theme::ICON_SM,
+                                            theme::accent(),
+                                        ))
+                                    })
+                                    .when(!prefetching && audio_cached, |this| {
+                                        this.child(
+                                            svg()
+                                                .path(icons::path("disc-3"))
+                                                .size(px(theme::ICON_SM))
+                                                .text_color(theme::accent()),
+                                        )
+                                    }),
                             )
                             .child(
                                 div()
@@ -943,7 +995,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                     div()
                         .text_size(theme::Text::Tiny.size())
                         .text_color(theme::text_faint())
-                        .child(language.textf("播放队列 · {} 首", &[total.to_string()])),
+                        .child(queue_title),
                 )
                 .child(
                     div()

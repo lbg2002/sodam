@@ -305,6 +305,7 @@ impl Session {
         // sidecar 记录「音质标签 + 实际字节数」，用于命中时的大小校验。
         let quality_path = dir.join(format!("{0}-{tag}.quality", track.id));
         if let Some(cached) = self.cached_track(&track.id) {
+            crate::audio::touch_audio_cache(&cached.path);
             return Ok(cached);
         }
 
@@ -345,6 +346,7 @@ impl Session {
         let quality = describe_quality(&info);
         std::fs::rename(&part, &path).map_err(|err| anyhow::anyhow!("缓存落盘失败: {err}"))?;
         let _ = std::fs::write(&quality_path, format!("{quality}\t{written}"));
+        crate::audio::touch_audio_cache(&path);
         Ok(CachedTrack { path, quality })
     }
 

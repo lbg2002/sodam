@@ -386,6 +386,8 @@ fn search_track_row(
                 .cloned()
                 .collect::<std::collections::HashSet<_>>(),
         ),
+        root.cached_ids.clone(),
+        std::sync::Arc::new(root.prefetch_inflight.clone()),
     )
 }
 

@@ -1294,6 +1294,9 @@ impl Root {
     pub(crate) fn pause_pending(&mut self, cx: &mut Context<Self>) {
         self.playing = true;
         self.play_seq = self.play_seq.wrapping_add(1);
+        // 每次真正开始一轮曲目装载都允许“最近播放”在 3 秒阈值后重新计数，
+        // 包括单曲循环或用户主动重播同一首。
+        self.recent_recorded_track_id.clear();
         let request_seq = self.play_seq;
         let Some(track) = self.queue.current().cloned() else {
             return;

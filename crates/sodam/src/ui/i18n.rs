@@ -103,6 +103,42 @@ impl Language {
             "浅色" => "Light",
             "深色" => "Dark",
             "主题已切换，但保存失败：{err}" => "Theme switched, but saving failed: {err}",
+            "播放音质偏好" => "Playback Quality",
+            "下载设置" => "Download Settings",
+            "下载音质" => "Download Quality",
+            "下载格式" => "Download Format",
+            "跟随播放设置" => "Follow Playback Setting",
+            "使用当前播放音质偏好；播放为自动时选择已有缓存中的最高档" => {
+                "Use the playback quality preference; when playback is Auto, use the highest cached quality."
+            }
+            "只导出无损缓存；没有对应缓存时保持待下载" => {
+                "Export only lossless cache; remain pending until that cache exists."
+            }
+            "只导出极高缓存（≈320k）" => "Export only the high-quality cache (≈320k).",
+            "只导出较高缓存" => "Export only the medium-quality cache.",
+            "只导出标准缓存" => "Export only the standard-quality cache.",
+            "原始格式" => "Original Format",
+            "直接保存 SodaM 实际播放缓存，速度最快且不二次编码" => {
+                "Save SodaM's playback cache directly for the fastest export without re-encoding."
+            }
+            "使用 ffmpeg 转为高质量 MP3，兼容性最好" => {
+                "Convert to high-quality MP3 with ffmpeg for maximum compatibility."
+            }
+            "使用 ffmpeg 转为 FLAC；有损源不会因此变成真正无损" => {
+                "Convert to FLAC with ffmpeg; a lossy source does not become truly lossless."
+            }
+            "默认保存到：{}" => "Default save location: {}",
+            "下载音质设置已保存" => "Download quality setting saved",
+            "下载音质保存失败：{err}" => "Failed to save download quality: {err}",
+            "下载格式设置已保存" => "Download format setting saved",
+            "下载格式保存失败：{err}" => "Failed to save download format: {err}",
+            "保存待下载队列失败：{err}" => "Failed to save pending download queue: {err}",
+            "下载已完成：{}" => "Download completed: {}",
+            "仍在等待播放缓存：{}" => "Still waiting for playback cache: {}",
+            "已打开下载文件" => "Opened downloaded file",
+            "打开下载文件失败：{err}" => "Failed to open downloaded file: {err}",
+            "立即重试" => "Retry Now",
+            "打开" => "Open",
             "搜索已下载歌曲 / 歌手" => "Search downloaded songs / artists",
             "打开下载目录" => "Open Download Folder",
             "正在读取下载列表…" => "Loading downloads…",

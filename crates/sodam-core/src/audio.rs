@@ -274,7 +274,9 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 let new_player = rodio::Player::connect_new(device.mixer());
                 let volume = state.lock().map(|snap| snap.volume).unwrap_or(1.0);
                 let effective = (volume * gain).clamp(0.0, 2.0);
-                if crossfade_seconds > 0 && previous.is_some() {
+                let do_crossfade = crossfade_seconds > 0
+                    && previous.as_ref().is_some_and(|previous| !previous.empty());
+                if do_crossfade {
                     new_player.set_volume(0.0);
                 } else {
                     new_player.set_volume(effective);
@@ -283,7 +285,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 // Gapless 模式：先让新 Player 接入 mixer，再停止旧 Player。
                 new_player.play();
                 if let Some(previous) = previous {
-                    if crossfade_seconds > 0 && !previous.empty() {
+                    if do_crossfade {
                         fading_out = Some((
                             previous,
                             std::time::Instant::now(),

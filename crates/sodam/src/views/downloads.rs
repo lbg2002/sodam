@@ -77,6 +77,14 @@ fn download_search_box(root: &Root, window: &Window, cx: &mut Context<Root>) -> 
         .child(text)
 }
 
+fn file_format_label(path: &std::path::Path) -> String {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .filter(|ext| !ext.is_empty())
+        .map(|ext| ext.to_ascii_uppercase())
+        .unwrap_or_else(|| "AUDIO".to_string())
+}
+
 fn bytes_label(bytes: u64) -> String {
     const KB: f64 = 1024.0;
     const MB: f64 = 1024.0 * KB;
@@ -337,7 +345,12 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                             .text_right()
                             .text_size(theme::Text::Small.size())
                             .text_color(theme::text_faint())
-                            .child(format!("{} · {}", item.quality, bytes_label(item.bytes))),
+                            .child(format!(
+                                "{} · {} · {}",
+                                item.quality,
+                                file_format_label(&file_path),
+                                bytes_label(item.bytes)
+                            )),
                     )
                     .child(
                         div()

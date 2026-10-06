@@ -1953,6 +1953,23 @@ impl Root {
                     Ok(items) => {
                         root.downloaded_ids =
                             Arc::new(items.iter().map(|item| item.track_id.clone()).collect());
+                        let existing: HashSet<String> = sodam_core::local_library::tracks()
+                            .into_iter()
+                            .map(|track| track.id)
+                            .collect();
+                        let missing = items
+                            .iter()
+                            .filter(|item| !existing.contains(&item.track_id))
+                            .map(|item| TrackItem {
+                                id: item.track_id.clone(),
+                                title: item.title.clone(),
+                                artist: item.artist.clone(),
+                                album: item.album.clone(),
+                                cover: item.cover.clone(),
+                                ..Default::default()
+                            })
+                            .collect::<Vec<_>>();
+                        let _ = sodam_core::local_library::record_many(&missing);
                         root.downloads = Arc::new(items);
                     }
                     Err(err) => {
@@ -2967,10 +2984,19 @@ impl Root {
         // 直接返回，只有真正 miss 才发起网络请求。
         let work = cx.background_spawn(async move {
             let session = Session::new(settings.clone());
+            if let Some(cached) = session.cached_track(&work_track.id) {
+                return Ok(cached);
+            }
+            if let Ok(Some(downloaded)) =
+                sodam_core::downloads::downloaded_track(&work_track.id)
+            {
+                return Ok(sodam_core::session::CachedTrack {
+                    path: downloaded.path,
+                    quality: format!("本地下载 · {}", downloaded.quality),
+                });
+            }
             if settings.offline_mode {
-                return session
-                    .cached_track(&work_track.id)
-                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"));
+                anyhow::bail!("离线模式下这首歌尚未缓存或下载");
             }
 
             // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
@@ -3139,16 +3165,14 @@ impl Root {
             let len = self.queue.len();
             for _ in 0..len {
                 self.queue.advance();
-                let cached = self
-                    .queue
-                    .current()
-                    .and_then(|track| {
-                        self.session
-                            .as_ref()
-                            .and_then(|session| session.cached_track(&track.id))
-                    })
-                    .is_some();
-                if cached {
+                let available = self.queue.current().is_some_and(|track| {
+                    self.session
+                        .as_ref()
+                        .and_then(|session| session.cached_track(&track.id))
+                        .is_some()
+                        || self.downloaded_ids.contains(&track.id)
+                });
+                if available {
                     self.sync_queue_cache();
                     self.start_track(cx);
                     return;
@@ -3170,16 +3194,14 @@ impl Root {
             let len = self.queue.len();
             for _ in 0..len {
                 self.queue.rewind();
-                let cached = self
-                    .queue
-                    .current()
-                    .and_then(|track| {
-                        self.session
-                            .as_ref()
-                            .and_then(|session| session.cached_track(&track.id))
-                    })
-                    .is_some();
-                if cached {
+                let available = self.queue.current().is_some_and(|track| {
+                    self.session
+                        .as_ref()
+                        .and_then(|session| session.cached_track(&track.id))
+                        .is_some()
+                        || self.downloaded_ids.contains(&track.id)
+                });
+                if available {
                     self.sync_queue_cache();
                     self.start_track(cx);
                     return;

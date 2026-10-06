@@ -2,8 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, px, size, svg, App, Bounds, ClickEvent, Context, Entity, IntoElement, Render, TitlebarOptions,
-    Window, WindowBounds, WindowKind, WindowOptions,
+    div, px, size, svg, App, Bounds, ClickEvent, Context, Entity, IntoElement, Render,
+    TitlebarOptions, Window, WindowBounds, WindowKind, WindowOptions,
 };
 
 use crate::app::Root;

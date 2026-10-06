@@ -1413,10 +1413,11 @@ impl Root {
 
         for track in candidates {
             self.download_inflight.insert(track.id.clone());
-            let quality = self.settings.quality.clone();
+            let quality = self.download_quality_preference();
+            let format = self.download_output_format();
             let work_track = track.clone();
             let work = cx.background_spawn(async move {
-                sodam_core::downloads::export_cached_track(&work_track, &quality)
+                sodam_core::downloads::export_cached_track(&work_track, &quality, &format)
             });
             cx.spawn(async move |this, cx| {
                 let result = work.await;

@@ -318,6 +318,13 @@ pub fn cache_dir() -> std::path::PathBuf {
         .join("audio")
 }
 
+pub fn lyrics_cache_dir() -> std::path::PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("sodam")
+        .join("lyrics")
+}
+
 /// 从缓存文件名中提取曲目 id。
 ///
 /// 正常文件名为 `<track-id>-<quality>.m4a`。优先匹配已知音质后缀，
@@ -585,10 +592,10 @@ pub fn cache_stats() -> (u64, usize, u64, usize) {
     (audio_bytes, songs, cover_bytes, cover_files)
 }
 
-/// 清空缓存（音频 + 封面，含 original 子目录），返回删除的文件数。
+/// 清空缓存（音频 + 封面 + 歌词，含 original 子目录），返回删除的文件数。
 pub fn clear_cache() -> usize {
     let mut removed = 0usize;
-    for dir in [cache_dir(), cover_cache_dir()] {
+    for dir in [cache_dir(), cover_cache_dir(), lyrics_cache_dir()] {
         let (_, files) = dir_usage(&dir);
         if std::fs::remove_dir_all(&dir).is_ok() {
             removed += files;

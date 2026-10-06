@@ -343,6 +343,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                     div()
                         .flex()
                         .flex_col()
+                        .flex_1()
                         .min_w(px(0.0))
                         .child(
                             div()
@@ -354,6 +355,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 .child(
                                     div()
                                         .id("player-title-link")
+                                        .flex_1()
                                         .min_w(px(0.0))
                                         .truncate()
                                         .cursor_pointer()

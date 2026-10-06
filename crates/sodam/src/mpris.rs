@@ -129,9 +129,10 @@ fn emit_properties_changed(connection: &LocalConnection, state: &MprisState) {
     let mut changed = PropMap::new();
     changed.insert(
         "PlaybackStatus".to_string(),
-        Variant(Box::new(
-            if state.playing { "Playing" } else { "Paused" }.to_string(),
-        ) as Box<dyn RefArg>),
+        Variant(
+            Box::new(if state.playing { "Playing" } else { "Paused" }.to_string())
+                as Box<dyn RefArg>,
+        ),
     );
     changed.insert(
         "Metadata".to_string(),
@@ -402,12 +403,7 @@ fn run_server(
                 .property::<f64, _>("Volume", ())
                 .access(Access::ReadWrite)
                 .on_get(move |iter, _| {
-                    iter.append(
-                        volume_state
-                            .lock()
-                            .map(|state| state.volume)
-                            .unwrap_or(1.0),
-                    );
+                    iter.append(volume_state.lock().map(|state| state.volume).unwrap_or(1.0));
                     Ok(())
                 })
                 .on_set(move |iter, _| {

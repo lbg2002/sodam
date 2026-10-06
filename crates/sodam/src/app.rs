@@ -1070,7 +1070,6 @@ impl Root {
 
     pub fn set_status(&mut self, key: &'static str, args: &[String]) {
         self.status = self.localized(key, args);
-        crate::experience3::set_toast(self.status.clone());
     }
 
     pub fn set_language(&mut self, language: Language, cx: &mut Context<Self>) {

@@ -204,7 +204,11 @@ pub fn export_cached_track(
     Ok(Some(item))
 }
 
-fn transcode_cached_asset(input: &std::path::Path, output: &std::path::Path, format: &str) -> Result<()> {
+fn transcode_cached_asset(
+    input: &std::path::Path,
+    output: &std::path::Path,
+    format: &str,
+) -> Result<()> {
     let mut command = Command::new("ffmpeg");
     command
         .arg("-hide_banner")
@@ -217,7 +221,11 @@ fn transcode_cached_asset(input: &std::path::Path, output: &std::path::Path, for
 
     match format {
         "mp3" => {
-            command.arg("-codec:a").arg("libmp3lame").arg("-q:a").arg("0");
+            command
+                .arg("-codec:a")
+                .arg("libmp3lame")
+                .arg("-q:a")
+                .arg("0");
         }
         "flac" => {
             command.arg("-codec:a").arg("flac");
@@ -226,9 +234,7 @@ fn transcode_cached_asset(input: &std::path::Path, output: &std::path::Path, for
     }
 
     let result = command.arg(output).output().map_err(|err| {
-        anyhow::anyhow!(
-            "无法启动 ffmpeg：{err}。请先安装 ffmpeg，或把下载格式改为原始格式"
-        )
+        anyhow::anyhow!("无法启动 ffmpeg：{err}。请先安装 ffmpeg，或把下载格式改为原始格式")
     })?;
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
@@ -362,7 +368,9 @@ fn pick_asset<'a>(assets: &'a [CachedAsset], quality_preference: &str) -> Option
 
     match preference.as_str() {
         "" | "auto" | "best" => assets.iter().max_by_key(|asset| asset.bytes),
-        preferred => assets.iter().find(|asset| quality_matches(asset, preferred)),
+        preferred => assets
+            .iter()
+            .find(|asset| quality_matches(asset, preferred)),
     }
 }
 
@@ -419,7 +427,10 @@ mod tests {
         }];
         assert!(pick_asset(&assets, "lossless").is_none());
         assert_eq!(pick_asset(&assets, "highest").unwrap().tag, "highest");
-        assert_eq!(pick_asset(&assets, "follow:highest").unwrap().tag, "highest");
+        assert_eq!(
+            pick_asset(&assets, "follow:highest").unwrap().tag,
+            "highest"
+        );
     }
 
     #[test]

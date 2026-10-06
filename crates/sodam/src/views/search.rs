@@ -614,6 +614,7 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
         return search_playlist_detail(root, cx);
     }
     let query = root.search_keyword.trim().to_string();
+    let history = sodam_core::search_history::load();
     div()
         .flex()
         .flex_col()
@@ -641,6 +642,71 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
                         .child(query),
                 )
                 .into_any_element()
+        })
+        .when(query.is_empty() && !history.is_empty(), |this| {
+            this.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::SM))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_size(theme::Text::Small.size())
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme::text())
+                                    .child(root.tr("最近搜索")),
+                            )
+                            .child(
+                                div()
+                                    .id("clear-search-history")
+                                    .cursor_pointer()
+                                    .text_size(theme::Text::Tiny.size())
+                                    .text_color(theme::text_muted())
+                                    .on_click(cx.listener(
+                                        |root, _event: &ClickEvent, _window, cx| {
+                                            let _ = sodam_core::search_history::clear();
+                                            root.toast(root.tr("搜索历史已清空"), cx);
+                                        },
+                                    ))
+                                    .child(root.tr("清空")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(theme::space::SM))
+                            .children(history.into_iter().take(10).map(|item| {
+                                let query = item.query.clone();
+                                div()
+                                    .id(gpui::ElementId::Name(
+                                        format!("search-history-{}", item.used_at).into(),
+                                    ))
+                                    .px(px(theme::space::MD))
+                                    .py(px(theme::space::XS))
+                                    .rounded(px(theme::radius::PILL))
+                                    .bg(theme::surface_elevated())
+                                    .cursor_pointer()
+                                    .hover(|style| style.bg(theme::surface_hover()))
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::text_muted())
+                                    .on_click(cx.listener(
+                                        move |root, _event: &ClickEvent, _window, cx| {
+                                            root.search_input = query.clone();
+                                            root.run_search(cx);
+                                        },
+                                    ))
+                                    .child(item.query)
+                            })),
+                    ),
+            )
         })
         .child(search_tabs(root, cx))
         .child(if root.searching {

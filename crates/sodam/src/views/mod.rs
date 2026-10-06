@@ -249,9 +249,10 @@ fn track_row(
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
         .when(selected, |this| this.bg(theme::surface_selected()))
-        .when(!selected && current_track_id.as_ref() == Some(&track.id), |this| {
-            this.bg(theme::surface_hover())
-        })
+        .when(
+            !selected && current_track_id.as_ref() == Some(&track.id),
+            |this| this.bg(theme::surface_hover()),
+        )
         .hover(|style| style.bg(theme::surface_hover()))
         .on_click(move |event: &ClickEvent, _window, cx: &mut gpui::App| {
             let handled = crate::experience3::select_click(event, tracks.as_ref(), index);
@@ -1487,10 +1488,9 @@ fn local_playlists_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                             div()
                                 .text_size(theme::Text::Small.size())
                                 .text_color(theme::text_muted())
-                                .child(root.localized(
-                                    "{} 首",
-                                    &[playlist.tracks.len().to_string()],
-                                )),
+                                .child(
+                                    root.localized("{} 首", &[playlist.tracks.len().to_string()]),
+                                ),
                         ),
                 )
                 .child(

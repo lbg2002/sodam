@@ -17,6 +17,8 @@ fn icon_name(nav: Nav) -> &'static str {
         Nav::Search => "search",
         Nav::Liked => "heart",
         Nav::Library => "list-music",
+        Nav::LocalMusic => "disc-3",
+        Nav::LocalPlaylists => "folder",
         Nav::Recent => "history",
         Nav::Downloads => "download",
         Nav::Artist | Nav::Album => "search",
@@ -55,7 +57,14 @@ fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> A
         .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
             // 未登录时只放行「设置」，其他入口都拦回去（登录在设置 → 账户）
             if root.settings.cookie.trim().is_empty()
-                && !matches!(nav, Nav::Settings | Nav::Downloads | Nav::Recent)
+                && !matches!(
+                    nav,
+                    Nav::Settings
+                        | Nav::Downloads
+                        | Nav::Recent
+                        | Nav::LocalMusic
+                        | Nav::LocalPlaylists
+                )
             {
                 root.set_nav(Nav::Settings, cx);
                 root.set_status("请先在「设置 → 账户」扫码登录", &[]);
@@ -118,12 +127,24 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     } else {
         current == Nav::Recent
     };
+    let local_music_active = if playing {
+        matches!(active_origin, crate::app::QueueOrigin::LocalMusic)
+    } else {
+        current == Nav::LocalMusic
+    };
+    let local_playlists_active = if playing {
+        matches!(active_origin, crate::app::QueueOrigin::LocalPlaylist(_))
+    } else {
+        current == Nav::LocalPlaylists
+    };
     let labels: std::collections::HashMap<Nav, String> = [
         Nav::Home,
         Nav::Scenes,
         Nav::Search,
         Nav::Liked,
         Nav::Library,
+        Nav::LocalMusic,
+        Nav::LocalPlaylists,
         Nav::Recent,
         Nav::Downloads,
         Nav::Settings,
@@ -142,7 +163,14 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
             nav_row(nav, labels[&nav].clone(), active, cx)
         })
         .collect();
-    let library_items: Vec<AnyElement> = [Nav::Liked, Nav::Library, Nav::Recent, Nav::Downloads]
+    let library_items: Vec<AnyElement> = [
+        Nav::Liked,
+        Nav::Library,
+        Nav::LocalMusic,
+        Nav::LocalPlaylists,
+        Nav::Recent,
+        Nav::Downloads,
+    ]
         .into_iter()
         .map(|nav| {
             let active = match nav {
@@ -154,6 +182,8 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         current == Nav::Library
                     }
                 }
+                Nav::LocalMusic => local_music_active,
+                Nav::LocalPlaylists => local_playlists_active,
                 Nav::Recent => recent_active,
                 Nav::Downloads => current == Nav::Downloads,
                 _ => current == nav,

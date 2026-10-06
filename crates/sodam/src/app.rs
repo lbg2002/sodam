@@ -1040,6 +1040,7 @@ impl Root {
 
     pub fn set_status(&mut self, key: &'static str, args: &[String]) {
         self.status = self.localized(key, args);
+        crate::experience3::set_toast(self.status.clone());
     }
 
     pub fn set_language(&mut self, language: Language, cx: &mut Context<Self>) {
@@ -1137,6 +1138,34 @@ impl Render for Root {
                     }),
             )
             .child(ui::player_bar::render(self, cx))
+            .when_some(crate::experience3::toast_message(), |this, message| {
+                this.child(
+                    gpui::deferred(
+                        div()
+                            .absolute()
+                            .left(px(theme::SIDEBAR_W + theme::space::XL))
+                            .right(px(theme::space::XL))
+                            .bottom(px(theme::PLAYER_H + theme::space::LG))
+                            .flex()
+                            .justify_center()
+                            .child(
+                                div()
+                                    .max_w(px(560.0))
+                                    .px(px(theme::space::LG))
+                                    .py(px(theme::space::SM))
+                                    .rounded(px(theme::radius::PILL))
+                                    .bg(theme::surface_elevated())
+                                    .border_1()
+                                    .border_color(theme::border())
+                                    .shadow_lg()
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::text())
+                                    .child(message),
+                            ),
+                    )
+                    .with_priority(10),
+                )
+            })
             .when(self.track_menu.is_some(), |this| {
                 this.child(crate::views::track_menu(self, cx))
             })

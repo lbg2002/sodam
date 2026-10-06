@@ -270,6 +270,7 @@ pub struct Root {
     /// 本地最近播放历史，按最近播放时间倒序。
     pub recent: Arc<Vec<TrackItem>>,
     pub recent_scroll: gpui::UniformListScrollHandle,
+    pub(crate) recent_recorded_track_id: String,
     /// 「我喜欢的音乐」的曲目 id 集合（列表里的爱心状态）。
     pub liked_ids: Arc<HashSet<String>>,
     /// 已导出到下载目录的曲目；列表、播放栏和下载管理页共享同一状态。
@@ -530,6 +531,7 @@ impl Root {
             liked: Arc::new(Vec::new()),
             recent,
             recent_scroll: gpui::UniformListScrollHandle::new(),
+            recent_recorded_track_id: String::new(),
             liked_ids: Arc::new(HashSet::new()),
             downloads: Arc::new(Vec::new()),
             downloaded_ids: Arc::new(HashSet::new()),

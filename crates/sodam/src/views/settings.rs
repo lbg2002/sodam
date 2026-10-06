@@ -487,6 +487,81 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     })
     .collect();
 
+    let prefetch_rows: Vec<AnyElement> = [
+        (
+            0usize,
+            root.tr("关闭"),
+            root.tr("不提前缓存后续歌曲；切歌时可能需要等待加载"),
+        ),
+        (
+            1usize,
+            root.tr("前方 1 首"),
+            root.tr("最省流量，只保证下一首优先缓存"),
+        ),
+        (
+            3usize,
+            root.tr("前方 3 首（推荐）"),
+            root.tr("兼顾无感切歌、网络占用与缓存空间"),
+        ),
+        (
+            5usize,
+            root.tr("前方 5 首"),
+            root.tr("网络稳定时切歌更从容，但会增加缓存和流量"),
+        ),
+    ]
+    .iter()
+    .map(|(value, title, hint)| {
+        let chosen = root.settings.prefetch_count == *value;
+        let value = *value;
+        div()
+            .id(gpui::ElementId::Name(format!("prefetch-set-{value}").into()))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(theme::space::LG))
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_prefetch_count(value, cx);
+            }))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .text_size(theme::Text::Body.size())
+                            .text_color(if chosen {
+                                theme::text()
+                            } else {
+                                theme::text_muted()
+                            })
+                            .child(title.to_string()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_faint())
+                            .child(hint.to_string()),
+                    ),
+            )
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
     let account_card = account_section(root, cx);
 
     div()
@@ -705,6 +780,34 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .child(root.tr("下载格式")),
                 )
                 .children(download_format_rows),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Large.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::text())
+                        .child(root.tr("智能预加载")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(root.tr(
+                            "播放开始后后台逐步缓存后续歌曲；任务完成会立即补位，减少切歌等待",
+                        )),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .children(prefetch_rows),
         )
         .child({
             // 缓存：显示占用大小 + 一键清理（统计读后台快照，不在渲染路径扫盘）

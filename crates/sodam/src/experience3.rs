@@ -130,7 +130,7 @@ impl Root {
             cx.background_executor()
                 .timer(Duration::from_millis(3100))
                 .await;
-            cx.notify();
+            cx.refresh();
         })
         .detach();
     }

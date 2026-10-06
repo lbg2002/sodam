@@ -622,7 +622,9 @@ impl Root {
         };
         if logged_in {
             root.refresh_account(cx);
-            root.load_liked_ids(cx);
+            if !root.settings.lazy_startup {
+                root.load_liked_ids(cx);
+            }
             if root.queue.is_empty() {
                 root.start_recommendation(false, cx);
             } else {
@@ -630,6 +632,7 @@ impl Root {
                     .queue
                     .tracks()
                     .iter()
+                    .take(if root.settings.lazy_startup { 4 } else { usize::MAX })
                     .map(|track| track.cover.clone())
                     .collect();
                 root.ensure_covers(&covers, cx);
@@ -706,9 +709,27 @@ impl Root {
             })
             .detach();
         }
-        root.refresh_downloads(cx);
-        root.refresh_audio_cache_index(cx);
-        root.trim_cache_if_needed(cx);
+        if root.settings.lazy_startup {
+            let this = cx.entity();
+            cx.spawn(async move |_this, cx| {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(650))
+                    .await;
+                let _ = this.update(cx, |root, cx| {
+                    if !root.settings.cookie.trim().is_empty() {
+                        root.load_liked_ids(cx);
+                    }
+                    root.refresh_downloads(cx);
+                    root.refresh_audio_cache_index(cx);
+                    root.trim_cache_if_needed(cx);
+                });
+            })
+            .detach();
+        } else {
+            root.refresh_downloads(cx);
+            root.refresh_audio_cache_index(cx);
+            root.trim_cache_if_needed(cx);
+        }
         Self::start_heartbeat(cx);
 
         // 开发验证用：`SODAM_AUTOPLAY=1` 进收藏页并自动播放第一首；

@@ -33,7 +33,10 @@ fn toast_slot() -> &'static Mutex<Option<ToastState>> {
 
 pub fn toast_message() -> Option<String> {
     let mut slot = toast_slot().lock().ok()?;
-    if slot.as_ref().is_some_and(|toast| Instant::now() > toast.until) {
+    if slot
+        .as_ref()
+        .is_some_and(|toast| Instant::now() > toast.until)
+    {
         *slot = None;
     }
     slot.as_ref().map(|toast| toast.message.clone())
@@ -75,15 +78,23 @@ pub fn clear_selection() {
 
 /// Ctrl/Cmd 点击切换单项；Shift 点击选择锚点到当前项；普通点击在已有多选时清空并选当前。
 pub fn select_click(event: &ClickEvent, tracks: &[TrackItem], index: usize) -> bool {
-    let Some(track) = tracks.get(index) else { return false };
+    let Some(track) = tracks.get(index) else {
+        return false;
+    };
     let modifiers = event.modifiers();
     let multi = modifiers.control || modifiers.platform;
     let shift = modifiers.shift;
-    let Ok(mut state) = selection().lock() else { return false };
+    let Ok(mut state) = selection().lock() else {
+        return false;
+    };
 
     if shift {
         let anchor = state.anchor.unwrap_or(index);
-        let (start, end) = if anchor <= index { (anchor, index) } else { (index, anchor) };
+        let (start, end) = if anchor <= index {
+            (anchor, index)
+        } else {
+            (index, anchor)
+        };
         if !multi {
             state.ids.clear();
         }
@@ -265,7 +276,11 @@ impl Root {
         self.settings.system_notifications = enabled;
         let _ = self.settings.save();
         self.toast(
-            if enabled { self.tr("切歌通知已开启") } else { self.tr("切歌通知已关闭") },
+            if enabled {
+                self.tr("切歌通知已开启")
+            } else {
+                self.tr("切歌通知已关闭")
+            },
             cx,
         );
     }
@@ -277,7 +292,11 @@ impl Root {
         }
         let _ = self.settings.save();
         self.toast(
-            if enabled { self.tr("响度标准化已开启") } else { self.tr("响度标准化已关闭") },
+            if enabled {
+                self.tr("响度标准化已开启")
+            } else {
+                self.tr("响度标准化已关闭")
+            },
             cx,
         );
     }
@@ -288,7 +307,11 @@ impl Root {
             .set_transition(enabled, self.settings.crossfade_seconds);
         let _ = self.settings.save();
         self.toast(
-            if enabled { self.tr("无缝衔接已开启") } else { self.tr("无缝衔接已关闭") },
+            if enabled {
+                self.tr("无缝衔接已开启")
+            } else {
+                self.tr("无缝衔接已关闭")
+            },
             cx,
         );
     }
@@ -366,7 +389,10 @@ impl Root {
         self.settings.desktop_lyrics_opacity = opacity.clamp(30, 100);
         let _ = self.settings.save();
         self.toast(
-            format!("桌面歌词背景透明度：{}%", self.settings.desktop_lyrics_opacity),
+            format!(
+                "桌面歌词背景透明度：{}%",
+                self.settings.desktop_lyrics_opacity
+            ),
             cx,
         );
     }
@@ -375,7 +401,10 @@ impl Root {
         self.settings.desktop_lyrics_font_size = size.clamp(20, 44);
         let _ = self.settings.save();
         self.toast(
-            format!("桌面歌词字号：{} px", self.settings.desktop_lyrics_font_size),
+            format!(
+                "桌面歌词字号：{} px",
+                self.settings.desktop_lyrics_font_size
+            ),
             cx,
         );
     }
@@ -421,7 +450,10 @@ impl Root {
         self.settings.player_bar_compact_width = width.clamp(720, 1200);
         let _ = self.settings.save();
         self.toast(
-            format!("播放栏折叠阈值：{} px", self.settings.player_bar_compact_width),
+            format!(
+                "播放栏折叠阈值：{} px",
+                self.settings.player_bar_compact_width
+            ),
             cx,
         );
     }

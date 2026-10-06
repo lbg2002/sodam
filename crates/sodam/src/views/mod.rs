@@ -1273,28 +1273,23 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
                     .min_h(px(0.0))
                     .gap(px(theme::space::SM))
                     .child(
-                        div()
-                            .flex()
-                            .justify_end()
-                            .child(
-                                div()
-                                    .id("clear-recent")
-                                    .h(px(theme::size::CONTROL_SM))
-                                    .px(px(theme::space::MD))
-                                    .flex()
-                                    .items_center()
-                                    .rounded(px(theme::radius::ROW))
-                                    .cursor_pointer()
-                                    .hover(|style| style.bg(theme::surface_hover()))
-                                    .text_size(theme::Text::Small.size())
-                                    .text_color(theme::text_muted())
-                                    .on_click(cx.listener(
-                                        |root, _event: &ClickEvent, _window, cx| {
-                                            root.clear_recent_history(cx);
-                                        },
-                                    ))
-                                    .child(root.tr("清空最近播放")),
-                            ),
+                        div().flex().justify_end().child(
+                            div()
+                                .id("clear-recent")
+                                .h(px(theme::size::CONTROL_SM))
+                                .px(px(theme::space::MD))
+                                .flex()
+                                .items_center()
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.clear_recent_history(cx);
+                                }))
+                                .child(root.tr("清空最近播放")),
+                        ),
                     )
                     .child(track_list(
                         root,

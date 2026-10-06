@@ -110,11 +110,7 @@ fn start_tray_service(
 }
 
 #[cfg(target_os = "linux")]
-fn start_mpris_service(
-    bridge: mpris::MprisBridge,
-    app: Entity<app::Root>,
-    cx: &mut App,
-) {
+fn start_mpris_service(bridge: mpris::MprisBridge, app: Entity<app::Root>, cx: &mut App) {
     let state = bridge.state.clone();
     let receiver = bridge.receiver;
     cx.spawn(async move |cx| {
@@ -148,8 +144,7 @@ fn start_mpris_service(
                     mpris::MprisCommand::SeekRelative(offset) => cx.update(|cx| {
                         app.update(cx, |root, cx| {
                             let snapshot = root.engine.snapshot();
-                            let seconds =
-                                snapshot.position_seconds + offset as f64 / 1_000_000.0;
+                            let seconds = snapshot.position_seconds + offset as f64 / 1_000_000.0;
                             root.engine.seek(seconds.max(0.0));
                             root.persist_playback_state(cx);
                             cx.notify();
@@ -199,11 +194,9 @@ fn start_mpris_service(
                                 album,
                                 art_url,
                                 playing: snapshot.playing,
-                                position_micros: (snapshot.position_seconds.max(0.0)
-                                    * 1_000_000.0)
+                                position_micros: (snapshot.position_seconds.max(0.0) * 1_000_000.0)
                                     as i64,
-                                duration_micros: (snapshot.duration_seconds.max(0.0)
-                                    * 1_000_000.0)
+                                duration_micros: (snapshot.duration_seconds.max(0.0) * 1_000_000.0)
                                     as i64,
                                 volume: snapshot.volume as f64,
                                 can_go_next: root.queue.len() > 1,

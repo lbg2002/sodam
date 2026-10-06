@@ -111,6 +111,7 @@ icon_set!(
     "heart",
     "heart-filled",
     "download",
+    "history",
     "check",
     "folder-open",
     "trash-2",

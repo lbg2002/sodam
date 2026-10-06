@@ -261,11 +261,11 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                                 .left(px(0.0))
                                 .top(px(0.0))
                                 .h_full()
-                                .w_fraction(if batch_total == 0 {
+                                .w(gpui::relative(if batch_total == 0 {
                                     0.0
                                 } else {
                                     batch_done as f32 / batch_total as f32
-                                })
+                                }))
                                 .rounded(px(3.0))
                                 .bg(theme::accent()),
                         ),
@@ -276,7 +276,7 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
         None
     };
 
-    if root.downloads_loading && root.downloads.is_empty() {
+    if root.downloads_loading && root.downloads.is_empty() && batch_total == 0 {
         return div()
             .flex()
             .flex_col()
@@ -284,7 +284,6 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
             .min_h(px(0.0))
             .gap(px(theme::space::MD))
             .child(toolbar)
-            .when_some(batch_card.clone(), |this, card| this.child(card))
             .child(loading_state(root.tr("正在读取下载列表…")))
             .into_any_element();
     }

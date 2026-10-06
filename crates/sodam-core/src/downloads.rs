@@ -45,11 +45,45 @@ fn metadata_dir() -> PathBuf {
     download_dir().join(".sodam")
 }
 
+fn pending_path() -> PathBuf {
+    metadata_dir().join("pending.json")
+}
+
 pub fn ensure_download_dir() -> Result<PathBuf> {
     let dir = download_dir();
     fs::create_dir_all(&dir).context("创建下载目录失败")?;
     fs::create_dir_all(metadata_dir()).context("创建下载索引目录失败")?;
     Ok(dir)
+}
+
+pub fn load_pending_downloads() -> Result<Vec<TrackItem>> {
+    let path = pending_path();
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Ok(Vec::new());
+    };
+    let tracks = serde_json::from_str::<Vec<TrackItem>>(&text)
+        .with_context(|| format!("读取待下载索引失败：{}", path.display()))?;
+    Ok(tracks)
+}
+
+pub fn save_pending_downloads(tracks: &[TrackItem]) -> Result<()> {
+    ensure_download_dir()?;
+    let path = pending_path();
+    if tracks.is_empty() {
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err).context("清理待下载索引失败"),
+        }
+        return Ok(());
+    }
+    let part = path.with_extension("json.part");
+    fs::write(&part, serde_json::to_vec_pretty(tracks)?).context("写待下载索引失败")?;
+    if path.exists() {
+        let _ = fs::remove_file(&path);
+    }
+    fs::rename(&part, &path).context("保存待下载索引失败")?;
+    Ok(())
 }
 
 pub fn list_downloads() -> Result<Vec<DownloadedTrack>> {
@@ -61,7 +95,9 @@ pub fn list_downloads() -> Result<Vec<DownloadedTrack>> {
     let mut items = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json")
+            || path.file_name().and_then(|name| name.to_str()) == Some("pending.json")
+        {
             continue;
         }
         let Ok(text) = fs::read_to_string(&path) else {
@@ -294,5 +330,18 @@ mod tests {
     fn filename_sanitizes_path_characters() {
         assert_eq!(safe_filename("a/b:c"), "a_b_c");
         assert_eq!(safe_component("12/34"), "12_34");
+    }
+
+    #[test]
+    fn pending_tracks_are_json_serializable() {
+        let track = TrackItem {
+            id: "42".into(),
+            title: "测试歌曲".into(),
+            artist: "测试歌手".into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&vec![track.clone()]).unwrap();
+        let decoded: Vec<TrackItem> = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, vec![track]);
     }
 }

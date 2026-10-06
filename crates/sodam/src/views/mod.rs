@@ -76,7 +76,7 @@ fn columns_for(width: f32) -> Columns {
     let base = COL_INDEX + COL_LIKE + theme::size::ROW_ART + COL_DOWNLOAD;
     let candidate = |artist: bool, album: bool, time: bool| -> Option<f32> {
         let mut fixed = base;
-        let mut count = 3.0;
+        let mut count = 4.0;
         if artist {
             fixed += COL_ARTIST;
             count += 1.0;
@@ -543,6 +543,13 @@ pub(crate) fn scrolling_detail_page(
     let shuffle_tracks = tracks.clone();
     let row_tracks = tracks.clone();
     let current_track_id = root.queue.current().map(|track| track.id.clone());
+    let downloaded_ids = root.downloaded_ids.clone();
+    let pending_download_ids = std::sync::Arc::new(
+        root.pending_downloads.keys().cloned().collect::<std::collections::HashSet<_>>(),
+    );
+    let download_inflight_ids = std::sync::Arc::new(
+        root.download_inflight.iter().cloned().collect::<std::collections::HashSet<_>>(),
+    );
     let cols = columns_for(root.list_width.lock().map(|width| *width).unwrap_or(1200.0));
     let width_slot = root.list_width.clone();
     let liked_ids = root.liked_ids.clone();
@@ -681,6 +688,9 @@ pub(crate) fn scrolling_detail_page(
                 covers.clone(),
                 cover_requests.clone(),
                 current_track_id.clone(),
+                downloaded_ids.clone(),
+                pending_download_ids.clone(),
+                download_inflight_ids.clone(),
             );
         }
 

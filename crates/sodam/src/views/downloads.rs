@@ -209,14 +209,14 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                                     .truncate()
                                     .text_size(theme::Text::Body.size())
                                     .text_color(theme::text())
-                                    .child(track.title),
+                                    .child(track.title.clone()),
                             )
                             .child(
                                 div()
                                     .truncate()
                                     .text_size(theme::Text::Small.size())
                                     .text_color(theme::text_muted())
-                                    .child(track.artist),
+                                    .child(track.artist.clone()),
                             ),
                     )
                     .child(

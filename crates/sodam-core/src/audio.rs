@@ -316,8 +316,14 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 if let Some(current) = &player {
                     if current.is_paused() {
                         current.play();
+                        if let Some((old, _, _, _)) = &fading_out {
+                            old.play();
+                        }
                     } else {
                         current.pause();
+                        if let Some((old, _, _, _)) = &fading_out {
+                            old.pause();
+                        }
                     }
                     sync_progress(&state, current);
                 } else {
@@ -327,12 +333,18 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
             Command::Play => {
                 if let Some(current) = &player {
                     current.play();
+                    if let Some((old, _, _, _)) = &fading_out {
+                        old.play();
+                    }
                     sync_progress(&state, current);
                 }
             }
             Command::Pause => {
                 if let Some(current) = &player {
                     current.pause();
+                    if let Some((old, _, _, _)) = &fading_out {
+                        old.pause();
+                    }
                     sync_progress(&state, current);
                 }
             }

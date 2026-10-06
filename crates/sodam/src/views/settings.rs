@@ -644,6 +644,164 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     })
     .collect();
 
+    let adaptive_prefetch_rows: Vec<AnyElement> = [
+        (5u32, root.tr("5 分钟")),
+        (12u32, root.tr("12 分钟（推荐）")),
+        (20u32, root.tr("20 分钟")),
+        (30u32, root.tr("30 分钟")),
+    ]
+    .iter()
+    .map(|(value, title)| {
+        let chosen = root.settings.prefetch_adaptive && root.settings.prefetch_minutes == *value;
+        let value = *value;
+        div()
+            .id(gpui::ElementId::Name(
+                format!("prefetch-minutes-{value}").into(),
+            ))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_prefetch_minutes(value, cx);
+            }))
+            .child(title.to_string())
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
+    let adaptive_toggle = div()
+        .id("prefetch-adaptive-toggle")
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .when(root.settings.prefetch_adaptive, |this| {
+            this.bg(theme::surface_selected())
+        })
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+            root.set_prefetch_adaptive(!root.settings.prefetch_adaptive, cx);
+        }))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(root.tr("自适应预加载")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_faint())
+                        .child(root.tr("同时满足最低曲目数和目标分钟数，最长预取 8 首")),
+                ),
+        )
+        .child(
+            div()
+                .px(px(theme::space::SM))
+                .py(px(2.0))
+                .rounded(px(theme::radius::PILL))
+                .bg(if root.settings.prefetch_adaptive {
+                    theme::accent_soft()
+                } else {
+                    theme::surface_elevated()
+                })
+                .text_size(theme::Text::Tiny.size())
+                .text_color(if root.settings.prefetch_adaptive {
+                    theme::accent()
+                } else {
+                    theme::text_muted()
+                })
+                .child(if root.settings.prefetch_adaptive {
+                    root.tr("已开启")
+                } else {
+                    root.tr("已关闭")
+                }),
+        )
+        .into_any_element();
+
+    let offline_toggle = div()
+        .id("offline-mode-toggle")
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .when(root.settings.offline_mode, |this| {
+            this.bg(theme::surface_selected())
+        })
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+            root.set_offline_mode(!root.settings.offline_mode, cx);
+        }))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(root.tr("离线模式 / 缓存优先")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_faint())
+                        .child(root.tr("开启后只播放当前音质档位已经缓存的歌曲，不发起音频网络请求")),
+                ),
+        )
+        .child(
+            div()
+                .px(px(theme::space::SM))
+                .py(px(2.0))
+                .rounded(px(theme::radius::PILL))
+                .bg(if root.settings.offline_mode {
+                    theme::accent_soft()
+                } else {
+                    theme::surface_elevated()
+                })
+                .text_size(theme::Text::Tiny.size())
+                .text_color(if root.settings.offline_mode {
+                    theme::accent()
+                } else {
+                    theme::text_muted()
+                })
+                .child(if root.settings.offline_mode {
+                    root.tr("离线")
+                } else {
+                    root.tr("在线")
+                }),
+        )
+        .into_any_element();
+
     let cache_limit_rows: Vec<AnyElement> = [
         (1u64, "1 GB", root.tr("适合磁盘空间较小的设备")),
         (
@@ -950,15 +1108,32 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 )
                 .child(settings_heading(
                     root.tr("智能预加载"),
-                    root.tr("播放开始后后台逐步缓存后续歌曲；任务完成会立即补位，减少切歌等待"),
+                    root.tr("播放开始后后台逐步缓存后续歌曲；自适应模式按未来播放时长动态决定缓存深度"),
                 ))
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(px(theme::space::XS))
-                        .children(prefetch_rows),
-                )
+                .child(adaptive_toggle)
+                .when(root.settings.prefetch_adaptive, |this| {
+                    this.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(theme::space::XS))
+                            .children(adaptive_prefetch_rows),
+                    )
+                })
+                .when(!root.settings.prefetch_adaptive, |this| {
+                    this.child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(theme::space::XS))
+                            .children(prefetch_rows),
+                    )
+                })
+                .child(settings_heading(
+                    root.tr("离线播放"),
+                    root.tr("优先使用本地缓存；离线模式开启后完全禁止新的音频网络请求"),
+                ))
+                .child(offline_toggle)
                 .into_any_element()
         }
         SettingsSection::Lyrics => div()

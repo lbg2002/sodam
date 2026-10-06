@@ -26,6 +26,8 @@ pub struct Settings {
     pub download_format: String,
     /// 智能预加载前方曲目数；0 = 关闭。
     pub prefetch_count: usize,
+    /// 播放缓存上限（GB）；0 = 不限制。
+    pub cache_limit_gb: u64,
     /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
@@ -51,6 +53,7 @@ impl Default for Settings {
             download_quality: "follow".to_string(),
             download_format: "source".to_string(),
             prefetch_count: 3,
+            cache_limit_gb: 3,
             theme: String::new(),
             language: String::new(),
         }
@@ -143,6 +146,7 @@ mod tests {
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
         assert_eq!(loaded.prefetch_count, 3);
+        assert_eq!(loaded.cache_limit_gb, 3);
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());
         assert!(loaded.is_ready_for_vip());

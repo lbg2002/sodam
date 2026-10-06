@@ -120,35 +120,19 @@ pub fn selected_tracks(tracks: &[TrackItem]) -> Vec<TrackItem> {
         .collect()
 }
 
-pub fn fuzzy_matches(track: &TrackItem, query: &str) -> bool {
-    let query = query.trim().to_lowercase();
-    if query.is_empty() {
-        return true;
-    }
-    let haystack = format!("{} {} {}", track.title, track.artist, track.album).to_lowercase();
-    if haystack.contains(&query) {
-        return true;
-    }
-    // 子序列匹配：`jielun` / 拼音由服务端搜索承担，本地侧至少支持宽松字母搜索。
-    let mut chars = query.chars();
-    let mut wanted = chars.next();
-    for ch in haystack.chars() {
-        if Some(ch) == wanted {
-            wanted = chars.next();
-            if wanted.is_none() {
-                return true;
-            }
-        }
-    }
-    false
-}
-
 impl Root {
     pub fn toast(&mut self, message: impl Into<String>, cx: &mut Context<Self>) {
         let message = message.into();
         self.status = message.clone();
         set_toast(message);
         cx.notify();
+        cx.spawn(async move |_this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(3100))
+                .await;
+            cx.notify();
+        })
+        .detach();
     }
 
     pub fn e3_clear_selection(&mut self, cx: &mut Context<Self>) {

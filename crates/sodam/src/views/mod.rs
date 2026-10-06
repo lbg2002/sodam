@@ -36,6 +36,7 @@ const COL_TIME: f32 = 60.0;
 /// 标题列保底宽度：固定列再多也不能把标题挤没。
 const COL_TITLE_MIN: f32 = 160.0;
 const COL_LIKE: f32 = 28.0;
+const COL_CACHE: f32 = 40.0;
 const COL_DOWNLOAD: f32 = 48.0;
 
 fn vip_badge() -> AnyElement {
@@ -73,10 +74,10 @@ struct Columns {
 
 fn columns_for(width: f32) -> Columns {
     let usable = (width - ROW_PAD * 2.0).max(0.0);
-    let base = COL_INDEX + COL_LIKE + theme::size::ROW_ART + COL_DOWNLOAD;
+    let base = COL_INDEX + COL_LIKE + theme::size::ROW_ART + COL_CACHE + COL_DOWNLOAD;
     let candidate = |artist: bool, album: bool, time: bool| -> Option<f32> {
         let mut fixed = base;
-        let mut count = 4.0;
+        let mut count = 5.0;
         if artist {
             fixed += COL_ARTIST;
             count += 1.0;
@@ -183,6 +184,15 @@ fn track_header(cols: Columns, language: crate::ui::i18n::Language) -> AnyElemen
     }
     header = header.child(
         div()
+            .w(px(COL_CACHE))
+            .flex_none()
+            .flex()
+            .justify_center()
+            .whitespace_nowrap()
+            .child(language.text("缓存")),
+    );
+    header = header.child(
+        div()
             .w(px(COL_DOWNLOAD))
             .flex_none()
             .flex()
@@ -208,6 +218,8 @@ fn track_row(
     downloaded_ids: std::sync::Arc<std::collections::HashSet<String>>,
     pending_download_ids: std::sync::Arc<std::collections::HashSet<String>>,
     download_inflight_ids: std::sync::Arc<std::collections::HashSet<String>>,
+    cached_ids: std::sync::Arc<std::collections::HashSet<String>>,
+    prefetch_inflight_ids: std::sync::Arc<std::collections::HashSet<String>>,
 ) -> AnyElement {
     let play_entity = entity.clone();
     let like_entity = entity.clone();
@@ -219,6 +231,8 @@ fn track_row(
     let downloaded = downloaded_ids.contains(&track.id);
     let pending_download = pending_download_ids.contains(&track.id);
     let download_inflight = download_inflight_ids.contains(&track.id);
+    let audio_cached = cached_ids.contains(&track.id);
+    let prefetching = prefetch_inflight_ids.contains(&track.id);
     let download_track = track.clone();
     div()
         .id(("track", index))
@@ -406,6 +420,28 @@ fn track_row(
         })
         .child(
             div()
+                .w(px(COL_CACHE))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(prefetching, |this| {
+                    this.child(crate::ui::spinner::spinner(
+                        theme::ICON_SM,
+                        theme::accent(),
+                    ))
+                })
+                .when(!prefetching && audio_cached, |this| {
+                    this.child(
+                        svg()
+                            .path(icons::path("disc-3"))
+                            .size(px(theme::ICON_SM))
+                            .text_color(theme::accent()),
+                    )
+                }),
+        )
+        .child(
+            div()
                 .id(("download", index))
                 .w(px(COL_DOWNLOAD))
                 .flex_none()
@@ -469,6 +505,8 @@ fn track_list(
             .cloned()
             .collect::<std::collections::HashSet<_>>(),
     );
+    let cached_ids = root.cached_ids.clone();
+    let prefetch_inflight_ids = std::sync::Arc::new(root.prefetch_inflight.clone());
     let cols = columns_for(root.list_width.lock().map(|width| *width).unwrap_or(1200.0));
     let width_slot = root.list_width.clone();
 
@@ -492,6 +530,8 @@ fn track_list(
                         downloaded_ids.clone(),
                         pending_download_ids.clone(),
                         download_inflight_ids.clone(),
+                        cached_ids.clone(),
+                        prefetch_inflight_ids.clone(),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -563,6 +603,8 @@ pub(crate) fn scrolling_detail_page(
             .cloned()
             .collect::<std::collections::HashSet<_>>(),
     );
+    let cached_ids = root.cached_ids.clone();
+    let prefetch_inflight_ids = std::sync::Arc::new(root.prefetch_inflight.clone());
     let cols = columns_for(root.list_width.lock().map(|width| *width).unwrap_or(1200.0));
     let width_slot = root.list_width.clone();
     let liked_ids = root.liked_ids.clone();
@@ -704,6 +746,8 @@ pub(crate) fn scrolling_detail_page(
                 downloaded_ids.clone(),
                 pending_download_ids.clone(),
                 download_inflight_ids.clone(),
+                cached_ids.clone(),
+                prefetch_inflight_ids.clone(),
             );
         }
 

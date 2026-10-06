@@ -75,7 +75,9 @@ fn settings_nav_item(
         .child(
             div()
                 .text_size(theme::Text::Small.size())
-                .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
+                .when(selected, |this| {
+                    this.font_weight(gpui::FontWeight::SEMIBOLD)
+                })
                 .text_color(if selected {
                     theme::text()
                 } else {
@@ -902,8 +904,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 root.tr("当前跟随系统语言；手动选择后会固定语言")
                     .to_string()
             } else {
-                root.tr("已固定语言；可随时切换中文或 English")
-                    .to_string()
+                root.tr("已固定语言；可随时切换中文或 English").to_string()
             };
             div()
                 .flex()
@@ -1027,11 +1028,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 .bg(theme::surface_elevated())
                                 .cursor_pointer()
                                 .hover(|style| style.bg(theme::surface_hover()))
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.choose_download_directory(cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.choose_download_directory(cx);
+                                }))
                                 .child(root.tr("选择目录")),
                         )
                         .child(
@@ -1044,11 +1043,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 .rounded(px(theme::radius::ROW))
                                 .cursor_pointer()
                                 .hover(|style| style.bg(theme::surface_hover()))
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.open_download_folder(cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.open_download_folder(cx);
+                                }))
                                 .child(root.tr("打开目录")),
                         )
                         .when(!root.settings.download_dir.trim().is_empty(), |this| {
@@ -1076,9 +1073,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .px(px(theme::space::MD))
                         .text_size(theme::Text::Tiny.size())
                         .text_color(theme::text_faint())
-                        .child(root.tr(
-                            "导出时写入歌曲名、歌手、专辑；封面缓存可用时一并嵌入",
-                        )),
+                        .child(root.tr("导出时写入歌曲名、歌手、专辑；封面缓存可用时一并嵌入")),
                 )
                 .child(
                     div()
@@ -1226,11 +1221,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 .rounded(px(theme::radius::ROW))
                                 .cursor_pointer()
                                 .hover(|style| style.bg(theme::surface_hover()))
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.open_config_file(cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.open_config_file(cx);
+                                }))
                                 .child(root.tr("Edit")),
                         ),
                 )
@@ -1248,11 +1241,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .border_color(theme::border())
                         .cursor_pointer()
                         .hover(|style| style.bg(theme::surface_hover()))
-                        .on_click(cx.listener(
-                            |root, _event: &ClickEvent, _window, cx| {
-                                root.open_github_repository(cx);
-                            },
-                        ))
+                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.open_github_repository(cx);
+                        }))
                         .child(
                             img("icons/sodam-logo.svg")
                                 .size(px(40.0))
@@ -1272,10 +1263,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                         .text_size(theme::Text::Small.size())
                                         .font_weight(gpui::FontWeight::SEMIBOLD)
                                         .text_color(theme::text())
-                                        .child(format!(
-                                            "SodaM v{}",
-                                            env!("CARGO_PKG_VERSION")
-                                        )),
+                                        .child(format!("SodaM v{}", env!("CARGO_PKG_VERSION"))),
                                 )
                                 .child(
                                     div()

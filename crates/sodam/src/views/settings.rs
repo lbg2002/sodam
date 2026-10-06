@@ -109,6 +109,126 @@ fn settings_heading(title: &str, description: &str) -> AnyElement {
         .into_any_element()
 }
 
+
+fn toggle_setting_row(
+    id: &'static str,
+    title: &str,
+    description: &str,
+    enabled: bool,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id)
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(listener)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(title.to_string()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_muted())
+                        .child(description.to_string()),
+                ),
+        )
+        .child(
+            div()
+                .w(px(40.0))
+                .h(px(22.0))
+                .rounded(px(theme::radius::PILL))
+                .bg(if enabled {
+                    theme::accent()
+                } else {
+                    theme::surface_hover()
+                })
+                .flex()
+                .items_center()
+                .px(px(3.0))
+                .justify_end()
+                .when(!enabled, |this| this.justify_start())
+                .child(
+                    div()
+                        .size(px(16.0))
+                        .rounded_full()
+                        .bg(if enabled {
+                            theme::accent_foreground()
+                        } else {
+                            theme::text_faint()
+                        }),
+                ),
+        )
+        .into_any_element()
+}
+
+fn choice_setting_row(
+    id: String,
+    title: String,
+    description: String,
+    selected: bool,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    div()
+        .id(gpui::ElementId::Name(id.into()))
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .when(selected, |this| this.bg(theme::surface_selected()))
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(listener)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(title),
+                )
+                .when(!description.is_empty(), |this| {
+                    this.child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_muted())
+                            .child(description),
+                    )
+                }),
+        )
+        .when(selected, |this| {
+            this.child(
+                svg()
+                    .path(icons::path("check"))
+                    .size(px(theme::ICON))
+                    .text_color(theme::accent()),
+            )
+        })
+        .into_any_element()
+}
+
 /// 设置页：音质偏好选择 + 账号信息 + 其他。
 /// 设置页 → 账户板块：头像 + 昵称/ID/VIP；未登录给「去登录」并弹二维码 modal。
 fn account_section(root: &Root, cx: &mut Context<Root>) -> AnyElement {

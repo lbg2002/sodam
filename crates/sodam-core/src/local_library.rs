@@ -3,9 +3,20 @@
 use crate::models::TrackItem;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 const MAX_TRACKS: usize = 5000;
+
+fn memory_cache() -> &'static Mutex<Option<Vec<LocalTrackRecord>>> {
+    static CACHE: OnceLock<Mutex<Option<Vec<LocalTrackRecord>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LocalTrackRecord {
@@ -21,10 +32,19 @@ fn catalog_path() -> PathBuf {
 }
 
 pub fn load() -> Vec<LocalTrackRecord> {
-    fs::read_to_string(catalog_path())
+    if let Ok(cache) = memory_cache().lock() {
+        if let Some(records) = cache.as_ref() {
+            return records.clone();
+        }
+    }
+    let records = fs::read_to_string(catalog_path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if let Ok(mut cache) = memory_cache().lock() {
+        *cache = Some(records.clone());
+    }
+    records
 }
 
 pub fn tracks() -> Vec<TrackItem> {
@@ -76,6 +96,9 @@ fn save(records: &[LocalTrackRecord]) -> Result<()> {
         let _ = fs::remove_file(&path);
     }
     fs::rename(&part, &path).context("保存本地音乐索引失败")?;
+    if let Ok(mut cache) = memory_cache().lock() {
+        *cache = Some(records.to_vec());
+    }
     Ok(())
 }
 

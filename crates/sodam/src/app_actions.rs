@@ -2958,29 +2958,16 @@ impl Root {
         let work = cx.background_spawn(async move {
             let session = Session::new(settings.clone());
             if settings.offline_mode {
-                let cached = session
+                return session
                     .cached_track(&work_track.id)
-                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"))?;
-                let gain = if settings.normalize_volume {
-                    sodam_core::loudness::analyze_gain(&cached.path).unwrap_or(1.0)
-                } else {
-                    1.0
-                };
-                return Ok((cached, gain));
+                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"));
             }
 
             // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
             let mut last_err = None;
             for attempt in 1..=3 {
                 match session.download_to_cache(&work_track) {
-                    Ok(cached) => {
-                        let gain = if settings.normalize_volume {
-                            sodam_core::loudness::analyze_gain(&cached.path).unwrap_or(1.0)
-                        } else {
-                            1.0
-                        };
-                        return Ok((cached, gain));
-                    }
+                    Ok(cached) => return Ok(cached),
                     Err(err) => {
                         if std::env::var("SODAM_PLAYER_LOG").is_ok() {
                             eprintln!("[player] 第 {attempt} 次拉流失败：{err}");
@@ -3010,15 +2997,47 @@ impl Root {
                     return;
                 }
                 match result {
-                    Ok((cached, gain)) => {
+                    Ok(cached) => {
                         root.engine.set_transition(
                             root.settings.gapless_playback,
                             root.settings.crossfade_seconds,
                         );
-                        root.engine.set_gain(gain);
+                        let cached_gain = if root.settings.normalize_volume {
+                            sodam_core::loudness::cached_gain(&cached.path).unwrap_or(1.0)
+                        } else {
+                            1.0
+                        };
+                        root.engine.set_gain(cached_gain);
                         root.engine
                             .load(track.clone(), cached.path.clone(), cached.quality);
                         let _ = sodam_core::local_library::record(&track);
+
+                        // 首次响度分析不阻塞开播；完成后仅在同一首仍处于当前播放时应用。
+                        if root.settings.normalize_volume
+                            && sodam_core::loudness::cached_gain(&cached.path).is_none()
+                        {
+                            let analyze_path = cached.path.clone();
+                            let analyze_track_id = track.id.clone();
+                            let analyze = cx.background_spawn(async move {
+                                sodam_core::loudness::analyze_gain(&analyze_path)
+                            });
+                            cx.spawn(async move |this, cx| {
+                                let result = analyze.await;
+                                let _ = this.update(cx, |root, cx| {
+                                    if let Ok(gain) = result {
+                                        let snapshot = root.engine.snapshot();
+                                        if root.settings.normalize_volume
+                                            && snapshot.track_id == analyze_track_id
+                                        {
+                                            root.engine.set_gain(gain);
+                                            cx.notify();
+                                        }
+                                    }
+                                });
+                            })
+                            .detach();
+                        }
+
                         if root.settings.system_notifications {
                             let cover = root.cover_of(&track.cover);
                             crate::system_audio::notify_track(

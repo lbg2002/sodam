@@ -234,6 +234,7 @@ fn track_row(
     let audio_cached = cached_ids.contains(&track.id);
     let prefetching = prefetch_inflight_ids.contains(&track.id);
     let download_track = track.clone();
+    let selected = crate::experience3::is_selected(&track.id);
     div()
         .id(("track", index))
         .group(TRACK_GROUP)
@@ -247,14 +248,20 @@ fn track_row(
         .pb(px(theme::space::XS))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
-        .when(current_track_id.as_ref() == Some(&track.id), |this| {
+        .when(selected, |this| this.bg(theme::surface_selected()))
+        .when(!selected && current_track_id.as_ref() == Some(&track.id), |this| {
             this.bg(theme::surface_hover())
         })
         .hover(|style| style.bg(theme::surface_hover()))
-        .on_click(move |_event: &ClickEvent, _window, cx: &mut gpui::App| {
+        .on_click(move |event: &ClickEvent, _window, cx: &mut gpui::App| {
+            let handled = crate::experience3::select_click(event, tracks.as_ref(), index);
             let tracks = tracks.clone();
             play_entity.update(cx, |root, cx| {
                 root.track_menu = None;
+                if handled {
+                    cx.notify();
+                    return;
+                }
                 root.play_from_arc(tracks, index, cx);
             });
         })
@@ -471,6 +478,28 @@ fn track_row(
         .into_any_element()
 }
 
+fn action_pill(
+    id: &'static str,
+    label: &str,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id)
+        .h(px(theme::size::CONTROL_SM))
+        .px(px(theme::space::MD))
+        .flex()
+        .items_center()
+        .rounded(px(theme::radius::PILL))
+        .cursor_pointer()
+        .bg(theme::surface_hover())
+        .hover(|style| style.bg(theme::surface_selected()))
+        .text_size(theme::Text::Small.size())
+        .text_color(theme::text())
+        .on_click(listener)
+        .child(label.to_string())
+        .into_any_element()
+}
+
 /// 曲目列表（虚拟滚动）。
 #[allow(clippy::too_many_arguments)]
 fn track_list(
@@ -549,6 +578,74 @@ fn track_list(
         .min_h(px(0.0))
         .w_full()
         .gap(px(theme::space::XS))
+        .when(crate::experience3::selected_count() > 0, |this| {
+            let tracks_download = bulk_tracks.clone();
+            let tracks_next = bulk_tracks.clone();
+            let tracks_queue = bulk_tracks.clone();
+            let tracks_delete = bulk_tracks.clone();
+            let count = crate::experience3::selected_count();
+            this.child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(theme::space::SM))
+                    .px(px(theme::space::MD))
+                    .py(px(theme::space::SM))
+                    .rounded(px(theme::radius::ROW))
+                    .bg(theme::surface_elevated())
+                    .child(
+                        div()
+                            .text_size(theme::Text::Small.size())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme::text())
+                            .child(root.localized("已选择 {} 首", &[count.to_string()])),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(theme::space::SM))
+                            .child(action_pill(
+                                "selection-next",
+                                root.tr("下一首播放"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_play_next_selected(tracks_next.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-queue",
+                                root.tr("加入队列"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_append_selected(tracks_queue.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-download",
+                                root.tr("批量下载"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_download_selected(tracks_download.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-delete-download",
+                                root.tr("删除下载"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_delete_selected_downloads(tracks_delete.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-clear",
+                                root.tr("取消选择"),
+                                cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_clear_selection(cx);
+                                }),
+                            )),
+                    ),
+            )
+        })
         .when(matches!(nav, Nav::Liked | Nav::Recent), |this| {
             let tracks = bulk_tracks.clone();
             this.child(

@@ -1,10 +1,32 @@
 //! 独立桌面歌词窗口。
 
 use gpui::prelude::*;
-use gpui::{div, px, Context, Entity, IntoElement, Render, Window};
+use gpui::{
+    div, px, size, App, Bounds, Context, Entity, IntoElement, Render, TitlebarOptions, Window,
+    WindowBounds, WindowKind, WindowOptions,
+};
 
 use crate::app::Root;
 use crate::ui::theme;
+
+pub fn open(root: Entity<Root>, cx: &mut App) {
+    let bounds = Bounds::centered(None, size(px(760.0), px(170.0)), cx);
+    let options = WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        window_min_size: Some(size(px(520.0), px(150.0))),
+        kind: WindowKind::Floating,
+        is_resizable: true,
+        titlebar: Some(TitlebarOptions {
+            title: Some("SodaM Lyrics".into()),
+            ..Default::default()
+        }),
+        app_id: Some("SodaM".into()),
+        ..Default::default()
+    };
+    let _ = cx.open_window(options, move |_window, cx| {
+        cx.new(|_| DesktopLyrics::new(root))
+    });
+}
 
 pub struct DesktopLyrics {
     root: Entity<Root>,

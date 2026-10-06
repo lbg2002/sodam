@@ -30,7 +30,11 @@ fn download_search_box(root: &Root, window: &Window, cx: &mut Context<Root>) -> 
         .rounded_md()
         .bg(theme::surface())
         .border_1()
-        .border_color(if focused { theme::accent() } else { theme::border() })
+        .border_color(if focused {
+            theme::accent()
+        } else {
+            theme::border()
+        })
         .text_color(color)
         .cursor_text()
         .on_mouse_down(
@@ -222,11 +226,9 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                             .rounded(px(theme::radius::PILL))
                             .cursor_pointer()
                             .hover(|style| style.bg(theme::surface_hover()))
-                            .on_click(cx.listener(
-                                move |root, _event: &ClickEvent, _window, cx| {
-                                    root.toggle_download(cancel_track.clone(), cx);
-                                },
-                            ))
+                            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                root.toggle_download(cancel_track.clone(), cx);
+                            }))
                             .child(root.tr("取消")),
                     )
             }))
@@ -234,11 +236,14 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
         .into_any_element();
 
     let body = if items.is_empty() {
-        empty_state("download", if root.downloads.is_empty() {
-            root.tr("还没有下载的歌曲")
-        } else {
-            root.tr("没有找到匹配的下载")
-        })
+        empty_state(
+            "download",
+            if root.downloads.is_empty() {
+                root.tr("还没有下载的歌曲")
+            } else {
+                root.tr("没有找到匹配的下载")
+            },
+        )
     } else {
         div()
             .id("downloads-list")
@@ -260,7 +265,9 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                     }
                 }
                 div()
-                    .id(gpui::ElementId::Name(format!("download-{}", item.track_id).into()))
+                    .id(gpui::ElementId::Name(
+                        format!("download-{}", item.track_id).into(),
+                    ))
                     .flex()
                     .flex_row()
                     .items_center()
@@ -308,7 +315,9 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                     )
                     .child(
                         div()
-                            .id(gpui::ElementId::Name(format!("delete-download-{id}").into()))
+                            .id(gpui::ElementId::Name(
+                                format!("delete-download-{id}").into(),
+                            ))
                             .flex()
                             .items_center()
                             .justify_center()

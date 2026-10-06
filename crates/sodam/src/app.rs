@@ -385,6 +385,8 @@ pub struct Root {
     pub pending_track: Option<TrackItem>,
     /// 已处理过的「播完」序号（配合引擎的 finished_seq 自动切歌）。
     pub(crate) last_finished_seq: u64,
+    /// 当前曲目是否已经触发过提前衔接，避免 50/100ms 心跳重复切歌。
+    pub(crate) transition_triggered_track_id: String,
     /// 拖动进度条时的预览位置（0.0~1.0）：拖动中只改它，松手才真跳。
     pub progress_preview: Option<f32>,
     /// 队列快照（含版本号）：避免抽屉每帧深拷贝整条队列。
@@ -601,6 +603,7 @@ impl Root {
             playback_state_save_inflight: false,
             pending_track: None,
             last_finished_seq: 0,
+            transition_triggered_track_id: String::new(),
             progress_preview: None,
             queue_cache,
             cover_attempted: Arc::new(Mutex::new(HashSet::new())),

@@ -3,7 +3,17 @@
 use crate::models::TrackItem;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+fn memory_cache() -> &'static Mutex<Option<Vec<LocalPlaylist>>> {
+    static CACHE: OnceLock<Mutex<Option<Vec<LocalPlaylist>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LocalPlaylist {
@@ -21,10 +31,19 @@ fn playlists_path() -> PathBuf {
 }
 
 pub fn load() -> Vec<LocalPlaylist> {
-    fs::read_to_string(playlists_path())
+    if let Ok(cache) = memory_cache().lock() {
+        if let Some(items) = cache.as_ref() {
+            return items.clone();
+        }
+    }
+    let items = fs::read_to_string(playlists_path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if let Ok(mut cache) = memory_cache().lock() {
+        *cache = Some(items.clone());
+    }
+    items
 }
 
 pub fn save_queue(name: &str, tracks: &[TrackItem]) -> Result<Vec<LocalPlaylist>> {
@@ -77,6 +96,9 @@ fn save(playlists: &[LocalPlaylist]) -> Result<()> {
         let _ = fs::remove_file(&path);
     }
     fs::rename(&part, &path).context("保存本地播放列表失败")?;
+    if let Ok(mut cache) = memory_cache().lock() {
+        *cache = Some(playlists.to_vec());
+    }
     Ok(())
 }
 

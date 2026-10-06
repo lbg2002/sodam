@@ -111,6 +111,11 @@ impl Language {
             "播完当前歌曲" => "After current song",
             "剩余 {} 分钟" => "{} minutes remaining",
             "睡眠定时" => "Sleep Timer",
+            "15 分钟" => "15 minutes",
+            "30 分钟" => "30 minutes",
+            "60 分钟" => "60 minutes",
+            "90 分钟" => "90 minutes",
+
             "关闭睡眠定时" => "Turn Off Sleep Timer",
             "已打开迷你播放器" => "Mini player opened",
             "已打开桌面歌词" => "Desktop lyrics opened",

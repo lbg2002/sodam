@@ -130,6 +130,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn older_config_gets_new_playback_defaults() {
+        let dir = std::env::temp_dir().join(format!("sodam-old-cfg-{}", std::process::id()));
+        let path = dir.join("config.json");
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        std::fs::write(
+            &path,
+            r#"{
+  "cookie": "sessionid_ss=x",
+  "quality": "highest",
+  "theme": "dark",
+  "language": "zh"
+}"#,
+        )
+        .expect("write");
+
+        let loaded = Settings::load_from(&path);
+        assert_eq!(loaded.cookie, "sessionid_ss=x");
+        assert_eq!(loaded.quality, "highest");
+        assert_eq!(loaded.prefetch_count, 3);
+        assert_eq!(loaded.cache_limit_gb, 3);
+        assert_eq!(loaded.download_quality, "follow");
+        assert_eq!(loaded.download_format, "source");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn round_trip_and_defaults() {
         let dir = std::env::temp_dir().join(format!("sodam-cfg-{}", std::process::id()));
         let path = dir.join("config.json");

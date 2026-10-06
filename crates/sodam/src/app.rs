@@ -15,7 +15,7 @@ use sodam_core::{
     },
     queue::Queue,
     session::{AccountInfo, Session},
-    DownloadedTrack, PlaybackEngine, Settings,
+    DownloadedTrack, PlaybackEngine, PlaybackState, Settings,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -330,6 +330,15 @@ pub struct Root {
     /// 缓存统计快照（音频字节, 歌曲数, 封面字节, 封面张数）：
     /// 后台扫盘后回填，设置页只读它（渲染路径不做同步 IO）。
     pub(crate) cache_summary: (u64, usize, u64, usize),
+    /// 已完成播放缓存的曲目 id 快照；渲染只读它，不同步扫盘。
+    pub cached_ids: Arc<HashSet<String>>,
+    pub(crate) cache_index_loading: bool,
+    pub(crate) cache_trim_inflight: bool,
+    /// 启动恢复：当前歌曲装载完成后跳到这个秒数。
+    pub(crate) restore_seek_seconds: Option<f64>,
+    /// 启动恢复：Some(false) 表示恢复后保持暂停，Some(true) 表示继续播放。
+    pub(crate) restore_was_playing: Option<bool>,
+    pub(crate) playback_state_save_inflight: bool,
     /// 正在加载（下载/解密）的曲目：非空时播放栏显示 loading，且进度条不可拖。
     pub pending_track: Option<TrackItem>,
     /// 已处理过的「播完」序号（配合引擎的 finished_seq 自动切歌）。
@@ -387,7 +396,22 @@ impl Root {
                 "Not ready: set Cookie and signer URL in Settings (or use SODA_COOKIE / QISHUI_SIGNER_URL)".to_string()
             }
         };
-        let queue = Queue::new(Vec::<TrackItem>::new());
+        let restored_playback = PlaybackState::load();
+        let mut queue = restored_playback
+            .as_ref()
+            .map(|state| Queue::new(state.queue.clone()))
+            .unwrap_or_else(|| Queue::new(Vec::<TrackItem>::new()));
+        if let Some(state) = restored_playback.as_ref() {
+            queue.mode = state.mode;
+            let _ = queue.jump(state.index);
+        }
+        let queue_cache = (queue.revision(), Arc::new(queue.tracks().to_vec()));
+        let restore_seek_seconds = restored_playback
+            .as_ref()
+            .map(|state| state.position_seconds)
+            .filter(|position| *position > 0.0);
+        let restore_was_playing = restored_playback.as_ref().map(|state| state.was_playing);
+
         let pending_downloads: HashMap<String, TrackItem> =
             sodam_core::downloads::load_pending_downloads()
                 .unwrap_or_default()
@@ -515,10 +539,16 @@ impl Root {
             prefetch_failed: HashMap::new(),
             prefetch_patrol: 0,
             cache_summary: (0, 0, 0, 0),
+            cached_ids: Arc::new(HashSet::new()),
+            cache_index_loading: false,
+            cache_trim_inflight: false,
+            restore_seek_seconds,
+            restore_was_playing,
+            playback_state_save_inflight: false,
             pending_track: None,
             last_finished_seq: 0,
             progress_preview: None,
-            queue_cache: (0, Arc::new(Vec::new())),
+            queue_cache,
             cover_attempted: Arc::new(Mutex::new(HashSet::new())),
             cover_requests: Arc::new(Mutex::new(Vec::new())),
             covers: Arc::new(HashMap::new()),
@@ -533,7 +563,20 @@ impl Root {
         if logged_in {
             root.refresh_account(cx);
             root.load_liked_ids(cx);
-            root.start_recommendation(false, cx);
+            if root.queue.is_empty() {
+                root.start_recommendation(false, cx);
+            } else {
+                let covers: Vec<String> = root
+                    .queue
+                    .tracks()
+                    .iter()
+                    .map(|track| track.cover.clone())
+                    .collect();
+                root.ensure_covers(&covers, cx);
+                root.status = root.tr("已恢复上次播放队列").to_string();
+                root.open_lyrics(cx);
+                root.start_track(cx);
+            }
         } else {
             root.status = root.tr("请先在「设置 → 账户」扫码登录").to_string();
         }
@@ -603,6 +646,7 @@ impl Root {
             .detach();
         }
         root.refresh_downloads(cx);
+        root.refresh_audio_cache_index(cx);
         Self::start_heartbeat(cx);
 
         // 开发验证用：`SODAM_AUTOPLAY=1` 进收藏页并自动播放第一首；

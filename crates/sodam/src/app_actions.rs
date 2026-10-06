@@ -547,6 +547,7 @@ impl Root {
             Ok(()) => self.tr("歌词字号设置已保存").to_string(),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
+        crate::experience3::set_toast(self.status.clone());
         cx.notify();
     }
 
@@ -556,6 +557,7 @@ impl Root {
             Ok(()) => self.tr("歌词行距设置已保存").to_string(),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
+        crate::experience3::set_toast(self.status.clone());
         cx.notify();
     }
 
@@ -568,6 +570,7 @@ impl Root {
             ),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
+        crate::experience3::set_toast(self.status.clone());
         cx.notify();
     }
 
@@ -628,6 +631,7 @@ impl Root {
         if !enabled {
             self.spawn_prefetch(cx);
         }
+        crate::experience3::set_toast(self.status.clone());
         cx.notify();
     }
 
@@ -2166,6 +2170,7 @@ impl Root {
                             if !root.batch_download_paused {
                                 root.process_pending_downloads(cx);
                             }
+                            crate::experience3::set_toast(root.status.clone());
                             cx.notify();
                         }
                         Ok(None) => {}
@@ -2229,6 +2234,7 @@ impl Root {
                         root.status = root.localized("下载失败：{err}", &[err.to_string()]);
                     }
                 }
+                crate::experience3::set_toast(root.status.clone());
                 cx.notify();
             });
         })

@@ -68,6 +68,11 @@ impl Language {
             "音乐人" => "Artists",
             "专辑" => "Albums",
             "设置" => "Settings",
+            "外观、播放、歌词、下载、存储与账户" => "Appearance, playback, lyrics, downloads, storage, and account",
+            "导出时写入歌曲名、歌手、专辑；封面缓存可用时一并嵌入" => {
+                "Write title, artist, and album tags on export; embed cached artwork when available"
+            }
+
             "最近播放" => "Recently Played",
             "还没有最近播放记录" => "No recent playback yet",
             "清空最近播放" => "Clear Recent",

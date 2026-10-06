@@ -352,10 +352,7 @@ impl Root {
                 .saturating_duration_since(std::time::Instant::now())
                 .as_secs();
             if seconds > 0 {
-                return self.localized(
-                    "剩余 {} 分钟",
-                    &[seconds.div_ceil(60).to_string()],
-                );
+                return self.localized("剩余 {} 分钟", &[seconds.div_ceil(60).to_string()]);
             }
         }
         self.tr("睡眠定时").to_string()
@@ -2002,11 +1999,7 @@ impl Root {
         .detach();
     }
 
-    pub fn queue_batch_download(
-        &mut self,
-        tracks: Arc<Vec<TrackItem>>,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn queue_batch_download(&mut self, tracks: Arc<Vec<TrackItem>>, cx: &mut Context<Self>) {
         if tracks.is_empty() {
             return;
         }
@@ -2132,8 +2125,10 @@ impl Root {
                                 root.batch_download_paused = false;
                                 root.status = root.tr("批量下载任务已完成").to_string();
                             } else {
-                                root.status = root
-                                    .localized("待下载已完成：{}", std::slice::from_ref(&track.title));
+                                root.status = root.localized(
+                                    "待下载已完成：{}",
+                                    std::slice::from_ref(&track.title),
+                                );
                             }
                             if !root.batch_download_paused {
                                 root.process_pending_downloads(cx);
@@ -2930,9 +2925,9 @@ impl Root {
         let work = cx.background_spawn(async move {
             let session = Session::new(settings.clone());
             if settings.offline_mode {
-                return session.cached_track(&work_track.id).ok_or_else(|| {
-                    anyhow::anyhow!("离线模式下这首歌尚未缓存")
-                });
+                return session
+                    .cached_track(&work_track.id)
+                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"));
             }
 
             // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
@@ -3026,11 +3021,10 @@ impl Root {
                         root.playback_error = Some(message);
                         if root.settings.offline_mode {
                             root.playing = false;
-                            root.status = root
-                                .localized(
-                                    "离线不可播放：{} 尚未缓存",
-                                    std::slice::from_ref(&track.title),
-                                );
+                            root.status = root.localized(
+                                "离线不可播放：{} 尚未缓存",
+                                std::slice::from_ref(&track.title),
+                            );
                         } else if root.consecutive_failures >= 3 {
                             root.playing = false;
                             root.status = root

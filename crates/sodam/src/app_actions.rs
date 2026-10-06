@@ -79,7 +79,15 @@ impl Root {
     /// （后者自动覆盖 append/remove 等队列变更，不必逐个调用点补）。
     pub(crate) fn spawn_prefetch(&mut self, cx: &mut Context<Self>) {
         let log = std::env::var("SODAM_PREFETCH_LOG").is_ok();
-        let ahead = prefetch_ahead_count(self.settings.prefetch_count);
+        if self.settings.offline_mode {
+            return;
+        }
+        let ahead = prefetch_target_count(
+            &self.queue,
+            self.settings.prefetch_count,
+            self.settings.prefetch_adaptive,
+            self.settings.prefetch_minutes,
+        );
         if ahead == 0 {
             return;
         }
@@ -435,6 +443,60 @@ impl Root {
         cx.notify();
     }
 
+    pub fn set_prefetch_adaptive(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.prefetch_adaptive = enabled;
+        self.status = match self.settings.save() {
+            Ok(()) => {
+                if enabled {
+                    self.localized(
+                        "自适应预加载：至少 {} 分钟",
+                        &[self.settings.prefetch_minutes.to_string()],
+                    )
+                } else {
+                    self.localized(
+                        "固定预加载：前方 {} 首",
+                        &[self.settings.prefetch_count.to_string()],
+                    )
+                }
+            }
+            Err(err) => self.localized("预加载设置保存失败：{err}", &[err.to_string()]),
+        };
+        self.spawn_prefetch(cx);
+        cx.notify();
+    }
+
+    pub fn set_prefetch_minutes(&mut self, minutes: u32, cx: &mut Context<Self>) {
+        self.settings.prefetch_minutes = minutes.clamp(5, 30);
+        self.settings.prefetch_adaptive = true;
+        self.status = match self.settings.save() {
+            Ok(()) => self.localized(
+                "自适应预加载：至少 {} 分钟",
+                &[self.settings.prefetch_minutes.to_string()],
+            ),
+            Err(err) => self.localized("预加载设置保存失败：{err}", &[err.to_string()]),
+        };
+        self.spawn_prefetch(cx);
+        cx.notify();
+    }
+
+    pub fn set_offline_mode(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.offline_mode = enabled;
+        self.status = match self.settings.save() {
+            Ok(()) => {
+                if enabled {
+                    self.tr("已进入离线模式：只播放本地缓存").to_string()
+                } else {
+                    self.tr("已退出离线模式").to_string()
+                }
+            }
+            Err(err) => self.localized("离线模式保存失败：{err}", &[err.to_string()]),
+        };
+        if !enabled {
+            self.spawn_prefetch(cx);
+        }
+        cx.notify();
+    }
+
     pub fn set_prefetch_count(&mut self, count: usize, cx: &mut Context<Self>) {
         self.settings.prefetch_count = count.min(8);
         self.status = match self.settings.save() {
@@ -599,7 +661,15 @@ impl Root {
     ///
     /// 与实际预取策略一致：处于失败冷却的曲目不占目标名额，会继续向后看。
     pub fn prefetch_buffer_status(&self) -> (usize, usize, usize) {
-        let target = prefetch_ahead_count(self.settings.prefetch_count);
+        if self.settings.offline_mode {
+            return (0, 0, 0);
+        }
+        let target = prefetch_target_count(
+            &self.queue,
+            self.settings.prefetch_count,
+            self.settings.prefetch_adaptive,
+            self.settings.prefetch_minutes,
+        );
         if target == 0 {
             return (0, 0, 0);
         }
@@ -2870,6 +2940,35 @@ fn prefetch_ahead_count(configured: usize) -> usize {
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|count| count.min(8))
         .unwrap_or(configured.min(8))
+}
+
+fn prefetch_target_count(
+    queue: &Queue,
+    configured: usize,
+    adaptive: bool,
+    target_minutes: u32,
+) -> usize {
+    let fixed = prefetch_ahead_count(configured);
+    if fixed == 0 || !adaptive || std::env::var("SODAM_PREFETCH_COUNT").is_ok() {
+        return fixed;
+    }
+
+    let minimum = fixed.max(3).min(8);
+    let target_seconds = i64::from(target_minutes.clamp(5, 30)) * 60;
+    let mut seconds = 0i64;
+    let mut count = 0usize;
+    for track in queue.peek_ahead(8) {
+        count += 1;
+        seconds += if track.duration_seconds > 0 {
+            track.duration_seconds
+        } else {
+            240
+        };
+        if count >= minimum && seconds >= target_seconds {
+            break;
+        }
+    }
+    count.max(minimum.min(queue.len().saturating_sub(1))).min(8)
 }
 
 /// 预取并发上限：环境变量 `SODAM_PREFETCH_CONCURRENCY`（默认 2）。

@@ -1284,14 +1284,12 @@ impl Root {
                 root.downloads_loading = false;
                 match result {
                     Ok(items) => {
-                        root.downloaded_ids = Arc::new(
-                            items.iter().map(|item| item.track_id.clone()).collect(),
-                        );
+                        root.downloaded_ids =
+                            Arc::new(items.iter().map(|item| item.track_id.clone()).collect());
                         root.downloads = Arc::new(items);
                     }
                     Err(err) => {
-                        root.status =
-                            root.localized("读取下载列表失败：{err}", &[err.to_string()]);
+                        root.status = root.localized("读取下载列表失败：{err}", &[err.to_string()]);
                     }
                 }
                 cx.notify();
@@ -1308,8 +1306,7 @@ impl Root {
             return;
         }
         if self.pending_downloads.remove(&track.id).is_some() {
-            self.status =
-                self.localized("已取消待下载：{}", std::slice::from_ref(&track.title));
+            self.status = self.localized("已取消待下载：{}", std::slice::from_ref(&track.title));
             cx.notify();
             return;
         }
@@ -1347,10 +1344,7 @@ impl Root {
                         );
                     }
                     Err(err) => {
-                        root.status = root.localized(
-                            "下载失败：{err}",
-                            &[err.to_string()],
-                        );
+                        root.status = root.localized("下载失败：{err}", &[err.to_string()]);
                     }
                 }
                 cx.notify();
@@ -1391,16 +1385,13 @@ impl Root {
                             items.insert(0, item.clone());
                             root.downloads = Arc::new(items);
                             Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
-                            root.status = root.localized(
-                                "待下载已完成：{}",
-                                std::slice::from_ref(&track.title),
-                            );
+                            root.status = root
+                                .localized("待下载已完成：{}", std::slice::from_ref(&track.title));
                             cx.notify();
                         }
                         Ok(None) => {}
                         Err(err) => {
-                            root.status =
-                                root.localized("下载失败：{err}", &[err.to_string()]);
+                            root.status = root.localized("下载失败：{err}", &[err.to_string()]);
                             cx.notify();
                         }
                     }
@@ -1410,16 +1401,10 @@ impl Root {
         }
     }
 
-    pub fn delete_download(
-        &mut self,
-        track_id: String,
-        title: String,
-        cx: &mut Context<Self>,
-    ) {
+    pub fn delete_download(&mut self, track_id: String, title: String, cx: &mut Context<Self>) {
         let id_for_work = track_id.clone();
-        let work = cx.background_spawn(async move {
-            sodam_core::downloads::delete_download(&id_for_work)
-        });
+        let work = cx
+            .background_spawn(async move { sodam_core::downloads::delete_download(&id_for_work) });
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |root, cx| {
@@ -1433,10 +1418,7 @@ impl Root {
                             root.localized("已删除下载：{}", std::slice::from_ref(&title));
                     }
                     Err(err) => {
-                        root.status = root.localized(
-                            "删除下载失败：{err}",
-                            &[err.to_string()],
-                        );
+                        root.status = root.localized("删除下载失败：{err}", &[err.to_string()]);
                     }
                 }
                 cx.notify();

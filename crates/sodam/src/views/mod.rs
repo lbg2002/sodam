@@ -234,6 +234,7 @@ fn track_row(
     let audio_cached = cached_ids.contains(&track.id);
     let prefetching = prefetch_inflight_ids.contains(&track.id);
     let download_track = track.clone();
+    let selected = crate::experience3::is_selected(&track.id);
     div()
         .id(("track", index))
         .group(TRACK_GROUP)
@@ -247,14 +248,21 @@ fn track_row(
         .pb(px(theme::space::XS))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
-        .when(current_track_id.as_ref() == Some(&track.id), |this| {
-            this.bg(theme::surface_hover())
-        })
+        .when(selected, |this| this.bg(theme::surface_selected()))
+        .when(
+            !selected && current_track_id.as_ref() == Some(&track.id),
+            |this| this.bg(theme::surface_hover()),
+        )
         .hover(|style| style.bg(theme::surface_hover()))
-        .on_click(move |_event: &ClickEvent, _window, cx: &mut gpui::App| {
+        .on_click(move |event: &ClickEvent, _window, cx: &mut gpui::App| {
+            let handled = crate::experience3::select_click(event, tracks.as_ref(), index);
             let tracks = tracks.clone();
             play_entity.update(cx, |root, cx| {
                 root.track_menu = None;
+                if handled {
+                    cx.notify();
+                    return;
+                }
                 root.play_from_arc(tracks, index, cx);
             });
         })
@@ -471,6 +479,28 @@ fn track_row(
         .into_any_element()
 }
 
+fn action_pill(
+    id: &'static str,
+    label: &str,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> AnyElement {
+    div()
+        .id(id)
+        .h(px(theme::size::CONTROL_SM))
+        .px(px(theme::space::MD))
+        .flex()
+        .items_center()
+        .rounded(px(theme::radius::PILL))
+        .cursor_pointer()
+        .bg(theme::surface_hover())
+        .hover(|style| style.bg(theme::surface_selected()))
+        .text_size(theme::Text::Small.size())
+        .text_color(theme::text())
+        .on_click(listener)
+        .child(label.to_string())
+        .into_any_element()
+}
+
 /// 曲目列表（虚拟滚动）。
 #[allow(clippy::too_many_arguments)]
 fn track_list(
@@ -549,6 +579,74 @@ fn track_list(
         .min_h(px(0.0))
         .w_full()
         .gap(px(theme::space::XS))
+        .when(crate::experience3::selected_count() > 0, |this| {
+            let tracks_download = bulk_tracks.clone();
+            let tracks_next = bulk_tracks.clone();
+            let tracks_queue = bulk_tracks.clone();
+            let tracks_delete = bulk_tracks.clone();
+            let count = crate::experience3::selected_count();
+            this.child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .justify_between()
+                    .gap(px(theme::space::SM))
+                    .px(px(theme::space::MD))
+                    .py(px(theme::space::SM))
+                    .rounded(px(theme::radius::ROW))
+                    .bg(theme::surface_elevated())
+                    .child(
+                        div()
+                            .text_size(theme::Text::Small.size())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme::text())
+                            .child(root.localized("已选择 {} 首", &[count.to_string()])),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(theme::space::SM))
+                            .child(action_pill(
+                                "selection-next",
+                                root.tr("下一首播放"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_play_next_selected(tracks_next.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-queue",
+                                root.tr("加入队列"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_append_selected(tracks_queue.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-download",
+                                root.tr("批量下载"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_download_selected(tracks_download.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-delete-download",
+                                root.tr("删除下载"),
+                                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_delete_selected_downloads(tracks_delete.clone(), cx);
+                                }),
+                            ))
+                            .child(action_pill(
+                                "selection-clear",
+                                root.tr("取消选择"),
+                                cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.e3_clear_selection(cx);
+                                }),
+                            )),
+                    ),
+            )
+        })
         .when(matches!(nav, Nav::Liked | Nav::Recent), |this| {
             let tracks = bulk_tracks.clone();
             this.child(
@@ -986,6 +1084,19 @@ fn subtitle_for(root: &Root) -> String {
                 root.localized("{} 首", &[root.liked.len().to_string()])
             }
         }
+        Nav::LocalMusic => {
+            let count = sodam_core::local_library::tracks()
+                .into_iter()
+                .filter(|track| {
+                    root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
+                })
+                .count();
+            root.localized("{} 首可离线播放", &[count.to_string()])
+        }
+        Nav::LocalPlaylists => root.localized(
+            "{} 个本地播放列表",
+            &[sodam_core::local_playlists::load().len().to_string()],
+        ),
         Nav::Recent => root.localized("{} 首", &[root.recent.len().to_string()]),
         Nav::Downloads => root.localized(
             "{} 首 · {} 待下载",
@@ -1006,7 +1117,9 @@ fn subtitle_for(root: &Root) -> String {
                 }
             }
         },
-        Nav::Settings => root.tr("外观、播放、歌词、下载、存储与账户").to_string(),
+        Nav::Settings => root
+            .tr("外观、播放、歌词、下载、存储、桌面、高级与账户")
+            .to_string(),
         Nav::Lyrics => root.tr("正在播放").to_string(),
         Nav::Home => root.tr("来自汽水的推荐").to_string(),
         Nav::Scenes => root.tr("按场景选歌").to_string(),
@@ -1220,6 +1333,204 @@ fn qr_canvas(matrix: Vec<Vec<bool>>) -> impl IntoElement {
     .h(px(240.0))
 }
 
+fn local_music_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let mut tracks = sodam_core::local_library::tracks();
+    tracks.retain(|track| {
+        root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
+    });
+    let cached = tracks
+        .iter()
+        .filter(|track| root.cached_ids.contains(&track.id))
+        .count();
+    let downloaded = tracks
+        .iter()
+        .filter(|track| root.downloaded_ids.contains(&track.id))
+        .count();
+    if tracks.is_empty() {
+        return empty_state(
+            "disc-3",
+            root.tr("这里会显示已经缓存或下载、可离线播放的歌曲"),
+        );
+    }
+    let tracks = std::sync::Arc::new(tracks);
+    div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_h(px(0.0))
+        .gap(px(theme::space::MD))
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::SM))
+                .child(
+                    div()
+                        .px(px(theme::space::MD))
+                        .py(px(theme::space::XS))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::surface_elevated())
+                        .text_size(theme::Text::Small.size())
+                        .child(root.localized("已缓存 {} 首", &[cached.to_string()])),
+                )
+                .child(
+                    div()
+                        .px(px(theme::space::MD))
+                        .py(px(theme::space::XS))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::surface_elevated())
+                        .text_size(theme::Text::Small.size())
+                        .child(root.localized("已下载 {} 首", &[downloaded.to_string()])),
+                ),
+        )
+        .child(track_list(
+            root,
+            tracks,
+            Nav::LocalMusic,
+            None,
+            root.liked_ids.clone(),
+            root.covers.clone(),
+            root.cover_requests.clone(),
+            cx,
+        ))
+        .into_any_element()
+}
+
+fn local_playlists_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let playlists = sodam_core::local_playlists::load();
+    let mut page = div()
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_h(px(0.0))
+        .gap(px(theme::space::MD))
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(root.localized("{} 个本地播放列表", &[playlists.len().to_string()])),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(action_pill(
+                            "save-later-playlist",
+                            root.tr("稍后听"),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_save_queue_snapshot(root.tr("稍后听"), cx);
+                            }),
+                        ))
+                        .child(action_pill(
+                            "save-work-playlist",
+                            root.tr("工作音乐"),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_save_queue_snapshot(root.tr("工作音乐"), cx);
+                            }),
+                        ))
+                        .child(action_pill(
+                            "save-queue-snapshot",
+                            root.tr("保存快照"),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_save_queue_snapshot_auto(cx);
+                            }),
+                        )),
+                ),
+        );
+
+    if playlists.is_empty() {
+        return page
+            .child(empty_state(
+                "list-music",
+                root.tr("还没有本地播放列表，可先保存当前播放队列"),
+            ))
+            .into_any_element();
+    }
+
+    let cards = playlists
+        .into_iter()
+        .map(|playlist| {
+            let play_id = playlist.id.clone();
+            let delete_id = playlist.id.clone();
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .gap(px(theme::space::MD))
+                .px(px(theme::space::LG))
+                .py(px(theme::space::MD))
+                .rounded(px(theme::radius::ROW))
+                .bg(theme::surface_elevated())
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .min_w(px(0.0))
+                        .gap(px(theme::space::XS))
+                        .child(
+                            div()
+                                .truncate()
+                                .font_weight(gpui::FontWeight::SEMIBOLD)
+                                .text_color(theme::text())
+                                .child(playlist.name),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .child(
+                                    root.localized("{} 首", &[playlist.tracks.len().to_string()]),
+                                ),
+                        ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .gap(px(theme::space::SM))
+                        .child(action_pill(
+                            "play-local-playlist",
+                            root.tr("播放"),
+                            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                root.e3_play_local_playlist(&play_id, cx);
+                            }),
+                        ))
+                        .child(action_pill(
+                            "delete-local-playlist",
+                            root.tr("删除"),
+                            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                                root.e3_delete_local_playlist(&delete_id, cx);
+                            }),
+                        )),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
+    page = page.child(
+        div()
+            .id("local-playlists-scroll")
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h(px(0.0))
+            .gap(px(theme::space::SM))
+            .overflow_y_scroll()
+            .children(cards),
+    );
+    page.into_any_element()
+}
+
 /// 渲染内容区。
 pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl IntoElement {
     let settings = &root.settings;
@@ -1329,6 +1640,8 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
                 .child(playlist_grid(root, cx))
                 .into_any_element(),
         },
+        Nav::LocalMusic => local_music_page(root, cx),
+        Nav::LocalPlaylists => local_playlists_page(root, cx),
         Nav::Recent => {
             if root.recent.is_empty() {
                 empty_state("history", root.tr("还没有最近播放记录"))

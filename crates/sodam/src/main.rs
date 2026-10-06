@@ -5,8 +5,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod experience3;
 #[cfg(target_os = "linux")]
 mod mpris;
+mod system_audio;
 // 托盘：Linux 走 ksni/SNI，macOS 走 NSStatusItem，见 tray.rs。
 mod tray;
 mod ui;
@@ -248,7 +250,6 @@ fn main() {
             {
                 let (tray_tx, tray_rx) = std::sync::mpsc::channel();
 
-                // 平台各自的托盘创建 + 状态同步闭包。
                 #[cfg(target_os = "linux")]
                 let sync = {
                     let tray_service = ksni::TrayService::new(tray::linux::SodaTray::new(
@@ -258,7 +259,6 @@ fn main() {
                     let tray_handle = tray_service.handle();
                     tray_service.spawn();
                     move |state: tray::TrayState| {
-                        // ksni 0.2 的 Handle::update 返回 ()，直接调用。
                         tray_handle.update(|tray| {
                             tray.language = state.language;
                             tray.title = state.title;

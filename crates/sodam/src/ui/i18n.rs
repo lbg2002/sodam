@@ -68,6 +68,133 @@ impl Language {
             "音乐人" => "Artists",
             "专辑" => "Albums",
             "设置" => "Settings",
+            "本地音乐" => "Local Music",
+            "本地播放列表" => "Local Playlists",
+            "本地匹配" => "Local Matches",
+            "来自已缓存 / 已下载音乐" => "From cached / downloaded music",
+            "最近搜索" => "Recent Searches",
+            "清空" => "Clear",
+            "搜索历史已清空" => "Search history cleared",
+            "已选择 {} 首" => "{} selected",
+            "加入队列" => "Add to Queue",
+            "删除下载" => "Delete Downloads",
+            "取消选择" => "Clear Selection",
+            "请先选择歌曲" => "Select tracks first",
+            "已加入批量下载" => "Added to batch downloads",
+            "已加入下一首播放" => "Added to Play Next",
+            "已保存本地播放列表" => "Local playlist saved",
+            "本地播放列表不存在" => "Local playlist not found",
+            "已删除本地播放列表" => "Local playlist deleted",
+            "保存当前队列" => "Save Current Queue",
+            "还没有本地播放列表，可先保存当前播放队列" => {
+                "No local playlists yet. Save the current queue first."
+            }
+            "{} 个本地播放列表" => "{} local playlists",
+            "{} 首可离线播放" => "{} tracks available offline",
+            "已缓存 {} 首" => "{} cached",
+            "已下载 {} 首" => "{} downloaded",
+            "桌面" => "Desktop",
+            "高级" => "Advanced",
+            "音频输出设备" => "Audio Output Device",
+            "系统默认输出" => "System Default",
+            "Ubuntu / PipeWire-Pulse 下可直接切换扬声器、耳机、HDMI 或蓝牙输出" => {
+                "Switch speakers, headphones, HDMI, or Bluetooth output directly on Ubuntu / PipeWire-Pulse"
+            }
+            "播放增强" => "Playback Enhancements",
+            "响度标准化和歌曲衔接均可独立关闭" => {
+                "Loudness normalization and track transitions can be disabled independently"
+            }
+            "系统切歌通知" => "Track Change Notifications",
+            "切歌时显示封面、歌曲名和歌手" => {
+                "Show artwork, title, and artist when the track changes"
+            }
+            "响度标准化" => "Loudness Normalization",
+            "使用本地 ffmpeg 分析并缓存增益，减少歌曲之间忽大忽小" => {
+                "Analyze and cache gain with local ffmpeg to reduce loudness jumps between tracks"
+            }
+            "无缝播放 Gapless" => "Gapless Playback",
+            "提前衔接下一首，尽量消除曲目边界的短暂空白" => {
+                "Prepare the next track early to minimize gaps between tracks"
+            }
+            "交叉淡化 Crossfade" => "Crossfade",
+            "让上一首淡出、下一首淡入；0 秒表示关闭" => {
+                "Fade the previous track out while the next fades in; 0 seconds disables it"
+            }
+            "性能与布局" => "Performance & Layout",
+            "控制启动时的后台工作和底部播放栏的响应式折叠" => {
+                "Control startup background work and responsive player-bar folding"
+            }
+            "启动延迟加载" => "Lazy Startup",
+            "优先打开界面和恢复播放，再延迟加载收藏、下载索引和缓存统计" => {
+                "Open the UI and restore playback first, then load likes, downloads, and cache stats"
+            }
+            "低于此宽度时折叠次要播放栏按钮" => {
+                "Fold secondary player-bar actions below this width"
+            }
+            "桌面歌词" => "Desktop Lyrics",
+            "调整独立歌词窗口的显示方式、透明度和交互" => {
+                "Adjust the independent lyrics window display, transparency, and interaction"
+            }
+            "单行歌词" => "Single-line Lyrics",
+            "关闭时显示当前行和下一行" => "Show current and next line when disabled",
+            "始终置顶" => "Always on Top",
+            "桌面歌词窗口保持在其他窗口上方" => "Keep desktop lyrics above other windows",
+            "锁定位置" => "Lock Position",
+            "锁定后禁止拖动和调整窗口尺寸" => "Prevent moving and resizing while locked",
+            "鼠标穿透" => "Click Through",
+            "受当前 Linux/窗口后端能力限制；不支持时保持普通窗口交互" => {
+                "Depends on the Linux/window backend; unsupported backends keep normal interaction"
+            }
+            "背景透明度" => "Background Opacity",
+            "降低背景存在感，让歌词更适合悬浮在桌面" => {
+                "Reduce background presence for better desktop overlay use"
+            }
+            "歌词对齐" => "Lyrics Alignment",
+            "设置桌面歌词文字的水平对齐方式" => "Set horizontal alignment for desktop lyrics",
+            "左对齐" => "Left",
+            "居中" => "Center",
+            "右对齐" => "Right",
+            "音频输出设备已切换" => "Audio output device switched",
+            "切歌通知已开启" => "Track notifications enabled",
+            "切歌通知已关闭" => "Track notifications disabled",
+            "响度标准化已开启" => "Loudness normalization enabled",
+            "响度标准化已关闭" => "Loudness normalization disabled",
+            "无缝衔接已开启" => "Gapless playback enabled",
+            "无缝衔接已关闭" => "Gapless playback disabled",
+            "交叉淡化已关闭" => "Crossfade disabled",
+            "桌面歌词已切换为单行" => "Desktop lyrics switched to single-line mode",
+            "桌面歌词已切换为双行" => "Desktop lyrics switched to two-line mode",
+            "桌面歌词已设为置顶" => "Desktop lyrics set to always on top",
+            "桌面歌词已取消置顶" => "Desktop lyrics no longer always on top",
+            "桌面歌词位置已锁定" => "Desktop lyrics position locked",
+            "桌面歌词位置已解锁" => "Desktop lyrics position unlocked",
+            "桌面歌词已启用鼠标穿透" => "Desktop lyrics click-through enabled",
+            "桌面歌词已关闭鼠标穿透" => "Desktop lyrics click-through disabled",
+            "桌面歌词对齐方式已保存" => "Desktop lyrics alignment saved",
+            "桌面歌词独立字号" => "Independent Desktop Lyric Font Size",
+            "桌面歌词字号" => "Desktop Lyric Font Size",
+            "独立于主播放页歌词字号，适合远距离查看" => {
+                "Independent from the main player lyric size for easier distant viewing"
+            }
+            "桌面歌词颜色" => "Desktop Lyric Color",
+            "使用动态强调色，或跟随当前主题文字颜色" => {
+                "Use the dynamic accent color or follow the current theme text color"
+            }
+            "跟随强调色" => "Follow Accent Color",
+            "跟随主题文字色" => "Follow Theme Text Color",
+            "桌面歌词颜色已保存" => "Desktop lyric color saved",
+            "歌词偏移快捷调整" => "Quick Lyric Offset",
+            "快速提前或延后桌面歌词；与播放页歌词偏移共用" => {
+                "Quickly advance or delay desktop lyrics; shares the main lyric offset"
+            }
+            "提前 250 ms" => "250 ms Earlier",
+            "偏移归零" => "Reset Offset",
+            "延后 250 ms" => "250 ms Later",
+            "启动性能优化已开启" => "Startup optimization enabled",
+            "启动性能优化已关闭" => "Startup optimization disabled",
+            "外观、播放、歌词、下载、存储、桌面、高级与账户" => {
+                "Appearance, playback, lyrics, downloads, storage, desktop, advanced, and account"
+            }
             "自适应预加载" => "Adaptive Prefetch",
             "同时满足最低曲目数和目标分钟数，最长预取 8 首" => {
                 "Keep both a minimum track count and a target listening duration, up to 8 tracks"

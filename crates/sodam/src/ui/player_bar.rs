@@ -52,6 +52,33 @@ fn transport_button(
     ))
 }
 
+fn overflow_menu_row(
+    id: &'static str,
+    icon: &'static str,
+    label: String,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap(px(theme::space::SM))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(listener)
+        .child(
+            svg()
+                .path(icons::path(icon))
+                .size(px(theme::ICON_SM))
+                .text_color(theme::text_muted()),
+        )
+        .child(label)
+}
+
 /// 内联音量滑条：细轨道 + 强调色已播段 + 圆形滑块，点或拖都能调。
 fn volume_slider(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     let volume = root.engine.snapshot().volume.clamp(0.0, 1.0);
@@ -320,6 +347,13 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .is_some_and(|track| root.download_inflight.contains(&track.id));
     let download_track = track.clone();
     let cover_path = track.as_ref().and_then(|track| root.cover_of(&track.cover));
+    let measured_width = root
+        .player_bar_width
+        .lock()
+        .map(|width| *width)
+        .unwrap_or(1200.0);
+    let compact = measured_width < root.settings.player_bar_compact_width as f32;
+    let player_width_slot = root.player_bar_width.clone();
 
     div()
         .relative()
@@ -335,6 +369,27 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .bg(theme::bg())
         .border_t_1()
         .border_color(theme::border())
+        .child(
+            canvas(
+                move |bounds, window, _cx| {
+                    let width = f32::from(bounds.size.width);
+                    let changed = player_width_slot
+                        .lock()
+                        .map(|mut slot| {
+                            let changed = (*slot - width).abs() > 1.0;
+                            *slot = width;
+                            changed
+                        })
+                        .unwrap_or(false);
+                    if changed {
+                        window.refresh();
+                    }
+                },
+                |_bounds, _state, _window, _cx| {},
+            )
+            .absolute()
+            .size_full(),
+        )
         // 左：封面 + 标题/歌手/进度文案
         .child(
             div()
@@ -611,7 +666,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         ),
                 ),
         )
-        // 右：音量（内联滑条）+ 队列抽屉开关
+        // 右：宽窗口展示全部快捷操作；窄窗口把次要功能折叠到“···”。
         .child(
             div()
                 .flex()
@@ -619,70 +674,93 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .items_center()
                 .justify_end()
                 .gap(px(theme::space::XS))
-                .w(px(390.0))
-                .min_w(px(300.0))
+                .w(px(if compact { 176.0 } else { 390.0 }))
+                .min_w(px(if compact { 150.0 } else { 300.0 }))
                 .flex_shrink(1.0)
-                .child(
-                    icon_button(
-                        "offline-toggle",
-                        "cloud-off",
-                        theme::ICON,
-                        if root.settings.offline_mode {
-                            theme::accent()
-                        } else {
-                            theme::text_muted()
-                        },
+                .when(!compact, |this| {
+                    this.child(
+                        icon_button(
+                            "offline-toggle",
+                            "cloud-off",
+                            theme::ICON,
+                            if root.settings.offline_mode {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.set_offline_mode(!root.settings.offline_mode, cx);
+                            },
+                        )),
                     )
-                    .on_click(cx.listener(
-                        |root, _event: &ClickEvent, _window, cx| {
-                            root.set_offline_mode(!root.settings.offline_mode, cx);
-                        },
-                    )),
-                )
-                .child(
-                    icon_button(
-                        "desktop-lyrics",
-                        "captions",
-                        theme::ICON,
-                        theme::text_muted(),
+                    .child(
+                        icon_button(
+                            "desktop-lyrics",
+                            "captions",
+                            theme::ICON,
+                            theme::text_muted(),
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.open_desktop_lyrics(cx);
+                            },
+                        )),
                     )
-                    .on_click(cx.listener(
-                        |root, _event: &ClickEvent, _window, cx| {
-                            root.open_desktop_lyrics(cx);
-                        },
-                    )),
-                )
-                .child(
-                    icon_button(
-                        "mini-player",
-                        "picture-in-picture",
-                        theme::ICON,
-                        theme::text_muted(),
+                    .child(
+                        icon_button(
+                            "mini-player",
+                            "picture-in-picture",
+                            theme::ICON,
+                            theme::text_muted(),
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.open_mini_player(cx);
+                            },
+                        )),
                     )
-                    .on_click(cx.listener(
-                        |root, _event: &ClickEvent, _window, cx| {
-                            root.open_mini_player(cx);
-                        },
-                    )),
-                )
-                .child(
-                    icon_button(
-                        "sleep-timer",
-                        "moon",
-                        theme::ICON,
-                        if root.sleep_deadline.is_some() || root.sleep_after_current {
-                            theme::accent()
-                        } else {
-                            theme::text_muted()
-                        },
+                    .child(
+                        icon_button(
+                            "sleep-timer",
+                            "moon",
+                            theme::ICON,
+                            if root.sleep_deadline.is_some() || root.sleep_after_current {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.sleep_menu_open = !root.sleep_menu_open;
+                                cx.notify();
+                            },
+                        )),
                     )
-                    .on_click(cx.listener(
-                        |root, _event: &ClickEvent, _window, cx| {
-                            root.sleep_menu_open = !root.sleep_menu_open;
-                            cx.notify();
-                        },
-                    )),
-                )
+                })
+                .when(compact, |this| {
+                    this.child(
+                        icon_button(
+                            "player-more",
+                            "ellipsis",
+                            theme::ICON,
+                            if root.player_more_open {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.player_more_open = !root.player_more_open;
+                                root.sleep_menu_open = false;
+                                cx.notify();
+                            },
+                        )),
+                    )
+                })
                 .child(
                     icon_button(
                         "volume",
@@ -701,7 +779,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         },
                     )),
                 )
-                .child(volume_slider(root, cx))
+                .when(!compact, |this| this.child(volume_slider(root, cx)))
                 .child(
                     icon_button("queue", "list-end", theme::ICON, theme::text_muted()).on_click(
                         cx.listener(|root, _event: &ClickEvent, _window, cx| {
@@ -714,6 +792,61 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                     ),
                 ),
         )
+        .when(compact && root.player_more_open, |this| {
+            this.child(
+                gpui::deferred(
+                    div()
+                        .absolute()
+                        .right(px(72.0))
+                        .bottom(px(theme::PLAYER_H + 8.0))
+                        .w(px(220.0))
+                        .p(px(theme::space::XS))
+                        .rounded(px(theme::radius::CARD))
+                        .bg(theme::surface_elevated())
+                        .border_1()
+                        .border_color(theme::border())
+                        .shadow_lg()
+                        .child(overflow_menu_row(
+                            "more-offline",
+                            "cloud-off",
+                            root.tr("离线模式").to_string(),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_offline_mode(!root.settings.offline_mode, cx);
+                                root.player_more_open = false;
+                            }),
+                        ))
+                        .child(overflow_menu_row(
+                            "more-desktop-lyrics",
+                            "captions",
+                            root.tr("桌面歌词").to_string(),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.open_desktop_lyrics(cx);
+                                root.player_more_open = false;
+                            }),
+                        ))
+                        .child(overflow_menu_row(
+                            "more-mini-player",
+                            "picture-in-picture",
+                            root.tr("迷你播放器").to_string(),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.open_mini_player(cx);
+                                root.player_more_open = false;
+                            }),
+                        ))
+                        .child(overflow_menu_row(
+                            "more-sleep",
+                            "moon",
+                            root.tr("睡眠定时").to_string(),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.sleep_menu_open = true;
+                                root.player_more_open = false;
+                                cx.notify();
+                            }),
+                        )),
+                )
+                .with_priority(4),
+            )
+        })
         .when(root.sleep_menu_open, |this| {
             let options = [
                 ("sleep-current", root.tr("播完当前歌曲").to_string(), 0u32),

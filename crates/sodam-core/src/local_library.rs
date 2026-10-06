@@ -22,6 +22,8 @@ fn memory_cache() -> &'static Mutex<Option<Vec<LocalTrackRecord>>> {
 pub struct LocalTrackRecord {
     pub track: TrackItem,
     pub last_seen: u64,
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 fn catalog_path() -> PathBuf {
@@ -51,11 +53,55 @@ pub fn tracks() -> Vec<TrackItem> {
     load().into_iter().map(|record| record.track).collect()
 }
 
+pub fn search_tracks(query: &str) -> Vec<TrackItem> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return tracks();
+    }
+    load()
+        .into_iter()
+        .filter(|record| {
+            let haystack = format!(
+                "{} {} {}",
+                record.track.title, record.track.artist, record.track.album
+            )
+            .to_lowercase();
+            fuzzy_text_match(&haystack, &query)
+                || record
+                    .aliases
+                    .iter()
+                    .any(|alias| fuzzy_text_match(&alias.to_lowercase(), &query))
+        })
+        .map(|record| record.track)
+        .collect()
+}
+
+fn fuzzy_text_match(haystack: &str, query: &str) -> bool {
+    if haystack.contains(query) {
+        return true;
+    }
+    let mut wanted = query.chars();
+    let mut next = wanted.next();
+    for ch in haystack.chars() {
+        if Some(ch) == next {
+            next = wanted.next();
+            if next.is_none() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub fn record(track: &TrackItem) -> Result<()> {
     record_many(std::slice::from_ref(track))
 }
 
 pub fn record_many(tracks: &[TrackItem]) -> Result<()> {
+    record_many_with_alias(tracks, None)
+}
+
+pub fn record_many_with_alias(tracks: &[TrackItem], alias: Option<&str>) -> Result<()> {
     if tracks.is_empty() {
         return Ok(());
     }
@@ -71,11 +117,22 @@ pub fn record_many(tracks: &[TrackItem]) -> Result<()> {
         if track.id.trim().is_empty() {
             continue;
         }
+        let mut aliases = map
+            .get(&track.id)
+            .map(|record| record.aliases.clone())
+            .unwrap_or_default();
+        if let Some(alias) = alias.map(str::trim).filter(|value| !value.is_empty()) {
+            if !aliases.iter().any(|known| known.eq_ignore_ascii_case(alias)) {
+                aliases.insert(0, alias.to_string());
+                aliases.truncate(8);
+            }
+        }
         map.insert(
             track.id.clone(),
             LocalTrackRecord {
                 track: track.clone(),
                 last_seen: now,
+                aliases,
             },
         );
     }
@@ -111,6 +168,7 @@ mod tests {
         let record = LocalTrackRecord {
             track: TrackItem { id: "1".into(), title: "Song".into(), ..Default::default() },
             last_seen: 1,
+            aliases: vec!["song".into()],
         };
         let text = serde_json::to_string(&record).unwrap();
         let decoded: LocalTrackRecord = serde_json::from_str(&text).unwrap();

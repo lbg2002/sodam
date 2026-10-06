@@ -615,6 +615,21 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
     }
     let query = root.search_keyword.trim().to_string();
     let history = sodam_core::search_history::load();
+    let local_matches = if !query.is_empty()
+        && matches!(root.search_tab, SearchScope::All | SearchScope::Tracks)
+    {
+        sodam_core::local_library::tracks()
+            .into_iter()
+            .filter(|track| crate::experience3::fuzzy_matches(track, &query))
+            .filter(|track| {
+                root.cached_ids.contains(&track.id) || root.downloaded_ids.contains(&track.id)
+            })
+            .take(8)
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let local_tracks = std::sync::Arc::new(local_matches);
     div()
         .flex()
         .flex_col()
@@ -706,6 +721,49 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
                                     .child(item.query)
                             })),
                     ),
+            )
+        })
+        .when(!local_tracks.is_empty(), |this| {
+            let rows = local_tracks
+                .iter()
+                .enumerate()
+                .map(|(index, track)| {
+                    search_track_row(root, track, local_tracks.clone(), index, cx)
+                })
+                .collect::<Vec<_>>();
+            this.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::XS))
+                    .p(px(theme::space::SM))
+                    .rounded(px(theme::radius::CARD))
+                    .bg(theme::surface())
+                    .border_1()
+                    .border_color(theme::border())
+                    .child(
+                        div()
+                            .px(px(theme::space::MD))
+                            .py(px(theme::space::XS))
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_size(theme::Text::Small.size())
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_color(theme::text())
+                                    .child(root.tr("本地匹配")),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::Text::Tiny.size())
+                                    .text_color(theme::text_faint())
+                                    .child(root.tr("来自已缓存 / 已下载音乐")),
+                            ),
+                    )
+                    .children(rows),
             )
         })
         .child(search_tabs(root, cx))

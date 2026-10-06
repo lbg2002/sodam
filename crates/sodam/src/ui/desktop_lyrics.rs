@@ -33,7 +33,7 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         ..Default::default()
     };
     let _ = cx.open_window(options, move |_window, cx| {
-        cx.new(|_| DesktopLyrics::new(root))
+        cx.new(|cx| DesktopLyrics::new(root, cx))
     });
 }
 
@@ -42,7 +42,11 @@ pub struct DesktopLyrics {
 }
 
 impl DesktopLyrics {
-    pub fn new(root: Entity<Root>) -> Self {
+    pub fn new(root: Entity<Root>, cx: &mut Context<Self>) -> Self {
+        cx.observe(&root, |_view, _root, cx| {
+            cx.notify();
+        })
+        .detach();
         Self { root }
     }
 }

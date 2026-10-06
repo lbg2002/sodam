@@ -171,6 +171,25 @@ impl Language {
             "桌面歌词已启用鼠标穿透" => "Desktop lyrics click-through enabled",
             "桌面歌词已关闭鼠标穿透" => "Desktop lyrics click-through disabled",
             "桌面歌词对齐方式已保存" => "Desktop lyrics alignment saved",
+            "桌面歌词独立字号" => "Independent Desktop Lyric Font Size",
+            "桌面歌词字号" => "Desktop Lyric Font Size",
+            "独立于主播放页歌词字号，适合远距离查看" => {
+                "Independent from the main player lyric size for easier distant viewing"
+            }
+            "桌面歌词颜色" => "Desktop Lyric Color",
+            "使用动态强调色，或跟随当前主题文字颜色" => {
+                "Use the dynamic accent color or follow the current theme text color"
+            }
+            "跟随强调色" => "Follow Accent Color",
+            "跟随主题文字色" => "Follow Theme Text Color",
+            "桌面歌词颜色已保存" => "Desktop lyric color saved",
+            "歌词偏移快捷调整" => "Quick Lyric Offset",
+            "快速提前或延后桌面歌词；与播放页歌词偏移共用" => {
+                "Quickly advance or delay desktop lyrics; shares the main lyric offset"
+            }
+            "提前 250 ms" => "250 ms Earlier",
+            "偏移归零" => "Reset Offset",
+            "延后 250 ms" => "250 ms Later",
             "启动性能优化已开启" => "Startup optimization enabled",
             "启动性能优化已关闭" => "Startup optimization disabled",
             "外观、播放、歌词、下载、存储、桌面、高级与账户" => {

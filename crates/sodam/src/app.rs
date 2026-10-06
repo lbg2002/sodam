@@ -67,6 +67,10 @@ impl CoverPool {
     fn done(&mut self) {
         self.inflight = self.inflight.saturating_sub(1);
     }
+
+    fn clear_pending(&mut self) {
+        self.queue.clear();
+    }
 }
 
 /// 列表一次渲染的行数上限：GPUI 没有虚拟滚动，一次性布局几百行 + 解码封面

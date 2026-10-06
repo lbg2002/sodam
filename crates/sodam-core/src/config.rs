@@ -24,6 +24,8 @@ pub struct Settings {
     pub download_quality: String,
     /// 下载格式：`source` / `mp3` / `flac`。
     pub download_format: String,
+    /// 智能预加载前方曲目数；0 = 关闭。
+    pub prefetch_count: usize,
     /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
@@ -48,6 +50,7 @@ impl Default for Settings {
             quality: String::new(),
             download_quality: "follow".to_string(),
             download_format: "source".to_string(),
+            prefetch_count: 3,
             theme: String::new(),
             language: String::new(),
         }
@@ -139,6 +142,7 @@ mod tests {
         assert_eq!(loaded.cookie, settings.cookie);
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
+        assert_eq!(loaded.prefetch_count, 3);
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());
         assert!(loaded.is_ready_for_vip());

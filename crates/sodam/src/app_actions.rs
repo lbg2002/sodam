@@ -268,7 +268,10 @@ impl Root {
 
     fn download_quality_preference(&self) -> String {
         match self.settings.download_quality.trim().to_ascii_lowercase().as_str() {
-            "" | "follow" => self.settings.quality.clone(),
+            "" | "follow" => {
+                let playback = self.settings.quality.trim();
+                format!("follow:{}", if playback.is_empty() { "auto" } else { playback })
+            }
             value => value.to_string(),
         }
     }

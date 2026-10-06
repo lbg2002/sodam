@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -127,6 +128,7 @@ pub fn list_downloads() -> Result<Vec<DownloadedTrack>> {
 pub fn export_cached_track(
     track: &TrackItem,
     quality_preference: &str,
+    output_format: &str,
 ) -> Result<Option<DownloadedTrack>> {
     let assets = find_cached_assets(&track.id)?;
     let Some(asset) = pick_asset(&assets, quality_preference) else {
@@ -134,12 +136,23 @@ pub fn export_cached_track(
     };
 
     let dir = ensure_download_dir()?;
-    let extension = asset
+    let source_extension = asset
         .path
         .extension()
         .and_then(|ext| ext.to_str())
         .filter(|ext| !ext.is_empty())
         .unwrap_or("m4a");
+    let format = match output_format.trim().to_ascii_lowercase().as_str() {
+        "" | "source" => "source",
+        "mp3" => "mp3",
+        "flac" => "flac",
+        other => anyhow::bail!("不支持的下载格式：{other}"),
+    };
+    let extension = if format == "source" {
+        source_extension
+    } else {
+        format
+    };
     let stem = safe_filename(&format!(
         "{}{}{} [{}]",
         track.artist,
@@ -152,14 +165,19 @@ pub fn export_cached_track(
         track.id
     ));
     let output = dir.join(format!("{stem}.{extension}"));
-    let part = dir.join(format!(".{stem}.{}.part", std::process::id()));
+    let part = dir.join(format!(".{stem}.{}.tmp.{extension}", std::process::id()));
 
-    fs::copy(&asset.path, &part)
-        .with_context(|| format!("复制播放缓存失败：{}", asset.path.display()))?;
+    if format == "source" {
+        fs::copy(&asset.path, &part)
+            .with_context(|| format!("复制播放缓存失败：{}", asset.path.display()))?;
+    } else {
+        transcode_cached_asset(&asset.path, &part, format)?;
+    }
+
     let written = fs::metadata(&part).map(|meta| meta.len()).unwrap_or(0);
     if written == 0 {
         let _ = fs::remove_file(&part);
-        anyhow::bail!("播放缓存为空");
+        anyhow::bail!("导出后的音频文件为空");
     }
     if output.exists() {
         fs::remove_file(&output)
@@ -184,6 +202,47 @@ pub fn export_cached_track(
     };
     write_metadata(&item)?;
     Ok(Some(item))
+}
+
+fn transcode_cached_asset(input: &std::path::Path, output: &std::path::Path, format: &str) -> Result<()> {
+    let mut command = Command::new("ffmpeg");
+    command
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+        .arg("-y")
+        .arg("-i")
+        .arg(input)
+        .arg("-vn");
+
+    match format {
+        "mp3" => {
+            command.arg("-codec:a").arg("libmp3lame").arg("-q:a").arg("0");
+        }
+        "flac" => {
+            command.arg("-codec:a").arg("flac");
+        }
+        other => anyhow::bail!("不支持的转码格式：{other}"),
+    }
+
+    let result = command.arg(output).output().map_err(|err| {
+        anyhow::anyhow!(
+            "无法启动 ffmpeg：{err}。请先安装 ffmpeg，或把下载格式改为原始格式"
+        )
+    })?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        let _ = fs::remove_file(output);
+        anyhow::bail!(
+            "ffmpeg 转码失败{}",
+            if stderr.is_empty() {
+                String::new()
+            } else {
+                format!("：{stderr}")
+            }
+        );
+    }
+    Ok(())
 }
 
 pub fn delete_download(track_id: &str) -> Result<bool> {
@@ -278,14 +337,11 @@ fn pick_asset<'a>(assets: &'a [CachedAsset], quality_preference: &str) -> Option
         value => Some(value.to_string()),
     };
     if let Some(preferred) = preferred {
-        if let Some(asset) = assets
+        return assets
             .iter()
-            .find(|asset| asset.tag.eq_ignore_ascii_case(&preferred))
-        {
-            return Some(asset);
-        }
+            .find(|asset| asset.tag.eq_ignore_ascii_case(&preferred));
     }
-    // 多档缓存同时存在时优先使用体积最大的实际播放资产，通常对应更高音质。
+    // 自动 / 跟随自动档：多档缓存同时存在时优先使用体积最大的实际播放资产。
     assets.iter().max_by_key(|asset| asset.bytes)
 }
 
@@ -330,6 +386,18 @@ mod tests {
     fn filename_sanitizes_path_characters() {
         assert_eq!(safe_filename("a/b:c"), "a_b_c");
         assert_eq!(safe_component("12/34"), "12_34");
+    }
+
+    #[test]
+    fn specific_quality_does_not_silently_fallback() {
+        let assets = vec![CachedAsset {
+            path: PathBuf::from("x.m4a"),
+            quality: "极高".into(),
+            tag: "highest".into(),
+            bytes: 10,
+        }];
+        assert!(pick_asset(&assets, "lossless").is_none());
+        assert_eq!(pick_asset(&assets, "highest").unwrap().tag, "highest");
     }
 
     #[test]

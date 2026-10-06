@@ -52,6 +52,33 @@ fn transport_button(
     ))
 }
 
+fn overflow_menu_row(
+    id: &'static str,
+    icon: &'static str,
+    label: String,
+    listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap(px(theme::space::SM))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(theme::radius::ROW))
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(listener)
+        .child(
+            svg()
+                .path(icons::path(icon))
+                .size(px(theme::ICON_SM))
+                .text_color(theme::text_muted()),
+        )
+        .child(label)
+}
+
 /// 内联音量滑条：细轨道 + 强调色已播段 + 圆形滑块，点或拖都能调。
 fn volume_slider(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     let volume = root.engine.snapshot().volume.clamp(0.0, 1.0);
@@ -741,30 +768,6 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 ),
         )
         .when(compact && root.player_more_open, |this| {
-            let row = |id: &'static str,
-                       icon: &'static str,
-                       label: String,
-                       listener| {
-                div()
-                    .id(id)
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap(px(theme::space::SM))
-                    .px(px(theme::space::MD))
-                    .py(px(theme::space::SM))
-                    .rounded(px(theme::radius::ROW))
-                    .cursor_pointer()
-                    .hover(|style| style.bg(theme::surface_hover()))
-                    .on_click(listener)
-                    .child(
-                        svg()
-                            .path(icons::path(icon))
-                            .size(px(theme::ICON_SM))
-                            .text_color(theme::text_muted()),
-                    )
-                    .child(label)
-            };
             this.child(
                 gpui::deferred(
                     div()
@@ -778,7 +781,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .border_1()
                         .border_color(theme::border())
                         .shadow_lg()
-                        .child(row(
+                        .child(overflow_menu_row(
                             "more-offline",
                             "cloud-off",
                             root.tr("离线模式").to_string(),
@@ -787,7 +790,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 root.player_more_open = false;
                             }),
                         ))
-                        .child(row(
+                        .child(overflow_menu_row(
                             "more-desktop-lyrics",
                             "captions",
                             root.tr("桌面歌词").to_string(),
@@ -796,7 +799,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 root.player_more_open = false;
                             }),
                         ))
-                        .child(row(
+                        .child(overflow_menu_row(
                             "more-mini-player",
                             "picture-in-picture",
                             root.tr("迷你播放器").to_string(),
@@ -805,7 +808,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 root.player_more_open = false;
                             }),
                         ))
-                        .child(row(
+                        .child(overflow_menu_row(
                             "more-sleep",
                             "moon",
                             root.tr("睡眠定时").to_string(),

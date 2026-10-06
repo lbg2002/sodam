@@ -1166,10 +1166,24 @@ impl Root {
             self.lyrics_return_nav = Some(self.nav);
         }
         self.set_nav(Nav::Lyrics, cx);
-        self.load_lyrics(track, false, cx);
+        if !self.settings.offline_mode {
+            self.load_lyrics(track, false, cx);
+        } else if self.lyrics_track_id != track.id {
+            self.lyrics = Arc::new(Vec::new());
+            self.lyrics_active = None;
+            self.lyrics_track_id = track.id.clone();
+            self.lyrics_title = track.title.clone();
+            self.lyrics_artist = track.artist.clone();
+            self.lyrics_cover = track.cover.clone();
+            self.lyrics_error = Some(self.tr("离线模式：未加载的歌词不会联网获取").to_string());
+            cx.notify();
+        }
     }
 
     pub(crate) fn ensure_original_cover(&mut self, url: &str, cx: &mut Context<Self>) {
+        if self.settings.offline_mode {
+            return;
+        }
         let url = url.trim();
         if url.is_empty() || self.original_covers.contains_key(url) {
             return;
@@ -2309,6 +2323,9 @@ impl Root {
     /// 用 `cover_attempted` 去重：下载失败的 URL 也记下来，
     /// 否则「缺图 → 每帧重新排队」会变成 CPU/网络空转（实测踩过）。
     pub fn ensure_covers(&mut self, urls: &[String], cx: &mut Context<Self>) {
+        if self.settings.offline_mode {
+            return;
+        }
         let mut added = false;
         for url in urls {
             let url = url.trim();
@@ -2879,7 +2896,7 @@ impl Root {
         self.progress_preview = None;
         self.set_status("正在准备播放：{}…", std::slice::from_ref(&track.title));
         self.ensure_covers(std::slice::from_ref(&track.cover), cx);
-        if self.nav == Nav::Lyrics {
+        if self.nav == Nav::Lyrics && !self.settings.offline_mode {
             self.load_lyrics(track.clone(), false, cx);
         }
         cx.notify();

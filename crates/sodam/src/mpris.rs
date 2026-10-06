@@ -6,7 +6,10 @@
 #![cfg(target_os = "linux")]
 
 use dbus::arg::{PropMap, RefArg, Variant};
+use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
 use dbus::blocking::LocalConnection;
+use dbus::channel::Sender as _;
+use dbus::message::SignalArgs;
 use dbus_tree::{Access, Factory};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -119,6 +122,67 @@ fn metadata(state: &MprisState) -> PropMap {
         );
     }
     map
+}
+
+fn emit_properties_changed(connection: &LocalConnection, state: &MprisState) {
+    let mut changed = PropMap::new();
+    changed.insert(
+        "PlaybackStatus".to_string(),
+        Variant(Box::new(
+            if state.playing { "Playing" } else { "Paused" }.to_string(),
+        ) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "Metadata".to_string(),
+        Variant(Box::new(metadata(state)) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "Volume".to_string(),
+        Variant(Box::new(state.volume) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "CanGoNext".to_string(),
+        Variant(Box::new(state.can_go_next) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "CanGoPrevious".to_string(),
+        Variant(Box::new(state.can_go_previous) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "CanPlay".to_string(),
+        Variant(Box::new(state.can_play) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "LoopStatus".to_string(),
+        Variant(Box::new(state.loop_status.clone()) as Box<dyn RefArg>),
+    );
+    changed.insert(
+        "Shuffle".to_string(),
+        Variant(Box::new(state.shuffle) as Box<dyn RefArg>),
+    );
+
+    let signal = PropertiesPropertiesChanged {
+        interface_name: "org.mpris.MediaPlayer2.Player".to_string(),
+        changed_properties: changed,
+        invalidated_properties: Vec::new(),
+    };
+    let path = dbus::Path::new("/org/mpris/MediaPlayer2").expect("valid MPRIS path");
+    let _ = connection.send(signal.to_emit_message(&path));
+}
+
+fn observable_state_changed(previous: &MprisState, current: &MprisState) -> bool {
+    previous.track_id != current.track_id
+        || previous.title != current.title
+        || previous.artist != current.artist
+        || previous.album != current.album
+        || previous.art_url != current.art_url
+        || previous.playing != current.playing
+        || (previous.volume - current.volume).abs() > f64::EPSILON
+        || previous.can_go_next != current.can_go_next
+        || previous.can_go_previous != current.can_go_previous
+        || previous.can_play != current.can_play
+        || previous.loop_status != current.loop_status
+        || previous.shuffle != current.shuffle
 }
 
 fn run_server(
@@ -451,7 +515,14 @@ fn run_server(
     );
     tree.start_receive(&connection);
 
+    let mut last_emitted = MprisState::default();
     loop {
         connection.process(Duration::from_millis(250))?;
+        if let Ok(current) = state.lock().map(|state| state.clone()) {
+            if observable_state_changed(&last_emitted, &current) {
+                emit_properties_changed(&connection, &current);
+                last_emitted = current;
+            }
+        }
     }
 }

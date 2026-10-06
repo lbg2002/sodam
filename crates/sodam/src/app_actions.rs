@@ -460,21 +460,45 @@ impl Root {
     }
 
     /// 队列前方缓存状态：（已缓存、正在预取、目标数）。
+    ///
+    /// 与实际预取策略一致：处于失败冷却的曲目不占目标名额，会继续向后看。
     pub fn prefetch_buffer_status(&self) -> (usize, usize, usize) {
         let target = prefetch_ahead_count(self.settings.prefetch_count);
         if target == 0 {
             return (0, 0, 0);
         }
-        let ahead = self.queue.peek_ahead(target);
-        let ready = ahead
-            .iter()
-            .filter(|track| self.cached_ids.contains(&track.id))
-            .count();
-        let inflight = ahead
-            .iter()
-            .filter(|track| self.prefetch_inflight.contains(&track.id))
-            .count();
-        (ready, inflight, target.min(ahead.len()))
+        let scan_count = target.saturating_mul(3).max(target);
+        let mut ready = 0usize;
+        let mut inflight = 0usize;
+        let mut covered = 0usize;
+        let mut available = 0usize;
+
+        for track in self.queue.peek_ahead(scan_count) {
+            if covered >= target {
+                break;
+            }
+            let cooling_down = self
+                .prefetch_failed
+                .get(&track.id)
+                .is_some_and(|failed_at| failed_at.elapsed() < PREFETCH_RETRY_COOLDOWN);
+            if cooling_down {
+                continue;
+            }
+
+            available += 1;
+            if self.cached_ids.contains(&track.id) {
+                ready += 1;
+                covered += 1;
+            } else if self.prefetch_inflight.contains(&track.id) {
+                inflight += 1;
+                covered += 1;
+            } else {
+                // 这首还没有准备好，但它是目标窗口中的有效曲目。
+                covered += 1;
+            }
+        }
+
+        (ready, inflight, target.min(available))
     }
 
     fn download_quality_preference(&self) -> String {

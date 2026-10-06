@@ -68,6 +68,10 @@ enum Command {
     Pause,
     Stop,
     SetVolume(f32),
+    /// ReplayGain / 响度标准化增益，与用户音量独立。
+    SetGain(f32),
+    /// 曲目衔接策略。
+    SetTransition { gapless: bool, crossfade_seconds: u32 },
     /// 跳转到指定秒数
     Seek(f64),
 }
@@ -140,6 +144,17 @@ impl PlaybackEngine {
         let _ = self.tx.send(Command::SetVolume(volume.clamp(0.0, 1.0)));
     }
 
+    pub fn set_gain(&self, gain: f32) {
+        let _ = self.tx.send(Command::SetGain(gain.clamp(0.5, 2.0)));
+    }
+
+    pub fn set_transition(&self, gapless: bool, crossfade_seconds: u32) {
+        let _ = self.tx.send(Command::SetTransition {
+            gapless,
+            crossfade_seconds: crossfade_seconds.min(8),
+        });
+    }
+
     /// 跳转到指定秒数（越界会被引擎裁剪到 [0, 时长]）。
     pub fn seek(&self, seconds: f64) {
         let _ = self.tx.send(Command::Seek(seconds.max(0.0)));
@@ -171,22 +186,55 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
     };
 
     let mut player: Option<rodio::Player> = None;
+    let mut fading_out: Option<(rodio::Player, std::time::Instant, std::time::Duration, f32)> =
+        None;
+    let mut gain = 1.0_f32;
+    let mut gapless = true;
+    let mut crossfade_seconds = 0_u32;
     // 当前曲目是否已经上报过「播完」；换曲时重置
     let mut finished_reported = false;
     loop {
         // 为什么要超时 recv：进度必须**持续**更新（UI 的进度条依赖它）。
         // 之前只在 play/pause 时同步一次，所以进度条永远停在 0。
-        let command = match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+        let command = match rx.recv_timeout(std::time::Duration::from_millis(50)) {
             Ok(command) => Some(command),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
         };
+        let update_crossfade = |player: &Option<rodio::Player>,
+                                fading_out: &mut Option<(
+                                    rodio::Player,
+                                    std::time::Instant,
+                                    std::time::Duration,
+                                    f32,
+                                )>,
+                                state: &Arc<Mutex<PlaybackSnapshot>>,
+                                gain: f32| {
+            let Some((old, started, duration, old_volume)) = fading_out.as_mut() else {
+                return;
+            };
+            let elapsed = started.elapsed();
+            let ratio = if duration.is_zero() {
+                1.0
+            } else {
+                (elapsed.as_secs_f32() / duration.as_secs_f32()).clamp(0.0, 1.0)
+            };
+            let base = state.lock().map(|snap| snap.volume).unwrap_or(1.0);
+            old.set_volume(*old_volume * (1.0 - ratio));
+            if let Some(current) = player {
+                current.set_volume((base * gain * ratio).clamp(0.0, 2.0));
+            }
+            if ratio >= 1.0 {
+                old.stop();
+                *fading_out = None;
+            }
+        };
+
         let Some(command) = command else {
+            update_crossfade(&player, &mut fading_out, &state, gain);
             if let Some(current) = &player {
                 sync_progress(&state, current);
                 // 播完：置 finished，UI 会据此自动切下一首
-                // 注意：sync_progress 会把 playing 置 false，所以这里不能用 playing 判断，
-                // 必须用本地的 finished_reported 标志（否则自动下一首永远不触发）。
                 if current.empty() && !finished_reported {
                     finished_reported = true;
                     if let Ok(mut snap) = state.lock() {
@@ -204,9 +252,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 path,
                 quality,
             } => {
-                if let Some(previous) = player.take() {
-                    previous.stop();
-                }
+                let previous = player.take();
                 let Some(device) = &output else {
                     set_error(&state, "音频设备不可用，无法播放".to_string());
                     continue;
@@ -227,9 +273,30 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 };
                 let new_player = rodio::Player::connect_new(device.mixer());
                 let volume = state.lock().map(|snap| snap.volume).unwrap_or(1.0);
-                new_player.set_volume(volume);
+                let effective = (volume * gain).clamp(0.0, 2.0);
+                if crossfade_seconds > 0 && previous.is_some() {
+                    new_player.set_volume(0.0);
+                } else {
+                    new_player.set_volume(effective);
+                }
                 new_player.append(decoder);
+                // Gapless 模式：先让新 Player 接入 mixer，再停止旧 Player。
                 new_player.play();
+                if let Some(previous) = previous {
+                    if crossfade_seconds > 0 && !previous.empty() {
+                        fading_out = Some((
+                            previous,
+                            std::time::Instant::now(),
+                            std::time::Duration::from_secs(u64::from(crossfade_seconds)),
+                            effective,
+                        ));
+                    } else {
+                        if gapless {
+                            std::thread::yield_now();
+                        }
+                        previous.stop();
+                    }
+                }
                 if let Ok(mut snap) = state.lock() {
                     snap.track_id = track.id.clone();
                     snap.title = track.title.clone();
@@ -271,6 +338,9 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 if let Some(current) = player.take() {
                     current.stop();
                 }
+                if let Some((old, _, _, _)) = fading_out.take() {
+                    old.stop();
+                }
                 if let Ok(mut snap) = state.lock() {
                     snap.playing = false;
                     snap.position_seconds = 0.0;
@@ -291,13 +361,28 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
             }
             Command::SetVolume(volume) => {
                 if let Some(current) = &player {
-                    current.set_volume(volume);
+                    current.set_volume((volume * gain).clamp(0.0, 2.0));
                 }
                 if let Ok(mut snap) = state.lock() {
                     snap.volume = volume;
                 }
             }
+            Command::SetGain(value) => {
+                gain = value.clamp(0.5, 2.0);
+                let base = state.lock().map(|snap| snap.volume).unwrap_or(1.0);
+                if let Some(current) = &player {
+                    current.set_volume((base * gain).clamp(0.0, 2.0));
+                }
+            }
+            Command::SetTransition {
+                gapless: enabled,
+                crossfade_seconds: seconds,
+            } => {
+                gapless = enabled;
+                crossfade_seconds = seconds.min(8);
+            }
         }
+        update_crossfade(&player, &mut fading_out, &state, gain);
         if let Some(current) = &player {
             sync_progress(&state, current);
         }

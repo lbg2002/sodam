@@ -111,7 +111,10 @@ mod tests {
         let item = LocalPlaylist {
             id: "1".into(),
             name: "Later".into(),
-            tracks: vec![TrackItem { id: "t".into(), ..Default::default() }],
+            tracks: vec![TrackItem {
+                id: "t".into(),
+                ..Default::default()
+            }],
             updated_at: 1,
         };
         let text = serde_json::to_string(&item).unwrap();

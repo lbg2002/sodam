@@ -1073,6 +1073,15 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 )
                 .child(
                     div()
+                        .px(px(theme::space::MD))
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_faint())
+                        .child(root.tr(
+                            "导出时写入歌曲名、歌手、专辑；封面缓存可用时一并嵌入",
+                        )),
+                )
+                .child(
+                    div()
                         .flex()
                         .flex_col()
                         .gap(px(theme::space::XS))

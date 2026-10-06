@@ -5,6 +5,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod experience3;
 #[cfg(target_os = "linux")]
 mod mpris;
 mod system_audio;

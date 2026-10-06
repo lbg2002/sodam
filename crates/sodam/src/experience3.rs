@@ -206,6 +206,36 @@ impl Root {
         self.toast(format!("已加入队列：{count} 首"), cx);
     }
 
+    pub fn e3_delete_selected_downloads(
+        &mut self,
+        tracks: std::sync::Arc<Vec<TrackItem>>,
+        cx: &mut Context<Self>,
+    ) {
+        let selected = selected_tracks(&tracks);
+        if selected.is_empty() {
+            self.toast(self.tr("请先选择歌曲"), cx);
+            return;
+        }
+        let mut count = 0usize;
+        for track in selected {
+            if self.downloaded_ids.contains(&track.id) {
+                self.delete_download(track.id.clone(), track.title.clone(), cx);
+                count += 1;
+            }
+        }
+        clear_selection();
+        self.toast(format!("已请求删除 {count} 首本地下载"), cx);
+    }
+
+    pub fn e3_save_queue_snapshot_auto(&mut self, cx: &mut Context<Self>) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|value| value.as_secs())
+            .unwrap_or(0);
+        let name = format!("队列快照 {timestamp}");
+        self.e3_save_queue_snapshot(&name, cx);
+    }
+
     pub fn e3_save_queue_snapshot(&mut self, name: &str, cx: &mut Context<Self>) {
         match sodam_core::local_playlists::save_queue(name, self.queue.tracks()) {
             Ok(_) => self.toast(self.tr("已保存本地播放列表"), cx),

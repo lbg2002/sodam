@@ -2745,12 +2745,13 @@ fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<P
     #[cfg(target_os = "linux")]
     {
         let initial = initial.display().to_string();
+        let initial_arg = format!("--filename={initial}/");
         let zenity = std::process::Command::new("zenity")
             .args([
                 "--file-selection",
                 "--directory",
                 "--title=选择 SodaM 下载目录",
-                &format!("--filename={initial}/"),
+                initial_arg.as_str(),
             ])
             .output();
         if let Ok(output) = zenity {
@@ -2791,6 +2792,13 @@ fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<P
     {
         let _ = initial;
         anyhow::bail!("Windows 目录选择暂未接入")
+    }
+
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    {
+        let _ = initial;
+        anyhow::bail!("当前平台暂不支持目录选择器")
     }
 }
 

@@ -165,10 +165,7 @@ impl Queue {
     /// 拖拽重排队列。当前曲目本身不能拖动，但其他曲目可以跨过它；
     /// 重排后通过曲目 id 重新定位当前下标，保证引擎正在播的歌曲不变。
     pub fn move_track(&mut self, from: usize, to: usize) -> bool {
-        if from >= self.tracks.len()
-            || to >= self.tracks.len()
-            || from == to
-            || from == self.index
+        if from >= self.tracks.len() || to >= self.tracks.len() || from == to || from == self.index
         {
             return false;
         }
@@ -306,7 +303,11 @@ mod tests {
         assert!(queue.move_track(3, 1));
         assert_eq!(queue.current().map(|track| track.id.as_str()), Some("1"));
         assert_eq!(
-            queue.tracks().iter().map(|track| track.id.as_str()).collect::<Vec<_>>(),
+            queue
+                .tracks()
+                .iter()
+                .map(|track| track.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["0", "3", "1", "2"]
         );
     }

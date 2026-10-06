@@ -514,7 +514,9 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         let chosen = root.settings.prefetch_count == *value;
         let value = *value;
         div()
-            .id(gpui::ElementId::Name(format!("prefetch-set-{value}").into()))
+            .id(gpui::ElementId::Name(
+                format!("prefetch-set-{value}").into(),
+            ))
             .flex()
             .flex_row()
             .items_center()
@@ -564,7 +566,11 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 
     let cache_limit_rows: Vec<AnyElement> = [
         (1u64, "1 GB", root.tr("适合磁盘空间较小的设备")),
-        (3u64, root.tr("3 GB（推荐）"), root.tr("兼顾无感切歌与磁盘占用")),
+        (
+            3u64,
+            root.tr("3 GB（推荐）"),
+            root.tr("兼顾无感切歌与磁盘占用"),
+        ),
         (5u64, "5 GB", root.tr("适合经常连续听歌，保留更多本地缓存")),
         (0u64, root.tr("不限制"), root.tr("不自动清理播放缓存")),
     ]

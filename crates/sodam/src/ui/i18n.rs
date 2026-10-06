@@ -68,6 +68,54 @@ impl Language {
             "音乐人" => "Artists",
             "专辑" => "Albums",
             "设置" => "Settings",
+            "外观、播放、歌词、下载、存储与账户" => "Appearance, playback, lyrics, downloads, storage, and account",
+            "导出时写入歌曲名、歌手、专辑；封面缓存可用时一并嵌入" => {
+                "Write title, artist, and album tags on export; embed cached artwork when available"
+            }
+
+            "最近播放" => "Recently Played",
+            "还没有最近播放记录" => "No recent playback yet",
+            "清空最近播放" => "Clear Recent",
+            "已清空最近播放" => "Recent playback cleared",
+            "清空最近播放失败：{err}" => "Failed to clear recent playback: {err}",
+            "歌词字号" => "Lyric Font Size",
+            "调整播放页歌词文字大小" => "Adjust lyric text size on the playback page",
+            "歌词行距" => "Lyric Spacing",
+            "调整每行歌词之间的垂直间距" => "Adjust vertical spacing between lyric lines",
+            "歌词时间偏移" => "Lyric Timing Offset",
+            "负值让歌词更早出现，正值让歌词更晚出现" => {
+                "Negative values show lyrics earlier; positive values show them later"
+            }
+            "小" => "Small",
+            "大" => "Large",
+            "特大" => "Extra Large",
+            "紧凑" => "Compact",
+            "宽松" => "Relaxed",
+            "很宽" => "Extra Relaxed",
+            "歌词字号设置已保存" => "Lyric font size saved",
+            "歌词行距设置已保存" => "Lyric spacing saved",
+            "歌词偏移：{} ms" => "Lyric offset: {} ms",
+            "歌词设置保存失败：{err}" => "Failed to save lyric settings: {err}",
+            "当前保存到：{}" => "Current save location: {}",
+            "选择目录" => "Choose Folder",
+            "打开目录" => "Open Folder",
+            "恢复默认" => "Restore Default",
+            "下载目录已更新" => "Download folder updated",
+            "有下载任务正在处理，请稍后更改下载目录" => {
+                "A download is currently being processed; change the download folder after it finishes"
+            }
+            "下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量" => {
+                "The download folder is overridden by SODAM_DOWNLOAD_DIR; unset it before changing this setting"
+            }
+
+            "下载目录已恢复默认" => "Download folder restored to default",
+            "更改下载目录失败：{err}" => "Failed to change download folder: {err}",
+            "恢复默认下载目录失败：{err}" => "Failed to restore default download folder: {err}",
+
+            "常规" => "General",
+            "存储" => "Storage",
+            "账户" => "Account",
+
             "等待扫码" => "Waiting for scan",
             "已扫码" => "Scanned",
             "登录成功" => "Signed in",

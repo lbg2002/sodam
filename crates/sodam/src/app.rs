@@ -97,11 +97,22 @@ pub enum Nav {
     Search,
     Liked,
     Library,
+    Recent,
     Downloads,
     Artist,
     Album,
     Settings,
     Lyrics,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SettingsSection {
+    General,
+    Playback,
+    Lyrics,
+    Downloads,
+    Storage,
+    Account,
 }
 
 impl Root {
@@ -113,6 +124,7 @@ impl Root {
             Nav::Search => self.tr("搜索"),
             Nav::Liked => self.tr("我喜欢的音乐"),
             Nav::Library => self.tr("我的歌单"),
+            Nav::Recent => self.tr("最近播放"),
             Nav::Downloads => self.tr("下载管理"),
             Nav::Artist => self.tr("音乐人"),
             Nav::Album => self.tr("专辑"),
@@ -171,6 +183,7 @@ pub enum QueueOrigin {
     FeedMode(String),
     Radio(String),
     Liked,
+    Recent,
     Playlist(String),
     Artist(String),
     Album(String),
@@ -194,6 +207,8 @@ pub struct Root {
     pub language: Language,
     pub language_follows_system: bool,
     pub settings: Settings,
+    /// 设置页二级分类；切换分类只影响展示，不触发配置重载。
+    pub settings_section: SettingsSection,
     pub session: Option<Session>,
     pub queue: Queue,
     pub queue_origin: QueueOrigin,
@@ -252,6 +267,10 @@ pub struct Root {
     /// 我的歌单 / 我喜欢的音乐（进入对应页面时懒加载）。
     pub playlists: Vec<PlaylistItem>,
     pub liked: Arc<Vec<TrackItem>>,
+    /// 本地最近播放历史，按最近播放时间倒序。
+    pub recent: Arc<Vec<TrackItem>>,
+    pub recent_scroll: gpui::UniformListScrollHandle,
+    pub(crate) recent_recorded_track_id: String,
     /// 「我喜欢的音乐」的曲目 id 集合（列表里的爱心状态）。
     pub liked_ids: Arc<HashSet<String>>,
     /// 已导出到下载目录的曲目；列表、播放栏和下载管理页共享同一状态。
@@ -412,6 +431,7 @@ impl Root {
             .filter(|position| *position > 0.0);
         let restore_was_playing = restored_playback.as_ref().map(|state| state.was_playing);
 
+        let recent = Arc::new(sodam_core::history::load_tracks());
         let pending_downloads: HashMap<String, TrackItem> =
             sodam_core::downloads::load_pending_downloads()
                 .unwrap_or_default()
@@ -434,6 +454,7 @@ impl Root {
             language,
             language_follows_system,
             settings,
+            settings_section: SettingsSection::General,
             session: Some(session),
             queue,
             queue_origin: QueueOrigin::None,
@@ -508,6 +529,9 @@ impl Root {
             scenes_card_columns: 4,
             playlists: Vec::new(),
             liked: Arc::new(Vec::new()),
+            recent,
+            recent_scroll: gpui::UniformListScrollHandle::new(),
+            recent_recorded_track_id: String::new(),
             liked_ids: Arc::new(HashSet::new()),
             downloads: Arc::new(Vec::new()),
             downloaded_ids: Arc::new(HashSet::new()),
@@ -596,6 +620,7 @@ impl Root {
                 "search" => Nav::Search,
                 "liked" => Nav::Liked,
                 "library" => Nav::Library,
+                "recent" => Nav::Recent,
                 "downloads" | "download" => Nav::Downloads,
                 "artist" => Nav::Artist,
                 "album" => Nav::Album,
@@ -1038,7 +1063,8 @@ impl Render for Root {
         }
         theme::set_ambient_rgb(ambient_color);
         if self.nav == Nav::Lyrics {
-            let position = self.engine.snapshot().position_seconds;
+            let position = self.engine.snapshot().position_seconds
+                - self.settings.lyrics_offset_ms as f64 / 1000.0;
             let active = self
                 .lyrics
                 .iter()
@@ -1123,6 +1149,7 @@ impl Render for Root {
                     Nav::Search => self.results.len(),
                     Nav::Liked => self.liked.len(),
                     Nav::Library => self.playlists.len(),
+                    Nav::Recent => self.recent.len(),
                     Nav::Downloads => self.downloads.len(),
                     _ => 0,
                 };

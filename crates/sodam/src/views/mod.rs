@@ -919,6 +919,7 @@ fn subtitle_for(root: &Root) -> String {
                 root.localized("{} 首", &[root.liked.len().to_string()])
             }
         }
+        Nav::Recent => root.localized("{} 首", &[root.recent.len().to_string()]),
         Nav::Downloads => root.localized(
             "{} 首 · {} 待下载",
             &[
@@ -938,7 +939,7 @@ fn subtitle_for(root: &Root) -> String {
                 }
             }
         },
-        Nav::Settings => root.tr("账号、签名服务与音质偏好").to_string(),
+        Nav::Settings => root.tr("外观、播放、歌词、下载、存储与账户").to_string(),
         Nav::Lyrics => root.tr("正在播放").to_string(),
         Nav::Home => root.tr("来自汽水的推荐").to_string(),
         Nav::Scenes => root.tr("按场景选歌").to_string(),
@@ -1261,6 +1262,48 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
                 .child(playlist_grid(root, cx))
                 .into_any_element(),
         },
+        Nav::Recent => {
+            if root.recent.is_empty() {
+                empty_state("history", root.tr("还没有最近播放记录"))
+            } else {
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .gap(px(theme::space::SM))
+                    .child(
+                        div().flex().justify_end().child(
+                            div()
+                                .id("clear-recent")
+                                .h(px(theme::size::CONTROL_SM))
+                                .px(px(theme::space::MD))
+                                .flex()
+                                .items_center()
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.clear_recent_history(cx);
+                                }))
+                                .child(root.tr("清空最近播放")),
+                        ),
+                    )
+                    .child(track_list(
+                        root,
+                        root.recent.clone(),
+                        Nav::Recent,
+                        Some(&root.recent_scroll),
+                        root.liked_ids.clone(),
+                        root.covers.clone(),
+                        root.cover_requests.clone(),
+                        cx,
+                    ))
+                    .into_any_element()
+            }
+        }
         Nav::Artist => search::artist_page(root, cx),
         Nav::Album => search::album_page(root, cx),
         Nav::Downloads => downloads::downloads_view(root, window, cx),

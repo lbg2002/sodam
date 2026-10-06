@@ -373,6 +373,19 @@ fn search_track_row(
         root.covers.clone(),
         root.cover_requests.clone(),
         root.queue.current().map(|track| track.id.clone()),
+        root.downloaded_ids.clone(),
+        std::sync::Arc::new(
+            root.pending_downloads
+                .keys()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>(),
+        ),
+        std::sync::Arc::new(
+            root.download_inflight
+                .iter()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>(),
+        ),
     )
 }
 

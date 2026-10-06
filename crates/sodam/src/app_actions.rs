@@ -234,10 +234,34 @@ impl Root {
                 // 注意：正在装载下一首（pending）时「播完」属于旧曲目，
                 // 只消费事件不推进——否则会把 pending 的那首跳过去（收尾瞬间
                 // 手动切歌/插入队列时踩过）。
+                if let Some(deadline) = root.sleep_deadline {
+                    if std::time::Instant::now() >= deadline {
+                        root.sleep_deadline = None;
+                        root.sleep_timer_minutes = 0;
+                        root.sleep_after_current = false;
+                        root.engine.pause();
+                        root.playing = false;
+                        root.status = root.tr("睡眠定时结束，已暂停播放").to_string();
+                        root.persist_playback_state(cx);
+                        cx.notify();
+                    }
+                }
+
                 if snap.finished && snap.finished_seq != root.last_finished_seq {
                     root.last_finished_seq = snap.finished_seq;
                     if root.pending_track.is_none() {
-                        root.next_track(cx);
+                        if root.sleep_after_current {
+                            root.sleep_after_current = false;
+                            root.sleep_deadline = None;
+                            root.sleep_timer_minutes = 0;
+                            root.engine.pause();
+                            root.playing = false;
+                            root.status = root.tr("当前歌曲播放结束，已暂停").to_string();
+                            root.persist_playback_state(cx);
+                            cx.notify();
+                        } else {
+                            root.next_track(cx);
+                        }
                     }
                 }
                 // 预取巡检：每 50 拍（约 5s）补一次，覆盖 append/remove 等；
@@ -280,6 +304,73 @@ impl Root {
             self.sync_queue_cache();
             cx.notify();
         }
+    }
+
+    pub fn move_queue_item(&mut self, from: usize, to: usize, cx: &mut Context<Self>) {
+        if self.queue.move_track(from, to) {
+            self.queue_menu = None;
+            self.sync_queue_cache();
+            self.persist_playback_state(cx);
+            self.spawn_prefetch(cx);
+            self.status = self.tr("播放队列顺序已更新").to_string();
+            cx.notify();
+        }
+    }
+
+    pub fn set_sleep_timer_minutes(&mut self, minutes: u32, cx: &mut Context<Self>) {
+        self.sleep_after_current = false;
+        self.sleep_timer_minutes = minutes;
+        self.sleep_deadline = if minutes == 0 {
+            None
+        } else {
+            Some(std::time::Instant::now() + std::time::Duration::from_secs(minutes as u64 * 60))
+        };
+        self.sleep_menu_open = false;
+        self.status = if minutes == 0 {
+            self.tr("睡眠定时已关闭").to_string()
+        } else {
+            self.localized("睡眠定时：{} 分钟", &[minutes.to_string()])
+        };
+        cx.notify();
+    }
+
+    pub fn set_sleep_after_current(&mut self, cx: &mut Context<Self>) {
+        self.sleep_deadline = None;
+        self.sleep_timer_minutes = 0;
+        self.sleep_after_current = true;
+        self.sleep_menu_open = false;
+        self.status = self.tr("将在当前歌曲结束后暂停").to_string();
+        cx.notify();
+    }
+
+    pub fn sleep_timer_label(&self) -> String {
+        if self.sleep_after_current {
+            return self.tr("播完当前歌曲").to_string();
+        }
+        if let Some(deadline) = self.sleep_deadline {
+            let seconds = deadline
+                .saturating_duration_since(std::time::Instant::now())
+                .as_secs();
+            if seconds > 0 {
+                return self.localized(
+                    "剩余 {} 分钟",
+                    &[seconds.div_ceil(60).to_string()],
+                );
+            }
+        }
+        self.tr("睡眠定时").to_string()
+    }
+
+    pub fn open_mini_player(&mut self, cx: &mut Context<Self>) {
+        let _ = self.ui_tx.send(crate::app::UiCommand::OpenMiniPlayer);
+        self.status = self.tr("已打开迷你播放器").to_string();
+        cx.notify();
+    }
+
+    pub fn open_desktop_lyrics(&mut self, cx: &mut Context<Self>) {
+        let _ = self.ui_tx.send(crate::app::UiCommand::OpenDesktopLyrics);
+        self.status = self.tr("已打开桌面歌词").to_string();
+        cx.notify();
     }
 
     /// 队列变化后刷新快照（抽屉渲染只读它，不再每帧 to_vec）。

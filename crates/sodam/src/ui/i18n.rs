@@ -68,6 +68,67 @@ impl Language {
             "音乐人" => "Artists",
             "专辑" => "Albums",
             "设置" => "Settings",
+            "自适应预加载" => "Adaptive Prefetch",
+            "同时满足最低曲目数和目标分钟数，最长预取 8 首" => {
+                "Keep both a minimum track count and a target listening duration, up to 8 tracks"
+            }
+            "5 分钟" => "5 minutes",
+            "12 分钟（推荐）" => "12 minutes (Recommended)",
+            "20 分钟" => "20 minutes",
+            "30 分钟" => "30 minutes",
+            "已开启" => "On",
+            "已关闭" => "Off",
+            "播放开始后后台逐步缓存后续歌曲；自适应模式按未来播放时长动态决定缓存深度" => {
+                "Cache upcoming tracks in the background; adaptive mode sizes the buffer by upcoming listening time"
+            }
+            "离线播放" => "Offline Playback",
+            "离线模式 / 缓存优先" => "Offline / Cache First",
+            "开启后只播放当前音质档位已经缓存的歌曲，不发起音频网络请求" => {
+                "Only play songs already cached for the current quality and make no new audio network requests"
+            }
+            "优先使用本地缓存；离线模式开启后完全禁止新的音频网络请求" => {
+                "Prefer local cache; offline mode blocks all new audio network requests"
+            }
+            "在线" => "Online",
+            "离线" => "Offline",
+            "自适应预加载：至少 {} 分钟" => "Adaptive prefetch: at least {} minutes",
+            "固定预加载：前方 {} 首" => "Fixed prefetch: {} tracks ahead",
+            "已进入离线模式：只播放本地缓存" => "Offline mode enabled: local cache only",
+            "已退出离线模式" => "Offline mode disabled",
+            "离线模式保存失败：{err}" => "Failed to save offline mode: {err}",
+            "离线不可播放：{} 尚未缓存" => "Unavailable offline: {} is not cached",
+            "离线模式：队列中没有更多已缓存歌曲" => "Offline mode: no more cached songs in the queue",
+            "离线模式：队列中没有其他已缓存歌曲" => "Offline mode: no other cached songs in the queue",
+            "离线模式：未加载的歌词不会联网获取" => {
+                "Offline mode: lyrics that are not already loaded will not be fetched"
+            }
+            "播放队列顺序已更新" => "Queue order updated",
+            "睡眠定时结束，已暂停播放" => "Sleep timer ended; playback paused",
+            "当前歌曲播放结束，已暂停" => "Current song finished; playback paused",
+            "睡眠定时已关闭" => "Sleep timer disabled",
+            "睡眠定时：{} 分钟" => "Sleep timer: {} minutes",
+            "将在当前歌曲结束后暂停" => "Playback will pause after the current song",
+            "播完当前歌曲" => "After current song",
+            "剩余 {} 分钟" => "{} minutes remaining",
+            "睡眠定时" => "Sleep Timer",
+            "关闭睡眠定时" => "Turn Off Sleep Timer",
+            "已打开迷你播放器" => "Mini player opened",
+            "已打开桌面歌词" => "Desktop lyrics opened",
+            "暂无歌词" => "No lyrics",
+            "批量下载" => "Batch Download",
+            "下载全部" => "Download All",
+            "批量下载：{} 首已加入任务，{} 首等待处理" => {
+                "Batch download: {} tracks selected, {} waiting"
+            }
+            "批量下载已暂停" => "Batch download paused",
+            "批量下载已继续" => "Batch download resumed",
+            "已取消批量下载任务" => "Batch download cancelled",
+            "批量下载任务已完成" => "Batch download completed",
+            "暂停" => "Pause",
+            "继续" => "Resume",
+            "取消任务" => "Cancel Task",
+            "{} / {} 首" => "{} / {} tracks",
+
             "外观、播放、歌词、下载、存储与账户" => "Appearance, playback, lyrics, downloads, storage, and account",
             "导出时写入歌曲名、歌手、专辑；封面缓存可用时一并嵌入" => {
                 "Write title, artist, and album tags on export; embed cached artwork when available"

@@ -71,7 +71,10 @@ enum Command {
     /// ReplayGain / 响度标准化增益，与用户音量独立。
     SetGain(f32),
     /// 曲目衔接策略。
-    SetTransition { gapless: bool, crossfade_seconds: u32 },
+    SetTransition {
+        gapless: bool,
+        crossfade_seconds: u32,
+    },
     /// 跳转到指定秒数
     Seek(f64),
 }
@@ -203,11 +206,11 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
         };
         let update_crossfade = |player: &Option<rodio::Player>,
                                 fading_out: &mut Option<(
-                                    rodio::Player,
-                                    std::time::Instant,
-                                    std::time::Duration,
-                                    f32,
-                                )>,
+            rodio::Player,
+            std::time::Instant,
+            std::time::Duration,
+            f32,
+        )>,
                                 state: &Arc<Mutex<PlaybackSnapshot>>,
                                 gain: f32| {
             let Some((old, started, duration, old_volume)) = fading_out.as_mut() else {

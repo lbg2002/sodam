@@ -78,6 +78,10 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
         .cloned()
         .or_else(|| root.cover_of(&track.cover));
     let original_cover_ready = root.original_covers.contains_key(&track.cover);
+    let downloaded = root.downloaded_ids.contains(&track.id);
+    let pending_download = root.pending_downloads.contains_key(&track.id);
+    let download_inflight = root.download_inflight.contains(&track.id);
+
     let like_button = div()
         .id("playback-like")
         .flex_none()
@@ -100,6 +104,35 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                 .size(px(theme::ICON_SM))
                 .text_color(if liked {
                     theme::accent()
+                } else {
+                    theme::text_muted()
+                }),
+        );
+
+    let download_button = div()
+        .id("playback-download")
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(theme::size::CONTROL_SM))
+        .rounded(px(theme::radius::PILL))
+        .cursor_pointer()
+        .hover(|style| style.bg(theme::surface_hover()))
+        .on_click(cx.listener({
+            let track = track.clone();
+            move |root, _event: &ClickEvent, _window, cx| {
+                root.toggle_download(track.clone(), cx);
+            }
+        }))
+        .child(
+            svg()
+                .path(icons::path(if downloaded { "check" } else { "download" }))
+                .size(px(theme::ICON_SM))
+                .text_color(if downloaded || pending_download {
+                    theme::accent()
+                } else if download_inflight {
+                    theme::text_faint()
                 } else {
                     theme::text_muted()
                 }),
@@ -148,7 +181,8 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                         .child(track.title.clone()),
                 )
                 .when(track.vip, |this| this.child(vip_badge()))
-                .child(like_button),
+                .child(like_button)
+                .child(download_button),
         )
         .child(
             div()

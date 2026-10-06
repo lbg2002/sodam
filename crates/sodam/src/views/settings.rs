@@ -316,6 +316,177 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         })
         .collect();
 
+    let download_quality_current = match root
+        .settings
+        .download_quality
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "" => "follow",
+        "lossless" => "lossless",
+        "highest" => "highest",
+        "medium" => "medium",
+        "low" => "low",
+        _ => "follow",
+    };
+    let download_quality_rows: Vec<AnyElement> = [
+        (
+            "follow",
+            root.tr("跟随播放设置"),
+            root.tr("使用当前播放音质偏好；播放为自动时选择已有缓存中的最高档"),
+        ),
+        (
+            "lossless",
+            root.tr("无损"),
+            root.tr("只导出无损缓存；没有对应缓存时保持待下载"),
+        ),
+        (
+            "highest",
+            root.tr("极高"),
+            root.tr("只导出极高缓存（≈320k）"),
+        ),
+        ("medium", root.tr("较高"), root.tr("只导出较高缓存")),
+        ("low", root.tr("标准"), root.tr("只导出标准缓存")),
+    ]
+    .iter()
+    .map(|(value, title, hint)| {
+        let chosen = *value == download_quality_current;
+        let value = value.to_string();
+        div()
+            .id(gpui::ElementId::Name(
+                format!("download-quality-set-{value}").into(),
+            ))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(theme::space::LG))
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_download_quality(&value, cx);
+            }))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .text_size(theme::Text::Body.size())
+                            .text_color(if chosen {
+                                theme::text()
+                            } else {
+                                theme::text_muted()
+                            })
+                            .child(title.to_string()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_faint())
+                            .child(hint.to_string()),
+                    ),
+            )
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
+    let download_format_current = match root
+        .settings
+        .download_format
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "mp3" => "mp3",
+        "flac" => "flac",
+        _ => "source",
+    };
+    let download_format_rows: Vec<AnyElement> = [
+        (
+            "source",
+            root.tr("原始格式"),
+            root.tr("直接保存 SodaM 实际播放缓存，速度最快且不二次编码"),
+        ),
+        (
+            "mp3",
+            "MP3",
+            root.tr("使用 ffmpeg 转为高质量 MP3，兼容性最好"),
+        ),
+        (
+            "flac",
+            "FLAC",
+            root.tr("使用 ffmpeg 转为 FLAC；有损源不会因此变成真正无损"),
+        ),
+    ]
+    .iter()
+    .map(|(value, title, hint)| {
+        let chosen = *value == download_format_current;
+        let value = value.to_string();
+        div()
+            .id(gpui::ElementId::Name(
+                format!("download-format-set-{value}").into(),
+            ))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .gap(px(theme::space::LG))
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_download_format(&value, cx);
+            }))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .text_size(theme::Text::Body.size())
+                            .text_color(if chosen {
+                                theme::text()
+                            } else {
+                                theme::text_muted()
+                            })
+                            .child(title.to_string()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_faint())
+                            .child(hint.to_string()),
+                    ),
+            )
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
     let account_card = account_section(root, cx);
 
     div()
@@ -459,7 +630,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .text_size(theme::Text::Large.size())
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::text())
-                        .child(root.tr("音质偏好")),
+                        .child(root.tr("播放音质偏好")),
                 )
                 .child(
                     div()
@@ -480,6 +651,60 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .flex_col()
                 .gap(px(theme::space::XS))
                 .children(rows),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .text_size(theme::Text::Large.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::text())
+                        .child(root.tr("下载设置")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(root.localized(
+                            "默认保存到：{}",
+                            &[sodam_core::downloads::download_dir().display().to_string()],
+                        )),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .px(px(theme::space::MD))
+                        .pt(px(theme::space::SM))
+                        .text_size(theme::Text::Small.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::text_muted())
+                        .child(root.tr("下载音质")),
+                )
+                .children(download_quality_rows),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .child(
+                    div()
+                        .px(px(theme::space::MD))
+                        .pt(px(theme::space::SM))
+                        .text_size(theme::Text::Small.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::text_muted())
+                        .child(root.tr("下载格式")),
+                )
+                .children(download_format_rows),
         )
         .child({
             // 缓存：显示占用大小 + 一键清理（统计读后台快照，不在渲染路径扫盘）

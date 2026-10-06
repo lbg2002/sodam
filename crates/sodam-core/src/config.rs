@@ -17,8 +17,13 @@ pub struct Settings {
     pub device_id: String,
     pub iid: String,
     pub fp: String,
-    /// 音质偏好：`best` / `lossless` / `highest` / `medium` / `low`。
+    /// 播放音质偏好：`best` / `lossless` / `highest` / `medium` / `low`。
     pub quality: String,
+    /// 下载音质：`follow` / `lossless` / `highest` / `medium` / `low`。
+    /// `follow` 表示跟随播放音质设置。
+    pub download_quality: String,
+    /// 下载格式：`source` / `mp3` / `flac`。
+    pub download_format: String,
     /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
@@ -41,6 +46,8 @@ impl Default for Settings {
             fp: String::new(),
             // 空 = 自动：登录后按账号 VIP 情况挑能用的最高档（见 Session::refresh_quality）
             quality: String::new(),
+            download_quality: "follow".to_string(),
+            download_format: "source".to_string(),
             theme: String::new(),
             language: String::new(),
         }
@@ -96,6 +103,8 @@ impl Settings {
             ("SODA_IID", &mut self.iid),
             ("SODA_FP", &mut self.fp),
             ("SODAM_QUALITY", &mut self.quality),
+            ("SODAM_DOWNLOAD_QUALITY", &mut self.download_quality),
+            ("SODAM_DOWNLOAD_FORMAT", &mut self.download_format),
         ];
         for (key, slot) in pairs {
             if slot.trim().is_empty() {
@@ -128,6 +137,8 @@ mod tests {
         let loaded = Settings::load_from(&path);
         assert_eq!(loaded.signer_url, settings.signer_url);
         assert_eq!(loaded.cookie, settings.cookie);
+        assert_eq!(loaded.download_quality, "follow");
+        assert_eq!(loaded.download_format, "source");
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());
         assert!(loaded.is_ready_for_vip());

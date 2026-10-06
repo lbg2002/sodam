@@ -15,7 +15,7 @@ use sodam_core::{
     },
     queue::Queue,
     session::{AccountInfo, Session},
-    PlaybackEngine, Settings,
+    DownloadedTrack, PlaybackEngine, Settings,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -97,6 +97,7 @@ pub enum Nav {
     Search,
     Liked,
     Library,
+    Downloads,
     Artist,
     Album,
     Settings,
@@ -112,6 +113,7 @@ impl Root {
             Nav::Search => self.tr("搜索"),
             Nav::Liked => self.tr("我喜欢的音乐"),
             Nav::Library => self.tr("我的歌单"),
+            Nav::Downloads => self.tr("下载管理"),
             Nav::Artist => self.tr("音乐人"),
             Nav::Album => self.tr("专辑"),
             Nav::Settings => self.tr("设置"),
@@ -218,6 +220,10 @@ pub struct Root {
     lyrics_request_seq: u64,
     pub search_input: String,
     pub search_focus: FocusHandle,
+    /// 下载管理页使用独立过滤输入，避免与全局搜索页共享关键词。
+    pub download_search_input: String,
+    pub download_search_focus: FocusHandle,
+    pub(crate) download_search_marked_range: Option<std::ops::Range<usize>>,
     /// 搜索结果与加载状态。
     pub results: Arc<Vec<TrackItem>>,
     pub search_results: SearchResults,
@@ -248,6 +254,14 @@ pub struct Root {
     pub liked: Arc<Vec<TrackItem>>,
     /// 「我喜欢的音乐」的曲目 id 集合（列表里的爱心状态）。
     pub liked_ids: Arc<HashSet<String>>,
+    /// 已导出到下载目录的曲目；列表、播放栏和下载管理页共享同一状态。
+    pub downloads: Arc<Vec<DownloadedTrack>>,
+    pub downloaded_ids: Arc<HashSet<String>>,
+    /// 用户点了下载但播放缓存尚未生成的曲目。
+    pub pending_downloads: HashMap<String, TrackItem>,
+    /// 正在执行本地导出的曲目，防止重复点击并发复制。
+    pub download_inflight: HashSet<String>,
+    pub downloads_loading: bool,
     liked_loading: bool,
     /// 收藏 ids 拉取失败（网络等）：置位后等网络就绪信号自动重试。
     pub liked_ids_failed: bool,
@@ -374,6 +388,12 @@ impl Root {
             }
         };
         let queue = Queue::new(Vec::<TrackItem>::new());
+        let pending_downloads: HashMap<String, TrackItem> =
+            sodam_core::downloads::load_pending_downloads()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|track| (track.id.clone(), track))
+                .collect();
 
         let logged_in = !settings.cookie.trim().is_empty();
         let mut root = Self {
@@ -398,6 +418,7 @@ impl Root {
             queue_menu: None,
             track_menu: None,
             search_marked_range: None,
+            download_search_marked_range: None,
             play_seq: 0,
             playback_error: None,
             consecutive_failures: 0,
@@ -420,6 +441,8 @@ impl Root {
             lyrics_request_seq: 0,
             search_input: String::new(),
             search_focus: cx.focus_handle(),
+            download_search_input: String::new(),
+            download_search_focus: cx.focus_handle(),
             results: Arc::new(Vec::new()),
             search_results: SearchResults::default(),
             search_tab: SearchScope::All,
@@ -462,6 +485,11 @@ impl Root {
             playlists: Vec::new(),
             liked: Arc::new(Vec::new()),
             liked_ids: Arc::new(HashSet::new()),
+            downloads: Arc::new(Vec::new()),
+            downloaded_ids: Arc::new(HashSet::new()),
+            pending_downloads,
+            download_inflight: HashSet::new(),
+            downloads_loading: false,
             liked_loading: false,
             liked_ids_failed: false,
             loading_library: false,
@@ -525,6 +553,7 @@ impl Root {
                 "search" => Nav::Search,
                 "liked" => Nav::Liked,
                 "library" => Nav::Library,
+                "downloads" | "download" => Nav::Downloads,
                 "artist" => Nav::Artist,
                 "album" => Nav::Album,
                 "settings" => Nav::Settings,
@@ -573,6 +602,7 @@ impl Root {
             })
             .detach();
         }
+        root.refresh_downloads(cx);
         Self::start_heartbeat(cx);
 
         // 开发验证用：`SODAM_AUTOPLAY=1` 进收藏页并自动播放第一首；
@@ -676,6 +706,34 @@ impl Root {
     }
 }
 
+fn utf16_to_byte_offset(text: &str, offset: usize) -> usize {
+    let mut units = 0;
+    for (byte_offset, character) in text.char_indices() {
+        if units >= offset {
+            return byte_offset;
+        }
+        units += character.len_utf16();
+    }
+    text.len()
+}
+
+fn byte_to_utf16_offset(text: &str, offset: usize) -> usize {
+    text.char_indices()
+        .take_while(|(byte_offset, _)| *byte_offset < offset)
+        .map(|(_, character)| character.len_utf16())
+        .sum()
+}
+
+fn byte_range_from_utf16(text: &str, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+    let start = utf16_to_byte_offset(text, range.start);
+    let end = utf16_to_byte_offset(text, range.end);
+    start.min(end)..start.max(end)
+}
+
+fn utf16_range_from_byte(text: &str, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+    byte_to_utf16_offset(text, range.start)..byte_to_utf16_offset(text, range.end)
+}
+
 impl EntityInputHandler for Root {
     fn text_for_range(
         &mut self,
@@ -684,12 +742,20 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<String> {
-        if !self.search_input_focused(window) {
-            return None;
+        if self.download_search_focus.is_focused(window) {
+            let range = byte_range_from_utf16(&self.download_search_input, range_utf16);
+            actual_range.replace(utf16_range_from_byte(
+                &self.download_search_input,
+                range.clone(),
+            ));
+            return Some(self.download_search_input[range].to_string());
         }
-        let range = self.search_byte_range_from_utf16(range_utf16);
-        actual_range.replace(self.search_utf16_range_from_byte(range.clone()));
-        Some(self.search_input[range].to_string())
+        if self.search_input_focused(window) {
+            let range = self.search_byte_range_from_utf16(range_utf16);
+            actual_range.replace(self.search_utf16_range_from_byte(range.clone()));
+            return Some(self.search_input[range].to_string());
+        }
+        None
     }
 
     fn selected_text_range(
@@ -698,17 +764,27 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
-        if !self.search_input_focused(window) {
-            return None;
+        if self.download_search_focus.is_focused(window) {
+            let range = self
+                .download_search_marked_range
+                .clone()
+                .unwrap_or(self.download_search_input.len()..self.download_search_input.len());
+            return Some(UTF16Selection {
+                range: utf16_range_from_byte(&self.download_search_input, range),
+                reversed: false,
+            });
         }
-        let range = self
-            .search_marked_range
-            .clone()
-            .unwrap_or(self.search_input.len()..self.search_input.len());
-        Some(UTF16Selection {
-            range: self.search_utf16_range_from_byte(range),
-            reversed: false,
-        })
+        if self.search_input_focused(window) {
+            let range = self
+                .search_marked_range
+                .clone()
+                .unwrap_or(self.search_input.len()..self.search_input.len());
+            return Some(UTF16Selection {
+                range: self.search_utf16_range_from_byte(range),
+                reversed: false,
+            });
+        }
+        None
     }
 
     fn marked_text_range(
@@ -716,16 +792,28 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<std::ops::Range<usize>> {
-        if !self.search_input_focused(window) {
-            return None;
+        if self.download_search_focus.is_focused(window) {
+            return self
+                .download_search_marked_range
+                .as_ref()
+                .map(|range| utf16_range_from_byte(&self.download_search_input, range.clone()));
         }
-        self.search_marked_range
-            .as_ref()
-            .map(|range| self.search_utf16_range_from_byte(range.clone()))
+        if self.search_input_focused(window) {
+            return self
+                .search_marked_range
+                .as_ref()
+                .map(|range| self.search_utf16_range_from_byte(range.clone()));
+        }
+        None
     }
 
-    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        if self.search_marked_range.take().is_some() {
+    fn unmark_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let changed = if self.download_search_focus.is_focused(window) {
+            self.download_search_marked_range.take().is_some()
+        } else {
+            self.search_marked_range.take().is_some()
+        };
+        if changed {
             cx.notify();
         }
     }
@@ -737,13 +825,22 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.search_input_focused(window) {
+        if self.download_search_focus.is_focused(window) {
+            let range = range_utf16
+                .map(|range| byte_range_from_utf16(&self.download_search_input, range))
+                .or_else(|| self.download_search_marked_range.clone())
+                .unwrap_or(self.download_search_input.len()..self.download_search_input.len());
+            self.download_search_input.replace_range(range, text);
+            self.download_search_marked_range = None;
+            cx.notify();
             return;
         }
-        let range = self.search_replacement_range(range_utf16);
-        self.search_input.replace_range(range, text);
-        self.search_marked_range = None;
-        cx.notify();
+        if self.search_input_focused(window) {
+            let range = self.search_replacement_range(range_utf16);
+            self.search_input.replace_range(range, text);
+            self.search_marked_range = None;
+            cx.notify();
+        }
     }
 
     fn replace_and_mark_text_in_range(
@@ -754,15 +851,26 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.search_input_focused(window) {
+        if self.download_search_focus.is_focused(window) {
+            let range = range_utf16
+                .map(|range| byte_range_from_utf16(&self.download_search_input, range))
+                .or_else(|| self.download_search_marked_range.clone())
+                .unwrap_or(self.download_search_input.len()..self.download_search_input.len());
+            let start = range.start;
+            self.download_search_input.replace_range(range, new_text);
+            let end = start + new_text.len();
+            self.download_search_marked_range = Some(start..end);
+            cx.notify();
             return;
         }
-        let range = self.search_replacement_range(range_utf16);
-        let start = range.start;
-        self.search_input.replace_range(range, new_text);
-        let end = start + new_text.len();
-        self.search_marked_range = Some(start..end);
-        cx.notify();
+        if self.search_input_focused(window) {
+            let range = self.search_replacement_range(range_utf16);
+            let start = range.start;
+            self.search_input.replace_range(range, new_text);
+            let end = start + new_text.len();
+            self.search_marked_range = Some(start..end);
+            cx.notify();
+        }
     }
 
     fn bounds_for_range(
@@ -772,7 +880,8 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<gpui::Bounds<gpui::Pixels>> {
-        self.search_input_focused(window).then_some(element_bounds)
+        (self.download_search_focus.is_focused(window) || self.search_input_focused(window))
+            .then_some(element_bounds)
     }
 
     fn character_index_for_point(
@@ -781,21 +890,37 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
-        if !self.search_input_focused(window) {
-            return None;
+        if self.download_search_focus.is_focused(window) {
+            return Some(
+                self.download_search_input
+                    .chars()
+                    .map(char::len_utf16)
+                    .sum(),
+            );
         }
-        Some(self.search_input.chars().map(char::len_utf16).sum())
+        if self.search_input_focused(window) {
+            return Some(self.search_input.chars().map(char::len_utf16).sum());
+        }
+        None
     }
 
     fn text_length_utf16(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> Option<usize> {
-        if !self.search_input_focused(window) {
-            return None;
+        if self.download_search_focus.is_focused(window) {
+            return Some(
+                self.download_search_input
+                    .chars()
+                    .map(char::len_utf16)
+                    .sum(),
+            );
         }
-        Some(self.search_input.chars().map(char::len_utf16).sum())
+        if self.search_input_focused(window) {
+            return Some(self.search_input.chars().map(char::len_utf16).sum());
+        }
+        None
     }
 
     fn accepts_text_input(&self, window: &mut Window, _cx: &mut Context<Self>) -> bool {
-        self.search_input_focused(window)
+        self.download_search_focus.is_focused(window) || self.search_input_focused(window)
     }
 }
 
@@ -953,6 +1078,7 @@ impl Render for Root {
                     Nav::Search => self.results.len(),
                     Nav::Liked => self.liked.len(),
                     Nav::Library => self.playlists.len(),
+                    Nav::Downloads => self.downloads.len(),
                     _ => 0,
                 };
                 eprintln!("[frame] {elapsed}ms nav={:?} rows={rows}", self.nav);

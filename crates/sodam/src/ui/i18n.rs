@@ -68,6 +68,10 @@ impl Language {
             "音乐人" => "Artists",
             "专辑" => "Albums",
             "设置" => "Settings",
+            "常规" => "General",
+            "存储" => "Storage",
+            "账户" => "Account",
+
             "等待扫码" => "Waiting for scan",
             "已扫码" => "Scanned",
             "登录成功" => "Signed in",

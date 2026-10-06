@@ -328,21 +328,42 @@ fn find_cached_assets(track_id: &str) -> Result<Vec<CachedAsset>> {
     Ok(assets)
 }
 
+fn quality_matches(asset: &CachedAsset, preferred: &str) -> bool {
+    if asset.tag.eq_ignore_ascii_case(preferred) {
+        return true;
+    }
+    let label = asset.quality.to_ascii_lowercase();
+    match preferred {
+        "lossless" => label.contains("无损") || label.contains("lossless"),
+        "highest" => label.contains("极高"),
+        "medium" => label.contains("较高"),
+        "low" => label.contains("标准"),
+        _ => false,
+    }
+}
+
 fn pick_asset<'a>(assets: &'a [CachedAsset], quality_preference: &str) -> Option<&'a CachedAsset> {
     if assets.is_empty() {
         return None;
     }
-    let preferred = match quality_preference.trim().to_ascii_lowercase().as_str() {
-        "" | "auto" | "best" => None,
-        value => Some(value.to_string()),
-    };
-    if let Some(preferred) = preferred {
+
+    let preference = quality_preference.trim().to_ascii_lowercase();
+    if let Some(playback_tag) = preference.strip_prefix("follow:") {
+        let playback_tag = if playback_tag.is_empty() {
+            "auto"
+        } else {
+            playback_tag
+        };
         return assets
             .iter()
-            .find(|asset| asset.tag.eq_ignore_ascii_case(&preferred));
+            .find(|asset| asset.tag.eq_ignore_ascii_case(playback_tag))
+            .or_else(|| assets.iter().max_by_key(|asset| asset.bytes));
     }
-    // 自动 / 跟随自动档：多档缓存同时存在时优先使用体积最大的实际播放资产。
-    assets.iter().max_by_key(|asset| asset.bytes)
+
+    match preference.as_str() {
+        "" | "auto" | "best" => assets.iter().max_by_key(|asset| asset.bytes),
+        preferred => assets.iter().find(|asset| quality_matches(asset, preferred)),
+    }
 }
 
 fn safe_component(input: &str) -> String {
@@ -398,6 +419,7 @@ mod tests {
         }];
         assert!(pick_asset(&assets, "lossless").is_none());
         assert_eq!(pick_asset(&assets, "highest").unwrap().tag, "highest");
+        assert_eq!(pick_asset(&assets, "follow:highest").unwrap().tag, "highest");
     }
 
     #[test]

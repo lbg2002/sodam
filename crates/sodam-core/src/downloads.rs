@@ -134,6 +134,23 @@ pub fn list_downloads() -> Result<Vec<DownloadedTrack>> {
     Ok(items)
 }
 
+pub fn downloaded_track(track_id: &str) -> Result<Option<DownloadedTrack>> {
+    let path = metadata_path(track_id);
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Ok(None);
+    };
+    let mut item = serde_json::from_str::<DownloadedTrack>(&text)
+        .with_context(|| format!("读取下载索引失败：{}", path.display()))?;
+    let Ok(meta) = fs::metadata(&item.path) else {
+        return Ok(None);
+    };
+    if !meta.is_file() || meta.len() == 0 {
+        return Ok(None);
+    }
+    item.bytes = meta.len();
+    Ok(Some(item))
+}
+
 /// 导出当前已经存在的播放缓存。
 ///
 /// - `Ok(Some(item))`：导出成功；

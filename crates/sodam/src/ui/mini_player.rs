@@ -2,7 +2,7 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, px, size, svg, App, Bounds, ClickEvent, Context, Entity, IntoElement, Render,
+    div, point, px, size, svg, App, Bounds, ClickEvent, Context, Entity, IntoElement, Render,
     TitlebarOptions, Window, WindowBounds, WindowKind, WindowOptions,
 };
 
@@ -20,12 +20,21 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         cx.activate(true);
         return;
     }
-    let bounds = Bounds::centered(None, size(px(430.0), px(142.0)), cx);
+    let settings = root.read(cx).settings.clone();
+    let window_size = size(
+        px(settings.mini_w.max(380.0)),
+        px(settings.mini_h.max(130.0)),
+    );
+    let bounds = if settings.mini_x != 0.0 || settings.mini_y != 0.0 {
+        Bounds::new(point(px(settings.mini_x), px(settings.mini_y)), window_size)
+    } else {
+        Bounds::centered(None, window_size, cx)
+    };
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         window_min_size: Some(size(px(380.0), px(130.0))),
         kind: WindowKind::Floating,
-        is_resizable: false,
+        is_resizable: true,
         titlebar: Some(TitlebarOptions {
             title: Some("SodaM Mini".into()),
             ..Default::default()
@@ -53,7 +62,25 @@ impl MiniPlayer {
 }
 
 impl Render for MiniPlayer {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let bounds = window.bounds();
+        let x = f32::from(bounds.origin.x);
+        let y = f32::from(bounds.origin.y);
+        let width = f32::from(bounds.size.width);
+        let height = f32::from(bounds.size.height);
+        self.root.update(cx, |root, _cx| {
+            if (root.settings.mini_x - x).abs() > 1.0
+                || (root.settings.mini_y - y).abs() > 1.0
+                || (root.settings.mini_w - width).abs() > 1.0
+                || (root.settings.mini_h - height).abs() > 1.0
+            {
+                root.settings.mini_x = x;
+                root.settings.mini_y = y;
+                root.settings.mini_w = width;
+                root.settings.mini_h = height;
+                let _ = root.settings.save();
+            }
+        });
         let root = self.root.read(cx);
         let snapshot = root.engine.snapshot();
         let track = root

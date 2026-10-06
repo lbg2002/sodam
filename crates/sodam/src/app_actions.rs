@@ -194,7 +194,7 @@ impl Root {
     pub(crate) fn start_heartbeat(cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
-                .timer(std::time::Duration::from_millis(200))
+                .timer(std::time::Duration::from_millis(100))
                 .await;
             let _ = this.update(cx, |root, cx| {
                 let snap = root.engine.snapshot();
@@ -232,15 +232,15 @@ impl Root {
                         root.next_track(cx);
                     }
                 }
-                // 预取巡检：每 25 拍（约 5s）补一次，覆盖 append/remove 等
-                // 队列变更路径（spawn_prefetch 自身会去重，空转开销极小）
+                // 预取巡检：每 50 拍（约 5s）补一次，覆盖 append/remove 等；
+                // 心跳本身为 100ms，以更快响应歌曲自然播完后的切歌。
                 root.prefetch_patrol = root.prefetch_patrol.wrapping_add(1);
-                if root.prefetch_patrol % 25 == 0 {
+                if root.prefetch_patrol % 50 == 0 {
                     root.spawn_prefetch(cx);
                     root.process_pending_downloads(cx);
                     root.persist_playback_state(cx);
                 }
-                if root.prefetch_patrol % 150 == 0 {
+                if root.prefetch_patrol % 300 == 0 {
                     root.trim_cache_if_needed(cx);
                 }
                 root.load_more_recommendation(cx);

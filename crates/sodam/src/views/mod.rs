@@ -585,6 +585,7 @@ pub(crate) fn scrolling_detail_page(
     let cover_path = root.cover_of(&cover_url);
     let play_tracks = tracks.clone();
     let shuffle_tracks = tracks.clone();
+    let download_tracks = tracks.clone();
     let row_tracks = tracks.clone();
     let current_track_id = root.queue.current().map(|track| track.id.clone());
     let downloaded_ids = root.downloaded_ids.clone();
@@ -690,6 +691,42 @@ pub(crate) fn scrolling_detail_page(
                                                 .text_size(theme::Text::Small.size())
                                                 .text_color(theme::accent_foreground())
                                                 .child(language.text("播放全部")),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .id("detail-download-all")
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap(px(theme::space::SM))
+                                        .h(px(theme::size::CONTROL))
+                                        .px(px(theme::space::LG))
+                                        .rounded(px(theme::radius::PILL))
+                                        .bg(theme::surface_elevated())
+                                        .cursor_pointer()
+                                        .hover(|style| style.bg(theme::surface_hover()))
+                                        .on_click({
+                                            let tracks = download_tracks.clone();
+                                            let entity = entity.clone();
+                                            move |_event: &ClickEvent, _window, cx| {
+                                                let tracks = tracks.clone();
+                                                entity.update(cx, |root, cx| {
+                                                    root.queue_batch_download(tracks.clone(), cx);
+                                                });
+                                            }
+                                        })
+                                        .child(
+                                            svg()
+                                                .path(icons::path("download"))
+                                                .size(px(theme::ICON))
+                                                .text_color(theme::text()),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(theme::Text::Small.size())
+                                                .text_color(theme::text())
+                                                .child(language.text("下载全部")),
                                         ),
                                 )
                                 .child(

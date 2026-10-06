@@ -2287,6 +2287,36 @@ impl Root {
         .detach();
     }
 
+    pub fn clear_recent_history(&mut self, cx: &mut Context<Self>) {
+        match sodam_core::history::clear() {
+            Ok(()) => {
+                self.recent = Arc::new(Vec::new());
+                self.status = self.tr("已清空最近播放").to_string();
+            }
+            Err(err) => {
+                self.status =
+                    self.localized("清空最近播放失败：{err}", &[err.to_string()]);
+            }
+        }
+        cx.notify();
+    }
+
+    fn record_recent_play(&mut self, track: TrackItem, cx: &mut Context<Self>) {
+        let work = cx.background_spawn(async move {
+            sodam_core::history::record_track(&track)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                if let Ok(tracks) = result {
+                    root.recent = Arc::new(tracks);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     /// 点列表行播放（列表以 `Arc` 共享，避免每次点击都深拷贝整张表）。
     pub fn play_from_arc(
         &mut self,
@@ -2339,6 +2369,7 @@ impl Root {
                 .map(|detail| QueueOrigin::Album(detail.album.id.clone()))
                 .unwrap_or(QueueOrigin::Search),
             Nav::Search => QueueOrigin::Search,
+            Nav::Recent => QueueOrigin::Recent,
             Nav::Home => QueueOrigin::Feed,
             _ => self.queue_origin.clone(),
         };
@@ -2621,7 +2652,8 @@ impl Root {
                         }
                         root.consecutive_failures = 0;
                         root.playback_error = None;
-                        // 记录真实播放历史（去重最近一条，避免重复刷屏）
+                        // 记录真实播放历史（队列内）以及持久化的“最近播放”。
+                        root.record_recent_play(track.clone(), cx);
                         if root.played_history.last().map(String::as_str) != Some(track.id.as_str())
                         {
                             root.played_history.push(track.id.clone());

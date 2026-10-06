@@ -13,6 +13,26 @@ use crate::app::Root;
 use crate::ui::artwork::{cover, icon_button};
 use crate::ui::{icons, theme};
 
+#[derive(Clone, Copy)]
+struct QueueDrag {
+    index: usize,
+}
+
+impl Render for QueueDrag {
+    fn render(&mut self, _window: &mut gpui::Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .bg(theme::surface_elevated())
+            .border_1()
+            .border_color(theme::border())
+            .text_size(theme::Text::Small.size())
+            .text_color(theme::text())
+            .child("移动歌曲")
+    }
+}
+
 /// 内联音量条宽度与滑块直径。
 const VOLUME_TRACK_W: f32 = 96.0;
 const VOLUME_THUMB: f32 = 11.0;
@@ -820,6 +840,23 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                             .cursor_pointer()
                             .when(playing, |this| this.bg(theme::accent_soft()))
                             .hover(|style| style.bg(theme::surface_hover()))
+                            .when(!playing, |this| {
+                                this.cursor_move().on_drag(
+                                    QueueDrag { index },
+                                    |drag: &QueueDrag, _position, _window, cx| {
+                                        cx.new(|_| *drag)
+                                    },
+                                )
+                            })
+                            .on_drop({
+                                let entity = entity.clone();
+                                move |drag: &QueueDrag, _window, cx: &mut gpui::App| {
+                                    let from = drag.index;
+                                    entity.update(cx, |root, cx| {
+                                        root.move_queue_item(from, index, cx);
+                                    });
+                                }
+                            })
                             .on_click({
                                 let entity = entity.clone();
                                 move |_event: &ClickEvent, _window, cx: &mut gpui::App| {

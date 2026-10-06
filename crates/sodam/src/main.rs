@@ -7,6 +7,7 @@
 mod app;
 #[cfg(target_os = "linux")]
 mod mpris;
+mod system_audio;
 // 托盘：Linux 走 ksni/SNI，macOS 走 NSStatusItem，见 tray.rs。
 mod tray;
 mod ui;
@@ -28,8 +29,6 @@ fn main_window_options(cx: &mut App) -> WindowOptions {
         window_min_size: Some(size(px(MIN_SIZE.0), px(MIN_SIZE.1))),
         titlebar: Some(TitlebarOptions {
             title: Some("SodaM".into()),
-            // macOS 隐藏系统标题栏（红绿灯悬浮）；Windows 同样隐藏，
-            // 由 ui::titlebar 自绘拖拽区与最小化/最大化/关闭按钮。
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             appears_transparent: true,
             ..Default::default()
@@ -78,35 +77,32 @@ fn start_tray_service(
             }
 
             tick += 1;
-            if tick % 5 == 0 {
-                cx.update(|cx| {
-                    app.update(cx, |root, _cx| {
-                        let snapshot = root.engine.snapshot();
-                        let title = if snapshot.track_id.is_empty() {
-                            "SodaM".to_string()
-                        } else {
-                            snapshot.title
-                        };
-                        let subtitle = if snapshot.track_id.is_empty() {
-                            root.tr("就绪").to_string()
-                        } else {
-                            root.queue
-                                .current()
-                                .map(|track| track.artist.clone())
-                                .unwrap_or_default()
-                        };
-                        sync(tray::TrayState {
-                            language: root.language,
-                            title,
-                            subtitle,
-                            playing: snapshot.playing,
-                        });
-                    });
+            if tick % 10 == 0 {
+                let state = cx.read_entity(&app, |root, _| {
+                    let snapshot = root.engine.snapshot();
+                    tray::TrayState {
+                        playing: snapshot.playing,
+                        title: snapshot.title,
+                    }
                 });
+                if let Ok(state) = state {
+                    sync(state);
+                }
             }
         }
     })
     .detach();
+}
+
+fn show_window(cx: &mut App, app: &Entity<app::Root>) {
+    if let Some(handle) = cx.windows().into_iter().next() {
+        let _ = handle.update(cx, |_view, window, _cx| {
+            window.activate_window();
+        });
+        return;
+    }
+    let app = app.clone();
+    let _ = cx.open_window(main_window_options(cx), move |_window, _cx| app.clone());
 }
 
 #[cfg(target_os = "linux")]
@@ -114,33 +110,30 @@ fn start_mpris_service(bridge: mpris::MprisBridge, app: Entity<app::Root>, cx: &
     let state = bridge.state.clone();
     let receiver = bridge.receiver;
     cx.spawn(async move |cx| {
-        let mut tick = 0u32;
         loop {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(100))
                 .await;
-
             while let Ok(command) = receiver.try_recv() {
                 match command {
-                    mpris::MprisCommand::Raise => cx.update(|cx| show_window(cx, &app)),
-                    mpris::MprisCommand::Play => {
-                        cx.update(|cx| app.update(cx, |root, cx| root.play(cx)))
-                    }
-                    mpris::MprisCommand::Pause => {
-                        cx.update(|cx| app.update(cx, |root, cx| root.pause(cx)))
-                    }
-                    mpris::MprisCommand::PlayPause => {
-                        cx.update(|cx| app.update(cx, |root, cx| root.toggle_play(cx)))
-                    }
-                    mpris::MprisCommand::Stop => {
-                        cx.update(|cx| app.update(cx, |root, cx| root.stop_playback(cx)))
-                    }
-                    mpris::MprisCommand::Next => {
-                        cx.update(|cx| app.update(cx, |root, cx| root.next_track(cx)))
-                    }
-                    mpris::MprisCommand::Previous => {
-                        cx.update(|cx| app.update(cx, |root, cx| root.prev_track(cx)))
-                    }
+                    mpris::MprisCommand::PlayPause => cx.update(|cx| {
+                        app.update(cx, |root, cx| root.toggle_play(cx));
+                    }),
+                    mpris::MprisCommand::Play => cx.update(|cx| {
+                        app.update(cx, |root, cx| root.play(cx));
+                    }),
+                    mpris::MprisCommand::Pause => cx.update(|cx| {
+                        app.update(cx, |root, cx| root.pause(cx));
+                    }),
+                    mpris::MprisCommand::Stop => cx.update(|cx| {
+                        app.update(cx, |root, cx| root.stop_playback(cx));
+                    }),
+                    mpris::MprisCommand::Next => cx.update(|cx| {
+                        app.update(cx, |root, cx| root.next_track(cx));
+                    }),
+                    mpris::MprisCommand::Previous => cx.update(|cx| {
+                        app.update(cx, |root, cx| root.prev_track(cx));
+                    }),
                     mpris::MprisCommand::SeekRelative(offset) => cx.update(|cx| {
                         app.update(cx, |root, cx| {
                             let snapshot = root.engine.snapshot();
@@ -159,124 +152,77 @@ fn start_mpris_service(bridge: mpris::MprisBridge, app: Entity<app::Root>, cx: &
                     }),
                     mpris::MprisCommand::SetVolume(volume) => cx.update(|cx| {
                         app.update(cx, |root, cx| {
-                            root.set_volume(volume.clamp(0.0, 1.0) as f32);
+                            root.set_volume(volume as f32);
                             cx.notify();
                         })
+                    }),
+                    mpris::MprisCommand::Raise => cx.update(|cx| show_window(cx, &app)),
+                    mpris::MprisCommand::Quit => cx.update(|cx| {
+                        app.update(cx, |root, _cx| root.save_playback_state_now());
+                        cx.quit();
                     }),
                 };
             }
 
-            tick = tick.wrapping_add(1);
-            if tick % 5 == 0 {
-                cx.update(|cx| {
-                    app.update(cx, |root, _cx| {
-                        let snapshot = root.engine.snapshot();
-                        let current = root.queue.current();
-                        let (artist, album, art_url) = current
-                            .map(|track| {
-                                (
-                                    track.artist.clone(),
-                                    track.album.clone(),
-                                    track.cover.clone(),
-                                )
-                            })
-                            .unwrap_or_default();
-                        let loop_status = match root.queue.mode {
-                            sodam_core::queue::PlayMode::RepeatOne => "Track",
-                            _ => "None",
-                        }
-                        .to_string();
-                        if let Ok(mut slot) = state.lock() {
-                            *slot = mpris::MprisState {
-                                track_id: snapshot.track_id,
-                                title: snapshot.title,
-                                artist,
-                                album,
-                                art_url,
-                                playing: snapshot.playing,
-                                position_micros: (snapshot.position_seconds.max(0.0) * 1_000_000.0)
-                                    as i64,
-                                duration_micros: (snapshot.duration_seconds.max(0.0) * 1_000_000.0)
-                                    as i64,
-                                volume: snapshot.volume as f64,
-                                can_go_next: root.queue.len() > 1,
-                                can_go_previous: root.queue.len() > 1,
-                                can_play: !root.queue.is_empty(),
-                                loop_status,
-                                shuffle: matches!(
-                                    root.queue.mode,
-                                    sodam_core::queue::PlayMode::Shuffle
-                                ),
-                            };
-                        }
-                    });
-                });
+            if let Ok(next) = cx.read_entity(&app, |root, _| {
+                let snapshot = root.engine.snapshot();
+                let track = root.queue.current();
+                let (artist, album, art_url) = track
+                    .map(|track| {
+                        (
+                            track.artist.clone(),
+                            track.album.clone(),
+                            root.cover_of(&track.cover)
+                                .map(|path| format!("file://{}", path.display()))
+                                .unwrap_or_default(),
+                        )
+                    })
+                    .unwrap_or_default();
+                mpris::MprisState {
+                    title: snapshot.title,
+                    artist,
+                    album,
+                    art_url,
+                    playing: snapshot.playing,
+                    position_micros: (snapshot.position_seconds.max(0.0) * 1_000_000.0) as i64,
+                    duration_micros: (snapshot.duration_seconds.max(0.0) * 1_000_000.0) as i64,
+                    volume: snapshot.volume as f64,
+                    can_go_next: root.queue.len() > 1,
+                    can_go_previous: root.queue.len() > 1,
+                }
+            }) {
+                mpris::update_state(&state, next);
             }
         }
     })
     .detach();
 }
 
-/// 打开或激活主窗口；由托盘的 Show 命令调用。
-fn show_window(cx: &mut App, app: &Entity<app::Root>) {
-    if let Some(window) = cx
-        .windows()
-        .iter()
-        .find_map(|window| window.downcast::<app::Root>())
-    {
-        let _ = window.update(cx, |_root, window, _| window.activate_window());
-    } else {
-        let app = app.clone();
-        let options = main_window_options(cx);
-        cx.open_window(options, |_window, _cx| app).ok();
-    }
-    cx.activate(true);
-}
-
 fn main() {
-    gpui_platform::application()
-        .with_assets(ui::icons::Assets)
-        .with_quit_mode(gpui::QuitMode::Explicit)
-        .run(|cx: &mut App| {
-            #[allow(clippy::redundant_closure)]
-            let app = cx.new(|cx| app::Root::new(cx));
-            let options = main_window_options(cx);
-            cx.open_window(options, |_window, _cx| app.clone())
-                .expect("打开主窗口失败");
+    gpui_platform::application().run(|cx: &mut App| {
+        ui::assets::init(cx);
+        let window = cx
+            .open_window(main_window_options(cx), |_window, cx| cx.new(app::Root::new))
+            .expect("创建主窗口失败");
+        let app = window.entity(cx).clone();
 
-            #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-            {
-                let (tray_tx, tray_rx) = std::sync::mpsc::channel();
+        if let Ok((rx, sync)) = tray::start() {
+            start_tray_service(rx, app.clone(), cx, sync);
+        }
 
-                // 平台各自的托盘创建 + 状态同步闭包。
-                #[cfg(target_os = "linux")]
-                let sync = {
-                    let tray_service = ksni::TrayService::new(tray::linux::SodaTray::new(
-                        tray_tx,
-                        crate::ui::i18n::Language::system_locale(),
-                    ));
-                    let tray_handle = tray_service.handle();
-                    tray_service.spawn();
-                    move |state: tray::TrayState| {
-                        // ksni 0.2 的 Handle::update 返回 ()，直接调用。
-                        tray_handle.update(|tray| {
-                            tray.language = state.language;
-                            tray.title = state.title;
-                            tray.subtitle = state.subtitle;
-                            tray.playing = state.playing;
-                        });
-                    }
-                };
-                #[cfg(any(target_os = "macos", target_os = "windows"))]
-                let sync =
-                    tray::create_status_item(tray_tx, crate::ui::i18n::Language::system_locale());
+        #[cfg(target_os = "linux")]
+        if let Ok(bridge) = mpris::start() {
+            start_mpris_service(bridge, app.clone(), cx);
+        }
 
-                start_tray_service(tray_rx, app.clone(), cx, sync);
+        cx.on_app_quit({
+            let app = app.clone();
+            move |cx| {
+                let _ = app.update(cx, |root, _cx| root.save_playback_state_now());
             }
+        })
+        .detach();
 
-            #[cfg(target_os = "linux")]
-            start_mpris_service(mpris::start(), app.clone(), cx);
-
-            cx.activate(true);
-        });
+        cx.activate(true);
+    });
 }

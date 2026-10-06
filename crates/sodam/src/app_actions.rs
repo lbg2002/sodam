@@ -315,6 +315,11 @@ impl Root {
     }
 
     pub fn choose_download_directory(&mut self, cx: &mut Context<Self>) {
+        if !self.download_inflight.is_empty() {
+            self.status = self.tr("有下载任务正在处理，请稍后更改下载目录").to_string();
+            cx.notify();
+            return;
+        }
         if std::env::var_os("SODAM_DOWNLOAD_DIR").is_some() {
             self.status = self
                 .tr("下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量")
@@ -356,6 +361,11 @@ impl Root {
     }
 
     pub fn reset_download_directory(&mut self, cx: &mut Context<Self>) {
+        if !self.download_inflight.is_empty() {
+            self.status = self.tr("有下载任务正在处理，请稍后更改下载目录").to_string();
+            cx.notify();
+            return;
+        }
         if std::env::var_os("SODAM_DOWNLOAD_DIR").is_some() {
             self.status = self
                 .tr("下载目录被 SODAM_DOWNLOAD_DIR 环境变量覆盖，请先取消该变量")

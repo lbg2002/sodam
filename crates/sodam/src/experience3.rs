@@ -317,7 +317,103 @@ impl Root {
         );
         let _ = self.settings.save();
         self.toast(
-            if seconds == 0 { self.tr("交叉淡化已关闭").to_string() } else { format!("交叉淡化：{} 秒", seconds.min(8)) },
+            if seconds == 0 {
+                self.tr("交叉淡化已关闭").to_string()
+            } else {
+                format!("交叉淡化：{} 秒", seconds.min(8))
+            },
+            cx,
+        );
+    }
+
+    pub fn e3_set_desktop_single_line(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.desktop_lyrics_single_line = enabled;
+        let _ = self.settings.save();
+        self.toast(
+            if enabled {
+                self.tr("桌面歌词已切换为单行")
+            } else {
+                self.tr("桌面歌词已切换为双行")
+            },
+            cx,
+        );
+    }
+
+    pub fn e3_set_desktop_always_on_top(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.desktop_lyrics_always_on_top = enabled;
+        let _ = self.settings.save();
+        self.toast(
+            if enabled {
+                self.tr("桌面歌词已设为置顶")
+            } else {
+                self.tr("桌面歌词已取消置顶")
+            },
+            cx,
+        );
+    }
+
+    pub fn e3_set_desktop_locked(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.desktop_lyrics_locked = enabled;
+        let _ = self.settings.save();
+        self.toast(
+            if enabled {
+                self.tr("桌面歌词位置已锁定")
+            } else {
+                self.tr("桌面歌词位置已解锁")
+            },
+            cx,
+        );
+    }
+
+    pub fn e3_set_desktop_click_through(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.desktop_lyrics_click_through = enabled;
+        let _ = self.settings.save();
+        self.toast(
+            if enabled {
+                self.tr("桌面歌词已启用鼠标穿透")
+            } else {
+                self.tr("桌面歌词已关闭鼠标穿透")
+            },
+            cx,
+        );
+    }
+
+    pub fn e3_set_desktop_opacity(&mut self, opacity: u8, cx: &mut Context<Self>) {
+        self.settings.desktop_lyrics_opacity = opacity.clamp(30, 100);
+        let _ = self.settings.save();
+        self.toast(
+            format!("桌面歌词背景透明度：{}%", self.settings.desktop_lyrics_opacity),
+            cx,
+        );
+    }
+
+    pub fn e3_set_desktop_align(&mut self, align: &str, cx: &mut Context<Self>) {
+        self.settings.desktop_lyrics_align = match align {
+            "left" | "right" => align.to_string(),
+            _ => "center".to_string(),
+        };
+        let _ = self.settings.save();
+        self.toast(self.tr("桌面歌词对齐方式已保存"), cx);
+    }
+
+    pub fn e3_set_lazy_startup(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.lazy_startup = enabled;
+        let _ = self.settings.save();
+        self.toast(
+            if enabled {
+                self.tr("启动性能优化已开启")
+            } else {
+                self.tr("启动性能优化已关闭")
+            },
+            cx,
+        );
+    }
+
+    pub fn e3_set_compact_width(&mut self, width: u32, cx: &mut Context<Self>) {
+        self.settings.player_bar_compact_width = width.clamp(720, 1200);
+        let _ = self.settings.save();
+        self.toast(
+            format!("播放栏折叠阈值：{} px", self.settings.player_bar_compact_width),
             cx,
         );
     }

@@ -114,11 +114,16 @@ impl Render for DesktopLyrics {
             .get(active.saturating_add(1))
             .map(|line| line.text.clone())
             .unwrap_or_default();
-        let base = root.settings.lyrics_font_size.clamp(14, 30) as f32;
+        let base = root.settings.desktop_lyrics_font_size.clamp(20, 44) as f32;
         let mut background = theme::bg();
         background.a = (root.settings.desktop_lyrics_opacity.clamp(30, 100) as f32 / 100.0)
             .clamp(0.3, 1.0);
         let align = root.settings.desktop_lyrics_align.as_str();
+        let active_color = if root.settings.desktop_lyrics_color == "text" {
+            theme::text()
+        } else {
+            theme::accent()
+        };
 
         div()
             .size_full()
@@ -135,9 +140,9 @@ impl Render for DesktopLyrics {
                     .when(align == "left", |this| this.text_left())
                     .when(align == "center", |this| this.text_center())
                     .when(align == "right", |this| this.text_right())
-                    .text_size(px((base + 10.0).clamp(24.0, 40.0)))
+                    .text_size(px(base))
                     .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme::accent())
+                    .text_color(active_color)
                     .child(current),
             )
             .when(!root.settings.desktop_lyrics_single_line && !next.is_empty(), |this| {
@@ -148,7 +153,7 @@ impl Render for DesktopLyrics {
                         .when(align == "center", |this| this.text_center())
                         .when(align == "right", |this| this.text_right())
                         .truncate()
-                        .text_size(px((base + 1.0).clamp(16.0, 28.0)))
+                        .text_size(px((base - 8.0).clamp(16.0, 36.0)))
                         .text_color(theme::text_muted())
                         .child(next),
                 )

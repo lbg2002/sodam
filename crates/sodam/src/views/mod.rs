@@ -36,7 +36,7 @@ const COL_TIME: f32 = 60.0;
 /// 标题列保底宽度：固定列再多也不能把标题挤没。
 const COL_TITLE_MIN: f32 = 160.0;
 const COL_LIKE: f32 = 28.0;
-const COL_DOWNLOAD: f32 = 32.0;
+const COL_DOWNLOAD: f32 = 48.0;
 
 fn vip_badge() -> AnyElement {
     div()
@@ -866,7 +866,13 @@ fn subtitle_for(root: &Root) -> String {
                 root.localized("{} 首", &[root.liked.len().to_string()])
             }
         }
-        Nav::Downloads => root.localized("{} 首", &[root.downloads.len().to_string()]),
+        Nav::Downloads => root.localized(
+            "{} 首 · {} 待下载",
+            &[
+                root.downloads.len().to_string(),
+                root.pending_downloads.len().to_string(),
+            ],
+        ),
         Nav::Library => match &root.open_playlist {
             Some((_, _, tracks)) => root.localized("{} 首", &[tracks.len().to_string()]),
             None => {

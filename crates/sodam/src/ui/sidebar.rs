@@ -53,7 +53,9 @@ fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> A
         .text_size(theme::Text::Body.size())
         .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
             // 未登录时只放行「设置」，其他入口都拦回去（登录在设置 → 账户）
-            if root.settings.cookie.trim().is_empty() && nav != Nav::Settings {
+            if root.settings.cookie.trim().is_empty()
+                && !matches!(nav, Nav::Settings | Nav::Downloads)
+            {
                 root.set_nav(Nav::Settings, cx);
                 root.set_status("请先在「设置 → 账户」扫码登录", &[]);
                 return;

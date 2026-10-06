@@ -122,7 +122,10 @@ pub fn record_many_with_alias(tracks: &[TrackItem], alias: Option<&str>) -> Resu
             .map(|record| record.aliases.clone())
             .unwrap_or_default();
         if let Some(alias) = alias.map(str::trim).filter(|value| !value.is_empty()) {
-            if !aliases.iter().any(|known| known.eq_ignore_ascii_case(alias)) {
+            if !aliases
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(alias))
+            {
                 aliases.insert(0, alias.to_string());
                 aliases.truncate(8);
             }
@@ -180,7 +183,11 @@ mod tests {
     #[test]
     fn record_type_round_trip() {
         let record = LocalTrackRecord {
-            track: TrackItem { id: "1".into(), title: "Song".into(), ..Default::default() },
+            track: TrackItem {
+                id: "1".into(),
+                title: "Song".into(),
+                ..Default::default()
+            },
             last_seen: 1,
             aliases: vec!["song".into()],
         };

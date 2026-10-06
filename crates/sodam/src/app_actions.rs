@@ -1970,12 +1970,91 @@ impl Root {
         .detach();
     }
 
+    pub fn queue_batch_download(
+        &mut self,
+        tracks: Arc<Vec<TrackItem>>,
+        cx: &mut Context<Self>,
+    ) {
+        if tracks.is_empty() {
+            return;
+        }
+        self.batch_download_ids = tracks.iter().map(|track| track.id.clone()).collect();
+        self.batch_download_total = self.batch_download_ids.len();
+        self.batch_download_paused = false;
+        let mut queued = 0usize;
+        for track in tracks.iter() {
+            if self.downloaded_ids.contains(&track.id) {
+                continue;
+            }
+            if self
+                .pending_downloads
+                .insert(track.id.clone(), track.clone())
+                .is_none()
+            {
+                queued += 1;
+            }
+        }
+        self.persist_pending_downloads();
+        self.status = self.localized(
+            "批量下载：{} 首已加入任务，{} 首等待处理",
+            &[self.batch_download_total.to_string(), queued.to_string()],
+        );
+        self.process_pending_downloads(cx);
+        cx.notify();
+    }
+
+    pub fn pause_batch_download(&mut self, paused: bool, cx: &mut Context<Self>) {
+        if self.batch_download_total == 0 {
+            return;
+        }
+        self.batch_download_paused = paused;
+        self.status = if paused {
+            self.tr("批量下载已暂停").to_string()
+        } else {
+            self.tr("批量下载已继续").to_string()
+        };
+        if !paused {
+            self.process_pending_downloads(cx);
+        }
+        cx.notify();
+    }
+
+    pub fn cancel_batch_download(&mut self, cx: &mut Context<Self>) {
+        if self.batch_download_total == 0 {
+            return;
+        }
+        let ids = self.batch_download_ids.clone();
+        self.pending_downloads
+            .retain(|track_id, _| !ids.contains(track_id));
+        self.persist_pending_downloads();
+        self.batch_download_ids.clear();
+        self.batch_download_total = 0;
+        self.batch_download_paused = false;
+        self.status = self.tr("已取消批量下载任务").to_string();
+        cx.notify();
+    }
+
+    pub fn batch_download_progress(&self) -> (usize, usize) {
+        if self.batch_download_total == 0 {
+            return (0, 0);
+        }
+        let done = self
+            .batch_download_ids
+            .iter()
+            .filter(|id| self.downloaded_ids.contains(*id))
+            .count();
+        (done, self.batch_download_total)
+    }
+
     /// 定期尝试待下载项。这里只看本地播放缓存，不会主动触发取流或播放。
     pub(crate) fn process_pending_downloads(&mut self, cx: &mut Context<Self>) {
         let candidates: Vec<TrackItem> = self
             .pending_downloads
             .values()
             .filter(|track| !self.download_inflight.contains(&track.id))
+            .filter(|track| {
+                !(self.batch_download_paused && self.batch_download_ids.contains(&track.id))
+            })
             .take(2)
             .cloned()
             .collect();
@@ -2014,8 +2093,16 @@ impl Root {
                             items.insert(0, item.clone());
                             root.downloads = Arc::new(items);
                             Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
-                            root.status = root
-                                .localized("待下载已完成：{}", std::slice::from_ref(&track.title));
+                            let (done, total) = root.batch_download_progress();
+                            if total > 0 && done >= total {
+                                root.batch_download_ids.clear();
+                                root.batch_download_total = 0;
+                                root.batch_download_paused = false;
+                                root.status = root.tr("批量下载任务已完成").to_string();
+                            } else {
+                                root.status = root
+                                    .localized("待下载已完成：{}", std::slice::from_ref(&track.title));
+                            }
                             cx.notify();
                         }
                         Ok(None) => {}

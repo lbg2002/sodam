@@ -518,7 +518,8 @@ fn run_server(
     let mut last_emitted = MprisState::default();
     loop {
         connection.process(Duration::from_millis(250))?;
-        if let Ok(current) = state.lock().map(|state| state.clone()) {
+        if let Ok(current) = state.lock() {
+            let current = current.clone();
             if observable_state_changed(&last_emitted, &current) {
                 emit_properties_changed(&connection, &current);
                 last_emitted = current;

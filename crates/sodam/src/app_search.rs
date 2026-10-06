@@ -22,6 +22,7 @@ impl Root {
         if self.searching {
             return;
         }
+        let _ = sodam_core::search_history::record(&keyword);
         let scope = self.search_tab;
         let settings = self.settings.clone();
         self.searching = true;
@@ -31,6 +32,21 @@ impl Root {
 
         let work_keyword = keyword.clone();
         let work = cx.background_spawn(async move {
+            if settings.offline_mode {
+                let tracks = if matches!(scope, SearchScope::All | SearchScope::Tracks) {
+                    sodam_core::local_library::tracks()
+                        .into_iter()
+                        .filter(|track| crate::experience3::fuzzy_matches(track, &work_keyword))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                return Ok(SearchResults {
+                    keyword: work_keyword,
+                    tracks,
+                    ..Default::default()
+                });
+            }
             Session::new(settings).search_scope(&work_keyword, scope)
         });
         cx.spawn(async move |this, cx| {

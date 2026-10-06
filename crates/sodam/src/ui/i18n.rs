@@ -115,7 +115,6 @@ impl Language {
             "剩余 {} 分钟" => "{} minutes remaining",
             "睡眠定时" => "Sleep Timer",
             "15 分钟" => "15 minutes",
-            "30 分钟" => "30 minutes",
             "60 分钟" => "60 minutes",
             "90 分钟" => "90 minutes",
 
@@ -132,7 +131,6 @@ impl Language {
             "批量下载已继续" => "Batch download resumed",
             "已取消批量下载任务" => "Batch download cancelled",
             "批量下载任务已完成" => "Batch download completed",
-            "暂停" => "Pause",
             "继续" => "Resume",
             "取消任务" => "Cancel Task",
             "{} / {} 首" => "{} / {} tracks",

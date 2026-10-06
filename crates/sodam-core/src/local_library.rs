@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn older_catalog_without_aliases_still_loads() {
-        let text = r#"{"track":{"id":"1","title":"Song"},"last_seen":1}"#;
+        let text = r#"{"track":{"id":"1","title":"Song","artist":"","album":"","artist_id":"","album_id":"","cover":"","duration_seconds":0,"vip":false},"last_seen":1}"#;
         let decoded: LocalTrackRecord = serde_json::from_str(text).unwrap();
         assert!(decoded.aliases.is_empty());
     }

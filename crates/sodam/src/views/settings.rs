@@ -709,6 +709,123 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     })
     .collect();
 
+    let lyric_font_rows: Vec<AnyElement> = [
+        (16u32, root.tr("小")),
+        (18u32, root.tr("标准")),
+        (22u32, root.tr("大")),
+        (26u32, root.tr("特大")),
+    ]
+    .iter()
+    .map(|(value, title)| {
+        let chosen = root.settings.lyrics_font_size == *value;
+        let value = *value;
+        div()
+            .id(gpui::ElementId::Name(format!("lyrics-font-{value}").into()))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_lyrics_font_size(value, cx);
+            }))
+            .child(title.to_string())
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
+    let lyric_spacing_rows: Vec<AnyElement> = [
+        (28u32, root.tr("紧凑")),
+        (32u32, root.tr("标准")),
+        (40u32, root.tr("宽松")),
+        (48u32, root.tr("很宽")),
+    ]
+    .iter()
+    .map(|(value, title)| {
+        let chosen = root.settings.lyrics_line_height == *value;
+        let value = *value;
+        div()
+            .id(gpui::ElementId::Name(
+                format!("lyrics-spacing-{value}").into(),
+            ))
+            .flex()
+            .flex_row()
+            .items_center()
+            .justify_between()
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(chosen, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_lyrics_line_height(value, cx);
+            }))
+            .child(title.to_string())
+            .when(chosen, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON))
+                        .text_color(theme::accent()),
+                )
+            })
+            .into_any_element()
+    })
+    .collect();
+
+    let lyric_offset_rows: Vec<AnyElement> = [-500i64, -250, 0, 250, 500]
+        .into_iter()
+        .map(|value| {
+            let chosen = root.settings.lyrics_offset_ms == value;
+            let title = if value > 0 {
+                format!("+{value} ms")
+            } else {
+                format!("{value} ms")
+            };
+            div()
+                .id(gpui::ElementId::Name(
+                    format!("lyrics-offset-{value}").into(),
+                ))
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .px(px(theme::space::MD))
+                .py(px(theme::space::SM))
+                .rounded(px(theme::radius::ROW))
+                .cursor_pointer()
+                .when(chosen, |this| this.bg(theme::surface_selected()))
+                .hover(|style| style.bg(theme::surface_hover()))
+                .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.set_lyrics_offset_ms(value, cx);
+                }))
+                .child(title)
+                .when(chosen, |this| {
+                    this.child(
+                        svg()
+                            .path(icons::path("check"))
+                            .size(px(theme::ICON))
+                            .text_color(theme::accent()),
+                    )
+                })
+                .into_any_element()
+        })
+        .collect();
+
     let account_card = account_section(root, cx);
 
     let language_rows: Vec<AnyElement> = [
@@ -847,16 +964,116 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 )
                 .into_any_element()
         }
+        SettingsSection::Lyrics => div()
+            .flex()
+            .flex_col()
+            .gap(px(theme::space::XL))
+            .child(settings_heading(
+                root.tr("歌词字号"),
+                root.tr("调整播放页歌词文字大小"),
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::XS))
+                    .children(lyric_font_rows),
+            )
+            .child(settings_heading(
+                root.tr("歌词行距"),
+                root.tr("调整每行歌词之间的垂直间距"),
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::XS))
+                    .children(lyric_spacing_rows),
+            )
+            .child(settings_heading(
+                root.tr("歌词时间偏移"),
+                root.tr("负值让歌词更早出现，正值让歌词更晚出现"),
+            ))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::XS))
+                    .children(lyric_offset_rows),
+            )
+            .into_any_element(),
         SettingsSection::Downloads => {
-            let path = sodam_core::downloads::download_dir().display().to_string();
+            let path = sodam_core::downloads::download_dir_for(&root.settings.download_dir)
+                .display()
+                .to_string();
             div()
                 .flex()
                 .flex_col()
                 .gap(px(theme::space::XL))
                 .child(settings_heading(
                     root.tr("下载设置"),
-                    &root.localized("默认保存到：{}", &[path]),
+                    &root.localized("当前保存到：{}", &[path]),
                 ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(
+                            div()
+                                .id("choose-download-dir")
+                                .h(px(theme::size::CONTROL_SM))
+                                .px(px(theme::space::MD))
+                                .flex()
+                                .items_center()
+                                .rounded(px(theme::radius::ROW))
+                                .bg(theme::surface_elevated())
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(
+                                    |root, _event: &ClickEvent, _window, cx| {
+                                        root.choose_download_directory(cx);
+                                    },
+                                ))
+                                .child(root.tr("选择目录")),
+                        )
+                        .child(
+                            div()
+                                .id("open-download-dir-settings")
+                                .h(px(theme::size::CONTROL_SM))
+                                .px(px(theme::space::MD))
+                                .flex()
+                                .items_center()
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .on_click(cx.listener(
+                                    |root, _event: &ClickEvent, _window, cx| {
+                                        root.open_download_folder(cx);
+                                    },
+                                ))
+                                .child(root.tr("打开目录")),
+                        )
+                        .when(!root.settings.download_dir.trim().is_empty(), |this| {
+                            this.child(
+                                div()
+                                    .id("reset-download-dir")
+                                    .h(px(theme::size::CONTROL_SM))
+                                    .px(px(theme::space::MD))
+                                    .flex()
+                                    .items_center()
+                                    .rounded(px(theme::radius::ROW))
+                                    .cursor_pointer()
+                                    .hover(|style| style.bg(theme::surface_hover()))
+                                    .on_click(cx.listener(
+                                        |root, _event: &ClickEvent, _window, cx| {
+                                            root.reset_download_directory(cx);
+                                        },
+                                    ))
+                                    .child(root.tr("恢复默认")),
+                            )
+                        })
                 .child(
                     div()
                         .flex()
@@ -1101,6 +1318,13 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             root,
             SettingsSection::Playback,
             root.tr("播放"),
+            "music",
+            cx,
+        ))
+        .child(settings_nav_item(
+            root,
+            SettingsSection::Lyrics,
+            root.tr("歌词"),
             "music",
             cx,
         ))

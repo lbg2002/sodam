@@ -164,7 +164,12 @@ impl Root {
             let track = next.clone();
             let work_track = track.clone();
             let result = cx.background_spawn(async move {
-                Session::new(settings).download_to_cache(&work_track)
+                let normalize = settings.normalize_volume;
+                let cached = Session::new(settings).download_to_cache(&work_track)?;
+                if normalize {
+                    let _ = sodam_core::loudness::analyze_gain(&cached.path);
+                }
+                Ok::<_, anyhow::Error>(cached)
             });
             cx.spawn(async move |this, cx| {
                 let outcome = result.await;

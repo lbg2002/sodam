@@ -87,6 +87,17 @@ fn bytes_label(bytes: u64) -> String {
 
 pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> AnyElement {
     let query = root.search_input.trim().to_lowercase();
+    let pending_items: Vec<_> = root
+        .pending_downloads
+        .values()
+        .filter(|track| {
+            query.is_empty()
+                || track.title.to_lowercase().contains(&query)
+                || track.artist.to_lowercase().contains(&query)
+                || track.album.to_lowercase().contains(&query)
+        })
+        .cloned()
+        .collect();
     let items: Vec<_> = root
         .downloads
         .iter()
@@ -143,6 +154,84 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
             .child(loading_state(root.tr("正在读取下载列表…")))
             .into_any_element();
     }
+
+    let pending_section = div()
+        .flex()
+        .flex_col()
+        .gap(px(theme::space::XS))
+        .when(!pending_items.is_empty(), |this| {
+            this.child(
+                div()
+                    .px(px(theme::space::SM))
+                    .text_size(theme::Text::Small.size())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme::text_muted())
+                    .child(root.tr("待下载")),
+            )
+            .children(pending_items.into_iter().map(|track| {
+                let cancel_track = track.clone();
+                div()
+                    .id(gpui::ElementId::Name(
+                        format!("pending-download-{}", track.id).into(),
+                    ))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(theme::space::MD))
+                    .h(px(58.0))
+                    .px(px(theme::space::MD))
+                    .rounded(px(theme::radius::ROW))
+                    .bg(theme::surface())
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(theme::Text::Body.size())
+                                    .text_color(theme::text())
+                                    .child(track.title),
+                            )
+                            .child(
+                                div()
+                                    .truncate()
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::text_muted())
+                                    .child(track.artist),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::accent())
+                            .child(root.tr("等待播放缓存")),
+                    )
+                    .child(
+                        div()
+                            .id(gpui::ElementId::Name(
+                                format!("cancel-download-{}", track.id).into(),
+                            ))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .h(px(theme::size::CONTROL_SM))
+                            .px(px(theme::space::MD))
+                            .rounded(px(theme::radius::PILL))
+                            .cursor_pointer()
+                            .hover(|style| style.bg(theme::surface_hover()))
+                            .on_click(cx.listener(
+                                move |root, _event: &ClickEvent, _window, cx| {
+                                    root.toggle_download(cancel_track.clone(), cx);
+                                },
+                            ))
+                            .child(root.tr("取消")),
+                    )
+            }))
+        })
+        .into_any_element();
 
     let body = if items.is_empty() {
         empty_state("download", if root.downloads.is_empty() {
@@ -249,6 +338,7 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
         .min_h(px(0.0))
         .gap(px(theme::space::MD))
         .child(toolbar)
+        .child(pending_section)
         .child(body)
         .into_any_element()
 }

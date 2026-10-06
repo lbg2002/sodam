@@ -1500,6 +1500,11 @@ impl Root {
         self.playback_error = None;
         self.queue = Queue::new(Vec::new());
         self.played_history.clear();
+        self.restore_seek_seconds = None;
+        self.restore_was_playing = None;
+        self.prefetch_inflight.clear();
+        self.prefetch_failed.clear();
+        sodam_core::PlaybackState::clear();
         self.sync_queue_cache();
 
         self.account = None;

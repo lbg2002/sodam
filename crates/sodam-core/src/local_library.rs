@@ -164,6 +164,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn fuzzy_match_supports_subsequence() {
+        assert!(fuzzy_text_match("jay chou 周杰伦", "jco"));
+        assert!(fuzzy_text_match("周杰伦 晴天", "晴天"));
+        assert!(!fuzzy_text_match("周杰伦 晴天", "abc"));
+    }
+
+    #[test]
+    fn older_catalog_without_aliases_still_loads() {
+        let text = r#"{"track":{"id":"1","title":"Song"},"last_seen":1}"#;
+        let decoded: LocalTrackRecord = serde_json::from_str(text).unwrap();
+        assert!(decoded.aliases.is_empty());
+    }
+
+    #[test]
     fn record_type_round_trip() {
         let record = LocalTrackRecord {
             track: TrackItem { id: "1".into(), title: "Song".into(), ..Default::default() },

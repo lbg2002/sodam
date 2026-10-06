@@ -1073,7 +1073,8 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                     ))
                                     .child(root.tr("恢复默认")),
                             )
-                        })
+                        }),
+                )
                 .child(
                     div()
                         .flex()

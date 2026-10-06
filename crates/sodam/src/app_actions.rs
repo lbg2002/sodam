@@ -1271,6 +1271,14 @@ impl Root {
         }
     }
 
+    fn persist_pending_downloads(&mut self) {
+        let mut tracks: Vec<TrackItem> = self.pending_downloads.values().cloned().collect();
+        tracks.sort_by(|a, b| a.title.cmp(&b.title).then_with(|| a.id.cmp(&b.id)));
+        if let Err(err) = sodam_core::downloads::save_pending_downloads(&tracks) {
+            self.status = self.localized("保存待下载队列失败：{err}", &[err.to_string()]);
+        }
+    }
+
     /// 后台读取下载索引；渲染线程只读快照，不同步扫盘。
     pub fn refresh_downloads(&mut self, cx: &mut Context<Self>) {
         if self.downloads_loading {
@@ -1306,6 +1314,7 @@ impl Root {
             return;
         }
         if self.pending_downloads.remove(&track.id).is_some() {
+            self.persist_pending_downloads();
             self.status = self.localized("已取消待下载：{}", std::slice::from_ref(&track.title));
             cx.notify();
             return;
@@ -1327,6 +1336,7 @@ impl Root {
                 match result {
                     Ok(Some(item)) => {
                         root.pending_downloads.remove(&track.id);
+                        root.persist_pending_downloads();
                         let mut items = root.downloads.as_ref().clone();
                         items.retain(|old| old.track_id != item.track_id);
                         items.insert(0, item.clone());
@@ -1338,6 +1348,7 @@ impl Root {
                     Ok(None) => {
                         root.pending_downloads
                             .insert(track.id.clone(), track.clone());
+                        root.persist_pending_downloads();
                         root.status = root.localized(
                             "已加入待下载：{}；正常播放产生缓存后会自动保存",
                             std::slice::from_ref(&track.title),
@@ -1380,6 +1391,7 @@ impl Root {
                     match result {
                         Ok(Some(item)) => {
                             root.pending_downloads.remove(&track.id);
+                            root.persist_pending_downloads();
                             let mut items = root.downloads.as_ref().clone();
                             items.retain(|old| old.track_id != item.track_id);
                             items.insert(0, item.clone());
@@ -1399,6 +1411,62 @@ impl Root {
             })
             .detach();
         }
+    }
+
+    pub fn retry_pending_download(&mut self, track: TrackItem, cx: &mut Context<Self>) {
+        if self.download_inflight.contains(&track.id) {
+            return;
+        }
+        self.pending_downloads
+            .insert(track.id.clone(), track.clone());
+        self.persist_pending_downloads();
+        self.download_inflight.insert(track.id.clone());
+
+        let quality = self.settings.quality.clone();
+        let work_track = track.clone();
+        let work = cx.background_spawn(async move {
+            sodam_core::downloads::export_cached_track(&work_track, &quality)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.download_inflight.remove(&track.id);
+                match result {
+                    Ok(Some(item)) => {
+                        root.pending_downloads.remove(&track.id);
+                        root.persist_pending_downloads();
+                        let mut items = root.downloads.as_ref().clone();
+                        items.retain(|old| old.track_id != item.track_id);
+                        items.insert(0, item.clone());
+                        root.downloads = Arc::new(items);
+                        Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
+                        root.status = root.localized(
+                            "下载已完成：{}",
+                            std::slice::from_ref(&track.title),
+                        );
+                    }
+                    Ok(None) => {
+                        root.status = root.localized(
+                            "仍在等待播放缓存：{}",
+                            std::slice::from_ref(&track.title),
+                        );
+                    }
+                    Err(err) => {
+                        root.status = root.localized("下载失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn open_download_file(&mut self, path: PathBuf, cx: &mut Context<Self>) {
+        self.status = match system_open(&path.display().to_string()) {
+            Ok(_) => self.tr("已打开下载文件").to_string(),
+            Err(err) => self.localized("打开下载文件失败：{err}", &[err.to_string()]),
+        };
+        cx.notify();
     }
 
     pub fn delete_download(&mut self, track_id: String, title: String, cx: &mut Context<Self>) {

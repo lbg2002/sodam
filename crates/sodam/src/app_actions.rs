@@ -173,6 +173,8 @@ impl Root {
                     root.prefetch_inflight.remove(&track.id);
                     if succeeded {
                         root.prefetch_failed.remove(&track.id);
+                        Arc::make_mut(&mut root.cached_ids).insert(track.id.clone());
+                        root.trim_cache_if_needed(cx);
                     } else {
                         root.prefetch_failed
                             .insert(track.id.clone(), std::time::Instant::now());
@@ -221,6 +223,10 @@ impl Root {
                 if root.prefetch_patrol % 25 == 0 {
                     root.spawn_prefetch(cx);
                     root.process_pending_downloads(cx);
+                    root.persist_playback_state(cx);
+                }
+                if root.prefetch_patrol % 150 == 0 {
+                    root.trim_cache_if_needed(cx);
                 }
                 root.load_more_recommendation(cx);
             });
@@ -310,6 +316,130 @@ impl Root {
             self.spawn_prefetch(cx);
         }
         cx.notify();
+    }
+
+    pub fn set_cache_limit_gb(&mut self, limit_gb: u64, cx: &mut Context<Self>) {
+        self.settings.cache_limit_gb = limit_gb;
+        self.status = match self.settings.save() {
+            Ok(()) => {
+                if limit_gb == 0 {
+                    self.tr("播放缓存上限：不限制").to_string()
+                } else {
+                    self.localized("播放缓存上限：{} GB", &[limit_gb.to_string()])
+                }
+            }
+            Err(err) => self.localized("缓存设置保存失败：{err}", &[err.to_string()]),
+        };
+        self.trim_cache_if_needed(cx);
+        cx.notify();
+    }
+
+    /// 后台扫描播放缓存，渲染层只读 cached_ids。
+    pub(crate) fn refresh_audio_cache_index(&mut self, cx: &mut Context<Self>) {
+        if self.cache_index_loading {
+            return;
+        }
+        self.cache_index_loading = true;
+        let work = cx.background_spawn(async { sodam_core::audio::cached_audio_ids() });
+        cx.spawn(async move |this, cx| {
+            let ids = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.cache_index_loading = false;
+                root.cached_ids = Arc::new(ids);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// LRU 自动裁剪播放缓存；下载目录不在这里，永远不会被自动清理。
+    pub(crate) fn trim_cache_if_needed(&mut self, cx: &mut Context<Self>) {
+        let limit_gb = self.settings.cache_limit_gb;
+        if limit_gb == 0 || self.cache_trim_inflight {
+            return;
+        }
+        self.cache_trim_inflight = true;
+        let max_bytes = limit_gb.saturating_mul(1024 * 1024 * 1024);
+        let mut protected = self.prefetch_inflight.clone();
+        if let Some(track) = self.queue.current() {
+            protected.insert(track.id.clone());
+        }
+        if let Some(track) = &self.pending_track {
+            protected.insert(track.id.clone());
+        }
+        let work = cx.background_spawn(async move {
+            sodam_core::audio::trim_audio_cache(max_bytes, &protected)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.cache_trim_inflight = false;
+                if result.removed_assets > 0 {
+                    root.status = root.localized(
+                        "已自动清理 {} 个旧缓存",
+                        &[result.removed_assets.to_string()],
+                    );
+                    root.refresh_audio_cache_index(cx);
+                    root.refresh_cache_stats(cx);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// 把队列、当前曲目和进度写到独立状态文件，供下次启动恢复。
+    pub(crate) fn persist_playback_state(&mut self, cx: &mut Context<Self>) {
+        if self.playback_state_save_inflight || self.queue.is_empty() {
+            return;
+        }
+        self.playback_state_save_inflight = true;
+        let snapshot = self.engine.snapshot();
+        let current_id = self.queue.current().map(|track| track.id.as_str());
+        let position_seconds = if current_id == Some(snapshot.track_id.as_str()) {
+            snapshot.position_seconds
+        } else {
+            0.0
+        };
+        let state = sodam_core::PlaybackState {
+            queue: self.queue.tracks().to_vec(),
+            index: self.queue.index(),
+            mode: self.queue.mode,
+            position_seconds,
+            was_playing: snapshot.playing || self.pending_track.is_some(),
+            ..Default::default()
+        };
+        let work = cx.background_spawn(async move { state.save() });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, _cx| {
+                root.playback_state_save_inflight = false;
+                if let Err(err) = result {
+                    if std::env::var("SODAM_PLAYER_LOG").is_ok() {
+                        eprintln!("[player] 保存播放恢复状态失败：{err}");
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// 队列前方缓存状态：（已缓存、正在预取、目标数）。
+    pub fn prefetch_buffer_status(&self) -> (usize, usize, usize) {
+        let target = prefetch_ahead_count(self.settings.prefetch_count);
+        if target == 0 {
+            return (0, 0, 0);
+        }
+        let ahead = self.queue.peek_ahead(target);
+        let ready = ahead
+            .iter()
+            .filter(|track| self.cached_ids.contains(&track.id))
+            .count();
+        let inflight = ahead
+            .iter()
+            .filter(|track| self.prefetch_inflight.contains(&track.id))
+            .count();
+        (ready, inflight, target.min(ahead.len()))
     }
 
     fn download_quality_preference(&self) -> String {
@@ -2171,6 +2301,34 @@ impl Root {
         .detach();
     }
 
+    pub fn play(&mut self, cx: &mut Context<Self>) {
+        let snapshot = self.engine.snapshot();
+        if snapshot.track_id.is_empty() {
+            self.start_track(cx);
+            return;
+        }
+        self.engine.play();
+        self.playing = true;
+        self.status = self.tr("播放中").to_string();
+        cx.notify();
+    }
+
+    pub fn pause(&mut self, cx: &mut Context<Self>) {
+        self.engine.pause();
+        self.playing = false;
+        self.status = self.tr("已暂停").to_string();
+        self.persist_playback_state(cx);
+        cx.notify();
+    }
+
+    pub fn stop_playback(&mut self, cx: &mut Context<Self>) {
+        self.engine.stop();
+        self.playing = false;
+        self.status = self.tr("已停止").to_string();
+        self.persist_playback_state(cx);
+        cx.notify();
+    }
+
     pub fn toggle_play(&mut self, cx: &mut Context<Self>) {
         let snapshot = self.engine.snapshot();
         if snapshot.track_id.is_empty() {
@@ -2254,7 +2412,22 @@ impl Root {
                 }
                 match result {
                     Ok(cached) => {
-                        root.engine.load(track.clone(), cached.path, cached.quality);
+                        root.engine
+                            .load(track.clone(), cached.path.clone(), cached.quality);
+                        Arc::make_mut(&mut root.cached_ids).insert(track.id.clone());
+
+                        let restore_seek = root.restore_seek_seconds.take();
+                        let restore_playing = root.restore_was_playing.take();
+                        if let Some(position) = restore_seek {
+                            root.engine.seek(position);
+                        }
+                        if restore_playing == Some(false) {
+                            root.engine.pause();
+                            root.playing = false;
+                        } else {
+                            root.playing = true;
+                        }
+
                         if std::env::var("SODAM_PLAYER_LOG").is_ok() {
                             eprintln!("[player] 装载完成：{}", track.title);
                         }
@@ -2269,9 +2442,17 @@ impl Root {
                                 root.played_history.drain(0..overflow);
                             }
                         }
-                        root.set_status("播放中：{}", std::slice::from_ref(&track.title));
+                        if restore_playing == Some(false) {
+                            root.set_status(
+                                "已恢复：{}（暂停）",
+                                std::slice::from_ref(&track.title),
+                            );
+                        } else {
+                            root.set_status("播放中：{}", std::slice::from_ref(&track.title));
+                        }
                         // 开播后立刻预取下一首，切歌时基本是秒开
                         root.spawn_prefetch(cx);
+                        root.trim_cache_if_needed(cx);
                     }
                     Err(err) => {
                         if std::env::var("SODAM_PLAYER_LOG").is_ok() {

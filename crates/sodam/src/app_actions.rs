@@ -79,7 +79,15 @@ impl Root {
     /// （后者自动覆盖 append/remove 等队列变更，不必逐个调用点补）。
     pub(crate) fn spawn_prefetch(&mut self, cx: &mut Context<Self>) {
         let log = std::env::var("SODAM_PREFETCH_LOG").is_ok();
-        let ahead = prefetch_ahead_count(self.settings.prefetch_count);
+        if self.settings.offline_mode {
+            return;
+        }
+        let ahead = prefetch_target_count(
+            &self.queue,
+            self.settings.prefetch_count,
+            self.settings.prefetch_adaptive,
+            self.settings.prefetch_minutes,
+        );
         if ahead == 0 {
             return;
         }
@@ -189,7 +197,7 @@ impl Root {
         }
     }
 
-    /// UI 心跳：播放中每 200ms 刷新一次（进度条需要持续重绘），
+    /// UI 心跳：播放中每 100ms 刷新一次（进度条与独立播放器窗口需要持续重绘），
     /// 曲目播完则自动切下一首。
     pub(crate) fn start_heartbeat(cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {
@@ -226,10 +234,34 @@ impl Root {
                 // 注意：正在装载下一首（pending）时「播完」属于旧曲目，
                 // 只消费事件不推进——否则会把 pending 的那首跳过去（收尾瞬间
                 // 手动切歌/插入队列时踩过）。
+                if let Some(deadline) = root.sleep_deadline {
+                    if std::time::Instant::now() >= deadline {
+                        root.sleep_deadline = None;
+                        root.sleep_timer_minutes = 0;
+                        root.sleep_after_current = false;
+                        root.engine.pause();
+                        root.playing = false;
+                        root.status = root.tr("睡眠定时结束，已暂停播放").to_string();
+                        root.persist_playback_state(cx);
+                        cx.notify();
+                    }
+                }
+
                 if snap.finished && snap.finished_seq != root.last_finished_seq {
                     root.last_finished_seq = snap.finished_seq;
                     if root.pending_track.is_none() {
-                        root.next_track(cx);
+                        if root.sleep_after_current {
+                            root.sleep_after_current = false;
+                            root.sleep_deadline = None;
+                            root.sleep_timer_minutes = 0;
+                            root.engine.pause();
+                            root.playing = false;
+                            root.status = root.tr("当前歌曲播放结束，已暂停").to_string();
+                            root.persist_playback_state(cx);
+                            cx.notify();
+                        } else {
+                            root.next_track(cx);
+                        }
                     }
                 }
                 // 预取巡检：每 50 拍（约 5s）补一次，覆盖 append/remove 等；
@@ -272,6 +304,79 @@ impl Root {
             self.sync_queue_cache();
             cx.notify();
         }
+    }
+
+    pub fn move_queue_item(&mut self, from: usize, to: usize, cx: &mut Context<Self>) {
+        if self.queue.move_track(from, to) {
+            self.queue_menu = None;
+            self.sync_queue_cache();
+            self.persist_playback_state(cx);
+            self.spawn_prefetch(cx);
+            self.status = self.tr("播放队列顺序已更新").to_string();
+            cx.notify();
+        }
+    }
+
+    pub fn set_sleep_timer_minutes(&mut self, minutes: u32, cx: &mut Context<Self>) {
+        self.sleep_after_current = false;
+        self.sleep_timer_minutes = minutes;
+        self.sleep_deadline = if minutes == 0 {
+            None
+        } else {
+            Some(std::time::Instant::now() + std::time::Duration::from_secs(minutes as u64 * 60))
+        };
+        self.sleep_menu_open = false;
+        self.status = if minutes == 0 {
+            self.tr("睡眠定时已关闭").to_string()
+        } else {
+            self.localized("睡眠定时：{} 分钟", &[minutes.to_string()])
+        };
+        cx.notify();
+    }
+
+    pub fn set_sleep_after_current(&mut self, cx: &mut Context<Self>) {
+        self.sleep_deadline = None;
+        self.sleep_timer_minutes = 0;
+        self.sleep_after_current = true;
+        self.sleep_menu_open = false;
+        self.status = self.tr("将在当前歌曲结束后暂停").to_string();
+        cx.notify();
+    }
+
+    pub fn sleep_timer_label(&self) -> String {
+        if self.sleep_after_current {
+            return self.tr("播完当前歌曲").to_string();
+        }
+        if let Some(deadline) = self.sleep_deadline {
+            let seconds = deadline
+                .saturating_duration_since(std::time::Instant::now())
+                .as_secs();
+            if seconds > 0 {
+                return self.localized("剩余 {} 分钟", &[seconds.div_ceil(60).to_string()]);
+            }
+        }
+        self.tr("睡眠定时").to_string()
+    }
+
+    pub fn open_mini_player(&mut self, cx: &mut Context<Self>) {
+        let root = cx.entity();
+        cx.defer(move |cx| crate::ui::mini_player::open(root, cx));
+        self.status = self.tr("已打开迷你播放器").to_string();
+        cx.notify();
+    }
+
+    pub fn open_desktop_lyrics(&mut self, cx: &mut Context<Self>) {
+        if let Some(track) = self
+            .pending_track
+            .clone()
+            .or_else(|| self.queue.current().cloned())
+        {
+            self.load_lyrics(track, false, cx);
+        }
+        let root = cx.entity();
+        cx.defer(move |cx| crate::ui::desktop_lyrics::open(root, cx));
+        self.status = self.tr("已打开桌面歌词").to_string();
+        cx.notify();
     }
 
     /// 队列变化后刷新快照（抽屉渲染只读它，不再每帧 to_vec）。
@@ -432,6 +537,66 @@ impl Root {
             ),
             Err(err) => self.localized("歌词设置保存失败：{err}", &[err.to_string()]),
         };
+        cx.notify();
+    }
+
+    pub fn set_prefetch_adaptive(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.prefetch_adaptive = enabled;
+        if enabled && self.settings.prefetch_count == 0 {
+            self.settings.prefetch_count = 3;
+        }
+        self.status = match self.settings.save() {
+            Ok(()) => {
+                if enabled {
+                    self.localized(
+                        "自适应预加载：至少 {} 分钟",
+                        &[self.settings.prefetch_minutes.to_string()],
+                    )
+                } else {
+                    self.localized(
+                        "固定预加载：前方 {} 首",
+                        &[self.settings.prefetch_count.to_string()],
+                    )
+                }
+            }
+            Err(err) => self.localized("预加载设置保存失败：{err}", &[err.to_string()]),
+        };
+        self.spawn_prefetch(cx);
+        cx.notify();
+    }
+
+    pub fn set_prefetch_minutes(&mut self, minutes: u32, cx: &mut Context<Self>) {
+        self.settings.prefetch_minutes = minutes.clamp(5, 30);
+        self.settings.prefetch_adaptive = true;
+        self.status = match self.settings.save() {
+            Ok(()) => self.localized(
+                "自适应预加载：至少 {} 分钟",
+                &[self.settings.prefetch_minutes.to_string()],
+            ),
+            Err(err) => self.localized("预加载设置保存失败：{err}", &[err.to_string()]),
+        };
+        self.spawn_prefetch(cx);
+        cx.notify();
+    }
+
+    pub fn set_offline_mode(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.offline_mode = enabled;
+        if enabled {
+            self.cover_pool.clear_pending();
+        }
+        self.status = match self.settings.save() {
+            Ok(()) => {
+                if enabled {
+                    self.tr("已进入离线模式：只播放本地缓存").to_string()
+                } else {
+                    self.tr("已退出离线模式").to_string()
+                }
+            }
+            Err(err) => self.localized("离线模式保存失败：{err}", &[err.to_string()]),
+        };
+        if !enabled {
+            self.spawn_prefetch(cx);
+        }
         cx.notify();
     }
 
@@ -599,7 +764,15 @@ impl Root {
     ///
     /// 与实际预取策略一致：处于失败冷却的曲目不占目标名额，会继续向后看。
     pub fn prefetch_buffer_status(&self) -> (usize, usize, usize) {
-        let target = prefetch_ahead_count(self.settings.prefetch_count);
+        if self.settings.offline_mode {
+            return (0, 0, 0);
+        }
+        let target = prefetch_target_count(
+            &self.queue,
+            self.settings.prefetch_count,
+            self.settings.prefetch_adaptive,
+            self.settings.prefetch_minutes,
+        );
         if target == 0 {
             return (0, 0, 0);
         }
@@ -1007,6 +1180,9 @@ impl Root {
     }
 
     pub(crate) fn ensure_original_cover(&mut self, url: &str, cx: &mut Context<Self>) {
+        if self.settings.offline_mode {
+            return;
+        }
         let url = url.trim();
         if url.is_empty() || self.original_covers.contains_key(url) {
             return;
@@ -1057,8 +1233,18 @@ impl Root {
         cx.notify();
 
         let settings = self.settings.clone();
+        let offline = settings.offline_mode;
         let work_track = track.clone();
-        let work = cx.background_spawn(async move { Session::new(settings).lyrics(&work_track) });
+        let work = cx.background_spawn(async move {
+            let session = Session::new(settings);
+            if offline {
+                session
+                    .cached_lyrics(&work_track.id)
+                    .ok_or_else(|| anyhow::anyhow!("离线模式：这首歌没有本地歌词缓存"))
+            } else {
+                session.lyrics(&work_track)
+            }
+        });
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |root, cx| {
@@ -1079,7 +1265,11 @@ impl Root {
                     Err(err) => {
                         root.lyrics = Arc::new(Vec::new());
                         root.lyrics_active = None;
-                        root.lyrics_error = Some(err.to_string());
+                        root.lyrics_error = Some(if root.settings.offline_mode {
+                            root.tr("离线模式：这首歌没有本地歌词缓存").to_string()
+                        } else {
+                            err.to_string()
+                        });
                     }
                 }
                 cx.notify();
@@ -1809,12 +1999,87 @@ impl Root {
         .detach();
     }
 
+    pub fn queue_batch_download(&mut self, tracks: Arc<Vec<TrackItem>>, cx: &mut Context<Self>) {
+        if tracks.is_empty() {
+            return;
+        }
+        self.batch_download_ids = tracks.iter().map(|track| track.id.clone()).collect();
+        self.batch_download_total = self.batch_download_ids.len();
+        self.batch_download_paused = false;
+        let mut queued = 0usize;
+        for track in tracks.iter() {
+            if self.downloaded_ids.contains(&track.id) {
+                continue;
+            }
+            if self
+                .pending_downloads
+                .insert(track.id.clone(), track.clone())
+                .is_none()
+            {
+                queued += 1;
+            }
+        }
+        self.persist_pending_downloads();
+        self.status = self.localized(
+            "批量下载：{} 首已加入任务，{} 首等待处理",
+            &[self.batch_download_total.to_string(), queued.to_string()],
+        );
+        self.process_pending_downloads(cx);
+        cx.notify();
+    }
+
+    pub fn pause_batch_download(&mut self, paused: bool, cx: &mut Context<Self>) {
+        if self.batch_download_total == 0 {
+            return;
+        }
+        self.batch_download_paused = paused;
+        self.status = if paused {
+            self.tr("批量下载已暂停").to_string()
+        } else {
+            self.tr("批量下载已继续").to_string()
+        };
+        if !paused {
+            self.process_pending_downloads(cx);
+        }
+        cx.notify();
+    }
+
+    pub fn cancel_batch_download(&mut self, cx: &mut Context<Self>) {
+        if self.batch_download_total == 0 {
+            return;
+        }
+        let ids = self.batch_download_ids.clone();
+        self.pending_downloads
+            .retain(|track_id, _| !ids.contains(track_id));
+        self.persist_pending_downloads();
+        self.batch_download_ids.clear();
+        self.batch_download_total = 0;
+        self.batch_download_paused = false;
+        self.status = self.tr("已取消批量下载任务").to_string();
+        cx.notify();
+    }
+
+    pub fn batch_download_progress(&self) -> (usize, usize) {
+        if self.batch_download_total == 0 {
+            return (0, 0);
+        }
+        let done = self
+            .batch_download_ids
+            .iter()
+            .filter(|id| self.downloaded_ids.contains(*id))
+            .count();
+        (done, self.batch_download_total)
+    }
+
     /// 定期尝试待下载项。这里只看本地播放缓存，不会主动触发取流或播放。
     pub(crate) fn process_pending_downloads(&mut self, cx: &mut Context<Self>) {
         let candidates: Vec<TrackItem> = self
             .pending_downloads
             .values()
             .filter(|track| !self.download_inflight.contains(&track.id))
+            .filter(|track| {
+                !(self.batch_download_paused && self.batch_download_ids.contains(&track.id))
+            })
             .take(2)
             .cloned()
             .collect();
@@ -1853,8 +2118,21 @@ impl Root {
                             items.insert(0, item.clone());
                             root.downloads = Arc::new(items);
                             Arc::make_mut(&mut root.downloaded_ids).insert(item.track_id);
-                            root.status = root
-                                .localized("待下载已完成：{}", std::slice::from_ref(&track.title));
+                            let (done, total) = root.batch_download_progress();
+                            if total > 0 && done >= total {
+                                root.batch_download_ids.clear();
+                                root.batch_download_total = 0;
+                                root.batch_download_paused = false;
+                                root.status = root.tr("批量下载任务已完成").to_string();
+                            } else {
+                                root.status = root.localized(
+                                    "待下载已完成：{}",
+                                    std::slice::from_ref(&track.title),
+                                );
+                            }
+                            if !root.batch_download_paused {
+                                root.process_pending_downloads(cx);
+                            }
                             cx.notify();
                         }
                         Ok(None) => {}
@@ -2059,6 +2337,9 @@ impl Root {
     /// 用 `cover_attempted` 去重：下载失败的 URL 也记下来，
     /// 否则「缺图 → 每帧重新排队」会变成 CPU/网络空转（实测踩过）。
     pub fn ensure_covers(&mut self, urls: &[String], cx: &mut Context<Self>) {
+        if self.settings.offline_mode {
+            return;
+        }
         let mut added = false;
         for url in urls {
             let url = url.trim();
@@ -2080,6 +2361,9 @@ impl Root {
 
     /// 驱动请求池：保持最多 `MAX_CONCURRENCY` 个下载在飞，完成一个补一个。
     pub(crate) fn pump_covers(&mut self, cx: &mut Context<Self>) {
+        if self.settings.offline_mode {
+            return;
+        }
         while let Some(url) = self.cover_pool.next() {
             let settings = self.settings.clone();
             let fetch_url = url.clone();
@@ -2636,9 +2920,17 @@ impl Root {
 
         let settings = self.settings.clone();
         let work_track = track.clone();
-        // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
+        // 离线模式严格只读已经校验通过的本地缓存；在线模式缓存命中时同样
+        // 直接返回，只有真正 miss 才发起网络请求。
         let work = cx.background_spawn(async move {
-            let session = Session::new(settings);
+            let session = Session::new(settings.clone());
+            if settings.offline_mode {
+                return session
+                    .cached_track(&work_track.id)
+                    .ok_or_else(|| anyhow::anyhow!("离线模式下这首歌尚未缓存"));
+            }
+
+            // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
             let mut last_err = None;
             for attempt in 1..=3 {
                 match session.download_to_cache(&work_track) {
@@ -2727,7 +3019,13 @@ impl Root {
                         );
                         root.status = message.clone();
                         root.playback_error = Some(message);
-                        if root.consecutive_failures >= 3 {
+                        if root.settings.offline_mode {
+                            root.playing = false;
+                            root.status = root.localized(
+                                "离线不可播放：{} 尚未缓存",
+                                std::slice::from_ref(&track.title),
+                            );
+                        } else if root.consecutive_failures >= 3 {
                             root.playing = false;
                             root.status = root
                                 .tr("连续 3 首拉流失败，已暂停（检查网络或签名服务）")
@@ -2746,9 +3044,31 @@ impl Root {
     }
 
     pub fn next_track(&mut self, cx: &mut Context<Self>) {
-        // 切歌时丢掉进度预览，避免「拖到一半换歌」把 seek 用到新歌上。
-        // 队列当前项不会被移除（remove 拒绝当前项），所以直接推进即可。
         self.progress_preview = None;
+        if self.settings.offline_mode {
+            let len = self.queue.len();
+            for _ in 0..len {
+                self.queue.advance();
+                let cached = self
+                    .queue
+                    .current()
+                    .and_then(|track| {
+                        self.session
+                            .as_ref()
+                            .and_then(|session| session.cached_track(&track.id))
+                    })
+                    .is_some();
+                if cached {
+                    self.sync_queue_cache();
+                    self.start_track(cx);
+                    return;
+                }
+            }
+            self.playing = false;
+            self.status = self.tr("离线模式：队列中没有更多已缓存歌曲").to_string();
+            cx.notify();
+            return;
+        }
         self.queue.advance();
         self.sync_queue_cache();
         self.start_track(cx);
@@ -2756,6 +3076,30 @@ impl Root {
 
     pub fn prev_track(&mut self, cx: &mut Context<Self>) {
         self.progress_preview = None;
+        if self.settings.offline_mode {
+            let len = self.queue.len();
+            for _ in 0..len {
+                self.queue.rewind();
+                let cached = self
+                    .queue
+                    .current()
+                    .and_then(|track| {
+                        self.session
+                            .as_ref()
+                            .and_then(|session| session.cached_track(&track.id))
+                    })
+                    .is_some();
+                if cached {
+                    self.sync_queue_cache();
+                    self.start_track(cx);
+                    return;
+                }
+            }
+            self.playing = false;
+            self.status = self.tr("离线模式：队列中没有其他已缓存歌曲").to_string();
+            cx.notify();
+            return;
+        }
         self.queue.rewind();
         self.sync_queue_cache();
         self.start_track(cx);
@@ -2870,6 +3214,35 @@ fn prefetch_ahead_count(configured: usize) -> usize {
         .and_then(|value| value.trim().parse::<usize>().ok())
         .map(|count| count.min(8))
         .unwrap_or(configured.min(8))
+}
+
+fn prefetch_target_count(
+    queue: &Queue,
+    configured: usize,
+    adaptive: bool,
+    target_minutes: u32,
+) -> usize {
+    let fixed = prefetch_ahead_count(configured);
+    if fixed == 0 || !adaptive || std::env::var("SODAM_PREFETCH_COUNT").is_ok() {
+        return fixed;
+    }
+
+    let minimum = fixed.clamp(3, 8);
+    let target_seconds = i64::from(target_minutes.clamp(5, 30)) * 60;
+    let mut seconds = 0i64;
+    let mut count = 0usize;
+    for track in queue.peek_ahead(8) {
+        count += 1;
+        seconds += if track.duration_seconds > 0 {
+            track.duration_seconds
+        } else {
+            240
+        };
+        if count >= minimum && seconds >= target_seconds {
+            break;
+        }
+    }
+    count.max(minimum.min(queue.len().saturating_sub(1))).min(8)
 }
 
 /// 预取并发上限：环境变量 `SODAM_PREFETCH_CONCURRENCY`（默认 2）。

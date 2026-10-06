@@ -219,8 +219,12 @@ fn start_mpris_service(bridge: mpris::MprisBridge, app: Entity<app::Root>, cx: &
 
 /// 打开或激活主窗口；由托盘的 Show 命令调用。
 fn show_window(cx: &mut App, app: &Entity<app::Root>) {
-    if let Some(window) = cx.windows().first() {
-        let _ = window.update(cx, |_, window, _| window.activate_window());
+    if let Some(window) = cx
+        .windows()
+        .iter()
+        .find_map(|window| window.downcast::<app::Root>())
+    {
+        let _ = window.update(cx, |_root, window, _| window.activate_window());
     } else {
         let app = app.clone();
         let options = main_window_options(cx);

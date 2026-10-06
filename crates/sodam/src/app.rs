@@ -575,6 +575,7 @@ impl Root {
             liked_loaded: false,
             liked_scroll: gpui::UniformListScrollHandle::new(),
             list_width: Arc::new(Mutex::new(1200.0)),
+            player_bar_width: Arc::new(Mutex::new(1200.0)),
             queue_scroll: gpui::UniformListScrollHandle::new(),
             open_playlist: None,
             loading_playlist: false,

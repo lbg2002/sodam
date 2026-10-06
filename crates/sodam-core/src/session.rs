@@ -362,11 +362,7 @@ impl Session {
     }
 
     fn lyrics_cache_path(track_id: &str) -> std::path::PathBuf {
-        dirs::cache_dir()
-            .unwrap_or_else(std::env::temp_dir)
-            .join("sodam")
-            .join("lyrics")
-            .join(format!("{:016x}.lrc", hash_url(track_id)))
+        crate::audio::lyrics_cache_dir().join(format!("{:016x}.lrc", hash_url(track_id)))
     }
 
     /// 只读取已经存在的本地歌词缓存，不触发任何网络请求。

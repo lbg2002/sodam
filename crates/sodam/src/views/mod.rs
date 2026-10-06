@@ -185,7 +185,8 @@ fn track_header(cols: Columns, language: crate::ui::i18n::Language) -> AnyElemen
         div()
             .w(px(COL_DOWNLOAD))
             .flex_none()
-            .text_center()
+            .flex()
+            .justify_center()
             .whitespace_nowrap()
             .child(language.text("下载")),
     );

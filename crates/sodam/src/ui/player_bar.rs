@@ -381,7 +381,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                         .truncate()
                                         .cursor_pointer()
                                         .text_size(theme::Text::Body.size())
-                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(theme::text())
                                         .hover(|style| style.text_color(theme::accent()))
                                         .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
@@ -483,6 +483,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                         .truncate()
                                         .cursor_pointer()
                                         .text_size(theme::Text::Small.size())
+                                        .font_weight(gpui::FontWeight::MEDIUM)
                                         .text_color(theme::text_muted())
                                         .hover(|style| style.text_color(theme::accent()))
                                         .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
@@ -1025,6 +1026,9 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                                         div()
                                             .truncate()
                                             .text_size(theme::Text::Body.size())
+                                            .when(playing, |this| {
+                                                this.font_weight(gpui::FontWeight::SEMIBOLD)
+                                            })
                                             .text_color(if playing {
                                                 theme::accent()
                                             } else {

@@ -1956,6 +1956,7 @@ impl Root {
 
     /// 单曲下载按钮：已有播放缓存立即导出，否则进入“待下载”队列。
     pub fn toggle_download(&mut self, track: TrackItem, cx: &mut Context<Self>) {
+        let _ = sodam_core::local_library::record(&track);
         if self.downloaded_ids.contains(&track.id) {
             self.status = self.localized("已下载：{}", std::slice::from_ref(&track.title));
             cx.notify();
@@ -2027,6 +2028,7 @@ impl Root {
         if tracks.is_empty() {
             return;
         }
+        let _ = sodam_core::local_library::record_many(tracks.as_ref());
         self.batch_download_ids = tracks.iter().map(|track| track.id.clone()).collect();
         self.batch_download_total = self.batch_download_ids.len();
         self.batch_download_paused = false;

@@ -3227,7 +3227,7 @@ fn prefetch_target_count(
         return fixed;
     }
 
-    let minimum = fixed.max(3).min(8);
+    let minimum = fixed.clamp(3, 8);
     let target_seconds = i64::from(target_minutes.clamp(5, 30)) * 60;
     let mut seconds = 0i64;
     let mut count = 0usize;

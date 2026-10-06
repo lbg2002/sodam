@@ -93,7 +93,7 @@ pub fn set_output_device(id: &str) -> anyhow::Result<()> {
                 }
             }
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(target_os = "linux"))]
     {

@@ -88,7 +88,9 @@ fn metadata(state: &MprisState) -> PropMap {
         "/org/mpris/MediaPlayer2/track/{}",
         sanitize_path_segment(&state.track_id)
     ))
-    .unwrap_or_else(|_| dbus::Path::from("/org/mpris/MediaPlayer2/track/none"));
+    .unwrap_or_else(|_| {
+        dbus::Path::new("/org/mpris/MediaPlayer2/track/none").expect("valid MPRIS object path")
+    });
 
     map.insert(
         "mpris:trackid".to_string(),

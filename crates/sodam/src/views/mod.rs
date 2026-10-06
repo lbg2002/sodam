@@ -426,10 +426,7 @@ fn track_row(
                 .items_center()
                 .justify_center()
                 .when(prefetching, |this| {
-                    this.child(crate::ui::spinner::spinner(
-                        theme::ICON_SM,
-                        theme::accent(),
-                    ))
+                    this.child(crate::ui::spinner::spinner(theme::ICON_SM, theme::accent()))
                 })
                 .when(!prefetching && audio_cached, |this| {
                     this.child(

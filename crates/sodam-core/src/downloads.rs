@@ -107,7 +107,11 @@ pub fn export_cached_track(
     let stem = safe_filename(&format!(
         "{}{}{} [{}]",
         track.artist,
-        if track.artist.trim().is_empty() { "" } else { " - " },
+        if track.artist.trim().is_empty() {
+            ""
+        } else {
+            " - "
+        },
         track.title,
         track.id
     ));
@@ -268,8 +272,7 @@ fn safe_component(input: &str) -> String {
 fn safe_filename(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     for ch in input.chars() {
-        if matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || ch.is_control()
-        {
+        if matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || ch.is_control() {
             output.push('_');
         } else {
             output.push(ch);

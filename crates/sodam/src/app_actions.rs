@@ -432,6 +432,33 @@ impl Root {
         .detach();
     }
 
+    pub(crate) fn save_playback_state_now(&self) {
+        if self.queue.is_empty() {
+            sodam_core::PlaybackState::clear();
+            return;
+        }
+        let snapshot = self.engine.snapshot();
+        let current_id = self.queue.current().map(|track| track.id.as_str());
+        let position_seconds = if current_id == Some(snapshot.track_id.as_str()) {
+            snapshot.position_seconds
+        } else {
+            0.0
+        };
+        let state = sodam_core::PlaybackState {
+            queue: self.queue.tracks().to_vec(),
+            index: self.queue.index(),
+            mode: self.queue.mode,
+            position_seconds,
+            was_playing: self.playing || self.pending_track.is_some(),
+            ..Default::default()
+        };
+        if let Err(err) = state.save() {
+            if std::env::var("SODAM_PLAYER_LOG").is_ok() {
+                eprintln!("[player] 退出前保存播放状态失败：{err}");
+            }
+        }
+    }
+
     /// 队列前方缓存状态：（已缓存、正在预取、目标数）。
     pub fn prefetch_buffer_status(&self) -> (usize, usize, usize) {
         let target = prefetch_ahead_count(self.settings.prefetch_count);

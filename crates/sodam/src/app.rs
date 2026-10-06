@@ -308,6 +308,8 @@ pub struct Root {
     pub liked_scroll: gpui::UniformListScrollHandle,
     /// 列表可用宽度（由画布测量）：决定折叠哪些列。
     pub list_width: Arc<Mutex<f32>>,
+    /// 底部播放栏可用宽度：低于设置阈值时折叠次要按钮。
+    pub player_bar_width: Arc<Mutex<f32>>,
     /// 队列抽屉的滚动句柄（打开时锚到「正在播放」）。
     pub queue_scroll: gpui::UniformListScrollHandle,
     /// 队列抽屉是否展开。

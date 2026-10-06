@@ -362,13 +362,15 @@ impl Root {
     }
 
     pub fn open_mini_player(&mut self, cx: &mut Context<Self>) {
-        let _ = self.ui_tx.send(crate::app::UiCommand::OpenMiniPlayer);
+        let root = cx.entity();
+        cx.defer(move |cx| crate::ui::mini_player::open(root, cx));
         self.status = self.tr("已打开迷你播放器").to_string();
         cx.notify();
     }
 
     pub fn open_desktop_lyrics(&mut self, cx: &mut Context<Self>) {
-        let _ = self.ui_tx.send(crate::app::UiCommand::OpenDesktopLyrics);
+        let root = cx.entity();
+        cx.defer(move |cx| crate::ui::desktop_lyrics::open(root, cx));
         self.status = self.tr("已打开桌面歌词").to_string();
         cx.notify();
     }

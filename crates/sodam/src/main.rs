@@ -70,7 +70,10 @@ fn start_tray_service(
                     tray::TrayCommand::Next => {
                         cx.update(|cx| app.update(cx, |root, cx| root.next_track(cx)))
                     }
-                    tray::TrayCommand::Quit => cx.update(|cx| cx.quit()),
+                    tray::TrayCommand::Quit => cx.update(|cx| {
+                        app.update(cx, |root, _cx| root.save_playback_state_now());
+                        cx.quit();
+                    }),
                 };
             }
 

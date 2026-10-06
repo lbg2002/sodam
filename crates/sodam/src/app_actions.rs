@@ -197,7 +197,7 @@ impl Root {
         }
     }
 
-    /// UI 心跳：播放中每 200ms 刷新一次（进度条需要持续重绘），
+    /// UI 心跳：播放中每 100ms 刷新一次（进度条与独立播放器窗口需要持续重绘），
     /// 曲目播完则自动切下一首。
     pub(crate) fn start_heartbeat(cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {

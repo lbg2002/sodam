@@ -633,9 +633,11 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                             theme::text_muted()
                         },
                     )
-                    .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.set_offline_mode(!root.settings.offline_mode, cx);
-                    })),
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.set_offline_mode(!root.settings.offline_mode, cx);
+                        },
+                    )),
                 )
                 .child(
                     icon_button(
@@ -644,9 +646,11 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         theme::ICON,
                         theme::text_muted(),
                     )
-                    .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.open_desktop_lyrics(cx);
-                    })),
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.open_desktop_lyrics(cx);
+                        },
+                    )),
                 )
                 .child(
                     icon_button(
@@ -655,9 +659,11 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         theme::ICON,
                         theme::text_muted(),
                     )
-                    .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.open_mini_player(cx);
-                    })),
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.open_mini_player(cx);
+                        },
+                    )),
                 )
                 .child(
                     icon_button(
@@ -670,10 +676,12 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                             theme::text_muted()
                         },
                     )
-                    .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.sleep_menu_open = !root.sleep_menu_open;
-                        cx.notify();
-                    })),
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.sleep_menu_open = !root.sleep_menu_open;
+                            cx.notify();
+                        },
+                    )),
                 )
                 .child(
                     icon_button(
@@ -766,11 +774,9 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 .hover(|style| style.bg(theme::surface_hover()))
                                 .text_size(theme::Text::Small.size())
                                 .text_color(theme::text_muted())
-                                .on_click(cx.listener(
-                                    |root, _event: &ClickEvent, _window, cx| {
-                                        root.set_sleep_timer_minutes(0, cx);
-                                    },
-                                ))
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.set_sleep_timer_minutes(0, cx);
+                                }))
                                 .child(root.tr("关闭睡眠定时")),
                         ),
                 )
@@ -970,9 +976,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                             .when(!playing && index > current_index, |this| {
                                 this.cursor_move().on_drag(
                                     QueueDrag { index },
-                                    |drag: &QueueDrag, _position, _window, cx| {
-                                        cx.new(|_| *drag)
-                                    },
+                                    |drag: &QueueDrag, _position, _window, cx| cx.new(|_| *drag),
                                 )
                             })
                             .when(index > current_index, |this| {

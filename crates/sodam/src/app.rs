@@ -109,6 +109,7 @@ pub enum Nav {
 pub enum SettingsSection {
     General,
     Playback,
+    Lyrics,
     Downloads,
     Storage,
     Account,
@@ -1060,7 +1061,8 @@ impl Render for Root {
         }
         theme::set_ambient_rgb(ambient_color);
         if self.nav == Nav::Lyrics {
-            let position = self.engine.snapshot().position_seconds;
+            let position = self.engine.snapshot().position_seconds
+                - self.settings.lyrics_offset_ms as f64 / 1000.0;
             let active = self
                 .lyrics
                 .iter()

@@ -36,7 +36,7 @@ pub fn load() -> Vec<LocalPlaylist> {
             return items.clone();
         }
     }
-    let items = fs::read_to_string(playlists_path())
+    let items: Vec<LocalPlaylist> = fs::read_to_string(playlists_path())
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();

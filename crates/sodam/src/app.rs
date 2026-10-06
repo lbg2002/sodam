@@ -104,6 +104,15 @@ pub enum Nav {
     Lyrics,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SettingsSection {
+    General,
+    Playback,
+    Downloads,
+    Storage,
+    Account,
+}
+
 impl Root {
     /// 侧栏/页面标题用的导航名；听歌模式跟随当前队列来源动态变化。
     pub fn nav_display_label(&self, nav: Nav) -> String {
@@ -194,6 +203,8 @@ pub struct Root {
     pub language: Language,
     pub language_follows_system: bool,
     pub settings: Settings,
+    /// 设置页二级分类；切换分类只影响展示，不触发配置重载。
+    pub settings_section: SettingsSection,
     pub session: Option<Session>,
     pub queue: Queue,
     pub queue_origin: QueueOrigin,
@@ -434,6 +445,7 @@ impl Root {
             language,
             language_follows_system,
             settings,
+            settings_section: SettingsSection::General,
             session: Some(session),
             queue,
             queue_origin: QueueOrigin::None,

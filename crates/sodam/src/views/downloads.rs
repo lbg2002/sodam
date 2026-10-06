@@ -159,6 +159,123 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
                 .child(root.tr("打开下载目录")),
         );
 
+    let (batch_done, batch_total) = root.batch_download_progress();
+    let batch_card = if batch_total > 0 {
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::SM))
+                .p(px(theme::space::MD))
+                .rounded(px(theme::radius::CARD))
+                .bg(theme::surface())
+                .border_1()
+                .border_color(theme::border())
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(theme::space::XS))
+                                .child(
+                                    div()
+                                        .text_size(theme::Text::Body.size())
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(theme::text())
+                                        .child(root.tr("批量下载")),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(theme::Text::Small.size())
+                                        .text_color(theme::text_muted())
+                                        .child(root.localized(
+                                            "{} / {} 首",
+                                            &[batch_done.to_string(), batch_total.to_string()],
+                                        )),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap(px(theme::space::SM))
+                                .child(
+                                    div()
+                                        .id("batch-download-pause")
+                                        .h(px(theme::size::CONTROL_SM))
+                                        .px(px(theme::space::MD))
+                                        .flex()
+                                        .items_center()
+                                        .rounded(px(theme::radius::PILL))
+                                        .cursor_pointer()
+                                        .hover(|style| style.bg(theme::surface_hover()))
+                                        .on_click(cx.listener(
+                                            |root, _event: &ClickEvent, _window, cx| {
+                                                root.pause_batch_download(
+                                                    !root.batch_download_paused,
+                                                    cx,
+                                                );
+                                            },
+                                        ))
+                                        .child(if root.batch_download_paused {
+                                            root.tr("继续")
+                                        } else {
+                                            root.tr("暂停")
+                                        }),
+                                )
+                                .child(
+                                    div()
+                                        .id("batch-download-cancel")
+                                        .h(px(theme::size::CONTROL_SM))
+                                        .px(px(theme::space::MD))
+                                        .flex()
+                                        .items_center()
+                                        .rounded(px(theme::radius::PILL))
+                                        .cursor_pointer()
+                                        .hover(|style| style.bg(theme::surface_hover()))
+                                        .on_click(cx.listener(
+                                            |root, _event: &ClickEvent, _window, cx| {
+                                                root.cancel_batch_download(cx);
+                                            },
+                                        ))
+                                        .child(root.tr("取消任务")),
+                                ),
+                        ),
+                )
+                .child(
+                    div()
+                        .relative()
+                        .w_full()
+                        .h(px(5.0))
+                        .rounded(px(3.0))
+                        .bg(theme::surface_elevated())
+                        .child(
+                            div()
+                                .absolute()
+                                .left(px(0.0))
+                                .top(px(0.0))
+                                .h_full()
+                                .w_fraction(if batch_total == 0 {
+                                    0.0
+                                } else {
+                                    batch_done as f32 / batch_total as f32
+                                })
+                                .rounded(px(3.0))
+                                .bg(theme::accent()),
+                        ),
+                )
+                .into_any_element(),
+        )
+    } else {
+        None
+    };
+
     if root.downloads_loading && root.downloads.is_empty() {
         return div()
             .flex()
@@ -167,6 +284,7 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
             .min_h(px(0.0))
             .gap(px(theme::space::MD))
             .child(toolbar)
+            .when_some(batch_card.clone(), |this, card| this.child(card))
             .child(loading_state(root.tr("正在读取下载列表…")))
             .into_any_element();
     }
@@ -402,6 +520,7 @@ pub fn downloads_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> A
         .min_h(px(0.0))
         .gap(px(theme::space::MD))
         .child(toolbar)
+        .when_some(batch_card, |this, card| this.child(card))
         .child(pending_section)
         .child(body)
         .into_any_element()

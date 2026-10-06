@@ -1472,6 +1472,254 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 )
                 .into_any_element()
         }
+        SettingsSection::Desktop => {
+            let opacity_rows = [60u8, 75, 86, 100]
+                .into_iter()
+                .map(|value| {
+                    choice_setting_row(
+                        format!("desktop-opacity-{value}"),
+                        format!("{value}%"),
+                        root.tr("桌面歌词背景透明度").to_string(),
+                        root.settings.desktop_lyrics_opacity == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_desktop_opacity(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let align_rows = [
+                ("left", root.tr("左对齐")),
+                ("center", root.tr("居中")),
+                ("right", root.tr("右对齐")),
+            ]
+            .into_iter()
+            .map(|(value, label)| {
+                choice_setting_row(
+                    format!("desktop-align-{value}"),
+                    label.to_string(),
+                    String::new(),
+                    root.settings.desktop_lyrics_align == value,
+                    cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_align(value, cx);
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XL))
+                .child(settings_heading(
+                    root.tr("桌面歌词"),
+                    root.tr("调整独立歌词窗口的显示方式、透明度和交互"),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-single-line",
+                    root.tr("单行歌词"),
+                    root.tr("关闭时显示当前行和下一行"),
+                    root.settings.desktop_lyrics_single_line,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_single_line(
+                            !root.settings.desktop_lyrics_single_line,
+                            cx,
+                        );
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-always-top",
+                    root.tr("始终置顶"),
+                    root.tr("桌面歌词窗口保持在其他窗口上方"),
+                    root.settings.desktop_lyrics_always_on_top,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_always_on_top(
+                            !root.settings.desktop_lyrics_always_on_top,
+                            cx,
+                        );
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-lock",
+                    root.tr("锁定位置"),
+                    root.tr("锁定后禁止拖动和调整窗口尺寸"),
+                    root.settings.desktop_lyrics_locked,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_locked(!root.settings.desktop_lyrics_locked, cx);
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "desktop-click-through",
+                    root.tr("鼠标穿透"),
+                    root.tr("受当前 Linux/窗口后端能力限制；不支持时保持普通窗口交互"),
+                    root.settings.desktop_lyrics_click_through,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_desktop_click_through(
+                            !root.settings.desktop_lyrics_click_through,
+                            cx,
+                        );
+                    }),
+                ))
+                .child(settings_heading(
+                    root.tr("背景透明度"),
+                    root.tr("降低背景存在感，让歌词更适合悬浮在桌面"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(opacity_rows),
+                )
+                .child(settings_heading(
+                    root.tr("歌词对齐"),
+                    root.tr("设置桌面歌词文字的水平对齐方式"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(align_rows),
+                )
+                .into_any_element()
+        }
+        SettingsSection::Advanced => {
+            let devices = crate::system_audio::list_output_devices();
+            let device_rows = devices
+                .into_iter()
+                .map(|device| {
+                    let id = device.id.clone();
+                    let selected = if root.settings.audio_output_device.trim().is_empty() {
+                        device.default
+                    } else {
+                        root.settings.audio_output_device == device.id
+                    };
+                    choice_setting_row(
+                        format!("audio-device-{}", device.id),
+                        device.name,
+                        if device.default {
+                            root.tr("系统默认输出").to_string()
+                        } else {
+                            String::new()
+                        },
+                        selected,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_audio_device(id.clone(), cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let crossfade_rows = [0u32, 2, 3, 5, 8]
+                .into_iter()
+                .map(|value| {
+                    let label = if value == 0 {
+                        root.tr("关闭").to_string()
+                    } else {
+                        root.localized("{} 秒", &[value.to_string()])
+                    };
+                    choice_setting_row(
+                        format!("crossfade-{value}"),
+                        label,
+                        String::new(),
+                        root.settings.crossfade_seconds == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_crossfade(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let compact_rows = [760u32, 900, 1080]
+                .into_iter()
+                .map(|value| {
+                    choice_setting_row(
+                        format!("compact-width-{value}"),
+                        format!("{value} px"),
+                        root.tr("低于此宽度时折叠次要播放栏按钮").to_string(),
+                        root.settings.player_bar_compact_width == value,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.e3_set_compact_width(value, cx);
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>();
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XL))
+                .child(settings_heading(
+                    root.tr("音频输出设备"),
+                    root.tr("Ubuntu / PipeWire-Pulse 下可直接切换扬声器、耳机、HDMI 或蓝牙输出"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(device_rows),
+                )
+                .child(settings_heading(
+                    root.tr("播放增强"),
+                    root.tr("响度标准化和歌曲衔接均可独立关闭"),
+                ))
+                .child(toggle_setting_row(
+                    "system-notifications",
+                    root.tr("系统切歌通知"),
+                    root.tr("切歌时显示封面、歌曲名和歌手"),
+                    root.settings.system_notifications,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_notifications(!root.settings.system_notifications, cx);
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "normalize-volume",
+                    root.tr("响度标准化"),
+                    root.tr("使用本地 ffmpeg 分析并缓存增益，减少歌曲之间忽大忽小"),
+                    root.settings.normalize_volume,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_normalize_volume(!root.settings.normalize_volume, cx);
+                    }),
+                ))
+                .child(toggle_setting_row(
+                    "gapless-playback",
+                    root.tr("无缝播放 Gapless"),
+                    root.tr("提前衔接下一首，尽量消除曲目边界的短暂空白"),
+                    root.settings.gapless_playback,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_gapless(!root.settings.gapless_playback, cx);
+                    }),
+                ))
+                .child(settings_heading(
+                    root.tr("交叉淡化 Crossfade"),
+                    root.tr("让上一首淡出、下一首淡入；0 秒表示关闭"),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(crossfade_rows),
+                )
+                .child(settings_heading(
+                    root.tr("性能与布局"),
+                    root.tr("控制启动时的后台工作和底部播放栏的响应式折叠"),
+                ))
+                .child(toggle_setting_row(
+                    "lazy-startup",
+                    root.tr("启动延迟加载"),
+                    root.tr("优先打开界面和恢复播放，再延迟加载收藏、下载索引和缓存统计"),
+                    root.settings.lazy_startup,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_lazy_startup(!root.settings.lazy_startup, cx);
+                    }),
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .children(compact_rows),
+                )
+                .into_any_element()
+        }
         SettingsSection::Account => {
             let repository = env!("CARGO_PKG_REPOSITORY");
             let signer = if root.settings.signer_url.trim().is_empty() {
@@ -1633,6 +1881,20 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             SettingsSection::Storage,
             root.tr("存储"),
             "hard-drive",
+            cx,
+        ))
+        .child(settings_nav_item(
+            root,
+            SettingsSection::Desktop,
+            root.tr("桌面"),
+            "captions",
+            cx,
+        ))
+        .child(settings_nav_item(
+            root,
+            SettingsSection::Advanced,
+            root.tr("高级"),
+            "settings",
             cx,
         ))
         .child(settings_nav_item(

@@ -572,8 +572,8 @@ fn count_extension(dir: &std::path::Path, extension: &str) -> usize {
 
 /// 缓存统计：(音频字节, 歌曲数, 封面字节, 封面张数)。
 ///
-/// * 字节数含**全部**文件（`.m4a` / `.quality` 边车 / 下载中的 `.part` /
-///   封面原图子目录）；
+/// * 字节数含**全部**文件（`.m4a` / `.quality` / `.access` 边车 /
+///   下载中的 `.part` / 封面原图子目录）；
 /// * 「歌曲数」只数 `.m4a`：边车和临时文件不是歌，全算会把数量翻倍（踩过）；
 /// * 「封面张数」数全部图片缓存文件（含原图）。
 ///
@@ -585,18 +585,13 @@ pub fn cache_stats() -> (u64, usize, u64, usize) {
     (audio_bytes, songs, cover_bytes, cover_files)
 }
 
-/// 清空缓存（音频 + 封面），返回删除的文件数。
+/// 清空缓存（音频 + 封面，含 original 子目录），返回删除的文件数。
 pub fn clear_cache() -> usize {
     let mut removed = 0usize;
     for dir in [cache_dir(), cover_cache_dir()] {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() && std::fs::remove_file(&path).is_ok() {
-                removed += 1;
-            }
+        let (_, files) = dir_usage(&dir);
+        if std::fs::remove_dir_all(&dir).is_ok() {
+            removed += files;
         }
     }
     removed
@@ -626,7 +621,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn cache_track_id_handles_quality_suffixes() {
         assert_eq!(
             cache_track_id(std::path::Path::new("123-lossless.m4a")).as_deref(),
@@ -638,6 +632,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn dir_usage_and_count_extension_classify_files_correctly() {
         let dir = std::env::temp_dir().join(format!("sodam-cache-stats-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);

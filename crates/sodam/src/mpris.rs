@@ -42,6 +42,7 @@ pub enum MprisCommand {
     Next,
     Previous,
     SeekRelative(i64),
+    SeekAbsolute(i64),
     SetVolume(f64),
 }
 
@@ -272,6 +273,7 @@ fn run_server(
     let next_tx = commands.clone();
     let prev_tx = commands.clone();
     let seek_tx = commands.clone();
+    let set_position_tx = commands.clone();
 
     let playback_state = state.clone();
     let metadata_state = state.clone();
@@ -318,6 +320,16 @@ fn run_server(
                     Ok(vec![info.msg.method_return()])
                 })
                 .inarg::<i64, _>("Offset"),
+        )
+        .add_m(
+            factory
+                .method("SetPosition", (), move |info| {
+                    let (_track_id, position): (dbus::Path<'static>, i64) = info.msg.read2()?;
+                    let _ = set_position_tx.send(MprisCommand::SeekAbsolute(position.max(0)));
+                    Ok(vec![info.msg.method_return()])
+                })
+                .inarg::<dbus::Path<'static>, _>("TrackId")
+                .inarg::<i64, _>("Position"),
         )
         .add_p(
             factory

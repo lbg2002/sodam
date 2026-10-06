@@ -190,6 +190,12 @@ pub enum QueueOrigin {
     Search,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiCommand {
+    OpenMiniPlayer,
+    OpenDesktopLyrics,
+}
+
 /// 歌曲右键菜单状态：目标曲目与弹出位置。
 pub struct TrackMenu {
     pub track: TrackItem,
@@ -209,6 +215,7 @@ pub struct Root {
     pub settings: Settings,
     /// 设置页二级分类；切换分类只影响展示，不触发配置重载。
     pub settings_section: SettingsSection,
+    pub(crate) ui_tx: std::sync::mpsc::Sender<UiCommand>,
     pub session: Option<Session>,
     pub queue: Queue,
     pub queue_origin: QueueOrigin,
@@ -281,6 +288,10 @@ pub struct Root {
     /// 正在执行本地导出的曲目，防止重复点击并发复制。
     pub download_inflight: HashSet<String>,
     pub downloads_loading: bool,
+    /// 本轮批量下载涉及的曲目 id；未缓存歌曲仍遵循“等待正常播放产生缓存”的规则。
+    pub batch_download_ids: HashSet<String>,
+    pub batch_download_total: usize,
+    pub batch_download_paused: bool,
     liked_loading: bool,
     /// 收藏 ids 拉取失败（网络等）：置位后等网络就绪信号自动重试。
     pub liked_ids_failed: bool,
@@ -296,6 +307,13 @@ pub struct Root {
     pub queue_scroll: gpui::UniformListScrollHandle,
     /// 队列抽屉是否展开。
     pub queue_open: bool,
+    pub sleep_menu_open: bool,
+    /// 定时暂停的绝对截止时刻。
+    pub sleep_deadline: Option<std::time::Instant>,
+    /// 当前歌曲结束后暂停，不继续推进队列。
+    pub sleep_after_current: bool,
+    /// 当前定时器展示用分钟数；0 表示未设置或“播完当前歌曲”。
+    pub sleep_timer_minutes: u32,
     pub volume_before_mute: f32,
     /// 播放栏弹层锚点：触发元素（音质徽章/音量/队列）在窗口里的位置，
     /// 由画布测量，弹层据此精确贴住入口。
@@ -384,7 +402,10 @@ pub struct Root {
 }
 
 impl Root {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        cx: &mut Context<Self>,
+        ui_tx: std::sync::mpsc::Sender<UiCommand>,
+    ) -> Self {
         let settings = Settings::load().merged_with_env();
         // 首次运行就把配置落盘：用户可以直接编辑 ~/.config/sodam/config.json
         // 换签名服务 / 钉死设备指纹（默认值已内置，见 sodam_core::config）
@@ -455,6 +476,7 @@ impl Root {
             language_follows_system,
             settings,
             settings_section: SettingsSection::General,
+            ui_tx,
             session: Some(session),
             queue,
             queue_origin: QueueOrigin::None,
@@ -538,6 +560,9 @@ impl Root {
             pending_downloads,
             download_inflight: HashSet::new(),
             downloads_loading: false,
+            batch_download_ids: HashSet::new(),
+            batch_download_total: 0,
+            batch_download_paused: false,
             liked_loading: false,
             liked_ids_failed: false,
             loading_library: false,
@@ -556,6 +581,10 @@ impl Root {
             open_album: None,
             loading_album: false,
             queue_open: false,
+            sleep_menu_open: false,
+            sleep_deadline: None,
+            sleep_after_current: false,
+            sleep_timer_minutes: 0,
             volume_before_mute: 1.0,
             progress_track_bounds: Arc::new(Mutex::new(None)),
             volume_track_bounds: Arc::new(Mutex::new(None)),

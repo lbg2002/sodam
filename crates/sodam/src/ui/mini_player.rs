@@ -34,7 +34,7 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         ..Default::default()
     };
     let _ = cx.open_window(options, move |_window, cx| {
-        cx.new(|_| MiniPlayer::new(root))
+        cx.new(|cx| MiniPlayer::new(root, cx))
     });
 }
 
@@ -43,7 +43,11 @@ pub struct MiniPlayer {
 }
 
 impl MiniPlayer {
-    pub fn new(root: Entity<Root>) -> Self {
+    pub fn new(root: Entity<Root>, cx: &mut Context<Self>) -> Self {
+        cx.observe(&root, |_view, _root, cx| {
+            cx.notify();
+        })
+        .detach();
         Self { root }
     }
 }
@@ -94,8 +98,8 @@ impl Render for MiniPlayer {
                             .child(
                                 div()
                                     .truncate()
-                                    .text_size(theme::Text::Body.size())
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .text_size(theme::Text::Large.size())
+                                    .font_weight(gpui::FontWeight::BOLD)
                                     .child(title),
                             )
                             .child(

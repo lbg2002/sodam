@@ -1317,7 +1317,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             root,
             SettingsSection::General,
             root.tr("常规"),
-            "settings",
+            "palette",
             cx,
         ))
         .child(settings_nav_item(
@@ -1331,7 +1331,7 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             root,
             SettingsSection::Lyrics,
             root.tr("歌词"),
-            "music",
+            "captions",
             cx,
         ))
         .child(settings_nav_item(
@@ -1345,14 +1345,14 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             root,
             SettingsSection::Storage,
             root.tr("存储"),
-            "disc-3",
+            "hard-drive",
             cx,
         ))
         .child(settings_nav_item(
             root,
             SettingsSection::Account,
             root.tr("账户"),
-            "log-in",
+            "user-round",
             cx,
         ));
 

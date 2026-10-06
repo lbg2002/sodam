@@ -67,6 +67,10 @@ impl CoverPool {
     fn done(&mut self) {
         self.inflight = self.inflight.saturating_sub(1);
     }
+
+    fn clear_pending(&mut self) {
+        self.queue.clear();
+    }
 }
 
 /// 列表一次渲染的行数上限：GPUI 没有虚拟滚动，一次性布局几百行 + 解码封面
@@ -281,6 +285,10 @@ pub struct Root {
     /// 正在执行本地导出的曲目，防止重复点击并发复制。
     pub download_inflight: HashSet<String>,
     pub downloads_loading: bool,
+    /// 本轮批量下载涉及的曲目 id；未缓存歌曲仍遵循“等待正常播放产生缓存”的规则。
+    pub batch_download_ids: HashSet<String>,
+    pub batch_download_total: usize,
+    pub batch_download_paused: bool,
     liked_loading: bool,
     /// 收藏 ids 拉取失败（网络等）：置位后等网络就绪信号自动重试。
     pub liked_ids_failed: bool,
@@ -296,6 +304,13 @@ pub struct Root {
     pub queue_scroll: gpui::UniformListScrollHandle,
     /// 队列抽屉是否展开。
     pub queue_open: bool,
+    pub sleep_menu_open: bool,
+    /// 定时暂停的绝对截止时刻。
+    pub sleep_deadline: Option<std::time::Instant>,
+    /// 当前歌曲结束后暂停，不继续推进队列。
+    pub sleep_after_current: bool,
+    /// 当前定时器展示用分钟数；0 表示未设置或“播完当前歌曲”。
+    pub sleep_timer_minutes: u32,
     pub volume_before_mute: f32,
     /// 播放栏弹层锚点：触发元素（音质徽章/音量/队列）在窗口里的位置，
     /// 由画布测量，弹层据此精确贴住入口。
@@ -344,7 +359,7 @@ pub struct Root {
     /// 预取失败冷却表（曲目 id → 最近失败时刻）：巡检不能把永久失败的歌
     /// （下架/地区受限）每 5 秒无限重试，60s 内不再排。
     pub(crate) prefetch_failed: HashMap<String, std::time::Instant>,
-    /// 预取巡检节拍：心跳每 200ms 自增，每 25 拍（约 5s）补一次预取。
+    /// 预取巡检节拍：心跳每 100ms 自增，每 50 拍（约 5s）补一次预取。
     pub(crate) prefetch_patrol: u32,
     /// 缓存统计快照（音频字节, 歌曲数, 封面字节, 封面张数）：
     /// 后台扫盘后回填，设置页只读它（渲染路径不做同步 IO）。
@@ -538,6 +553,9 @@ impl Root {
             pending_downloads,
             download_inflight: HashSet::new(),
             downloads_loading: false,
+            batch_download_ids: HashSet::new(),
+            batch_download_total: 0,
+            batch_download_paused: false,
             liked_loading: false,
             liked_ids_failed: false,
             loading_library: false,
@@ -556,6 +574,10 @@ impl Root {
             open_album: None,
             loading_album: false,
             queue_open: false,
+            sleep_menu_open: false,
+            sleep_deadline: None,
+            sleep_after_current: false,
+            sleep_timer_minutes: 0,
             volume_before_mute: 1.0,
             progress_track_bounds: Arc::new(Mutex::new(None)),
             volume_track_bounds: Arc::new(Mutex::new(None)),

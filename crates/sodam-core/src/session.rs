@@ -67,7 +67,7 @@ impl Session {
     /// 只检查「非空文件」会让被截断的半截下载永久冒充有效缓存，
     /// 表现为同一首歌每次都从中间开始/中途跳下一首。
     /// 旧格式 sidecar（只有音质、没记大小）视为 miss：重下一次完成自愈。
-    fn cached_track(&self, track_id: &str) -> Option<CachedTrack> {
+    pub fn cached_track(&self, track_id: &str) -> Option<CachedTrack> {
         let path = crate::audio::cache_dir().join(format!("{track_id}-{}.m4a", self.quality_tag()));
         let actual = std::fs::metadata(&path).ok()?.len();
         if actual == 0 {
@@ -361,7 +361,22 @@ impl Session {
         Ok(())
     }
 
+    fn lyrics_cache_path(track_id: &str) -> std::path::PathBuf {
+        crate::audio::lyrics_cache_dir().join(format!("{:016x}.lrc", hash_url(track_id)))
+    }
+
+    /// 只读取已经存在的本地歌词缓存，不触发任何网络请求。
+    pub fn cached_lyrics(&self, track_id: &str) -> Option<Vec<crate::models::LyricLine>> {
+        let track_id = track_id.trim();
+        if track_id.is_empty() {
+            return None;
+        }
+        let raw = std::fs::read_to_string(Self::lyrics_cache_path(track_id)).ok()?;
+        Some(crate::models::parse_lrc(&raw))
+    }
+
     /// 获取歌词，并保留原始增强 LRC 中的逐字时间轴。
+    /// 命中磁盘缓存时直接返回；首次联网获取成功后把原始 LRC 写入缓存。
     pub fn lyrics(
         &self,
         track: &crate::models::TrackItem,
@@ -371,9 +386,19 @@ impl Session {
         } else {
             track.id.trim()
         };
+        if let Some(cached) = self.cached_lyrics(track_id) {
+            return Ok(cached);
+        }
+
         let response = libresoda::soda::track::fetch_web_track_v2(&self.pumpkin, track_id)
             .map_err(|err| anyhow::anyhow!("获取歌词失败: {err}"))?;
-        Ok(crate::models::parse_lrc(&response.lyric.content))
+        let raw = response.lyric.content;
+        let path = Self::lyrics_cache_path(track_id);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&path, &raw);
+        Ok(crate::models::parse_lrc(&raw))
     }
 
     pub fn soda(&self) -> &Soda {

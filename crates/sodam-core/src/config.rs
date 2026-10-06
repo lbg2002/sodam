@@ -32,8 +32,14 @@ pub struct Settings {
     pub lyrics_line_height: u32,
     /// 歌词时间偏移（毫秒）；正值表示歌词更晚出现。
     pub lyrics_offset_ms: i64,
-    /// 智能预加载前方曲目数；0 = 关闭。
+    /// 智能预加载前方曲目数；0 = 关闭。固定模式使用。
     pub prefetch_count: usize,
+    /// 是否启用自适应预加载；启用后按“至少若干首 + 至少若干分钟”动态扩展。
+    pub prefetch_adaptive: bool,
+    /// 自适应预加载目标时长（分钟）。
+    pub prefetch_minutes: u32,
+    /// 离线模式：只播放当前音质档位已有的本地缓存，不发起音频网络请求。
+    pub offline_mode: bool,
     /// 播放缓存上限（GB）；0 = 不限制。
     pub cache_limit_gb: u64,
     /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
@@ -65,6 +71,9 @@ impl Default for Settings {
             lyrics_line_height: 32,
             lyrics_offset_ms: 0,
             prefetch_count: 3,
+            prefetch_adaptive: true,
+            prefetch_minutes: 12,
+            offline_mode: false,
             cache_limit_gb: 3,
             theme: String::new(),
             language: String::new(),
@@ -162,6 +171,9 @@ mod tests {
         assert_eq!(loaded.cookie, "sessionid_ss=x");
         assert_eq!(loaded.quality, "highest");
         assert_eq!(loaded.prefetch_count, 3);
+        assert!(loaded.prefetch_adaptive);
+        assert_eq!(loaded.prefetch_minutes, 12);
+        assert!(!loaded.offline_mode);
         assert_eq!(loaded.cache_limit_gb, 3);
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
@@ -193,6 +205,9 @@ mod tests {
         assert_eq!(loaded.lyrics_line_height, 32);
         assert_eq!(loaded.lyrics_offset_ms, 0);
         assert_eq!(loaded.prefetch_count, 3);
+        assert!(loaded.prefetch_adaptive);
+        assert_eq!(loaded.prefetch_minutes, 12);
+        assert!(!loaded.offline_mode);
         assert_eq!(loaded.cache_limit_gb, 3);
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());

@@ -13,8 +13,28 @@ use crate::app::Root;
 use crate::ui::artwork::{cover, icon_button};
 use crate::ui::{icons, theme};
 
+#[derive(Clone, Copy)]
+struct QueueDrag {
+    index: usize,
+}
+
+impl Render for QueueDrag {
+    fn render(&mut self, _window: &mut gpui::Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .bg(theme::surface_elevated())
+            .border_1()
+            .border_color(theme::border())
+            .text_size(theme::Text::Small.size())
+            .text_color(theme::text())
+            .child("移动歌曲")
+    }
+}
+
 /// 内联音量条宽度与滑块直径。
-const VOLUME_TRACK_W: f32 = 96.0;
+const VOLUME_TRACK_W: f32 = 72.0;
 const VOLUME_THUMB: f32 = 11.0;
 
 fn transport_button(
@@ -302,6 +322,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     let cover_path = track.as_ref().and_then(|track| root.cover_of(&track.cover));
 
     div()
+        .relative()
         .flex()
         .flex_row()
         .items_center()
@@ -360,6 +381,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                         .truncate()
                                         .cursor_pointer()
                                         .text_size(theme::Text::Body.size())
+                                        .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(theme::text())
                                         .hover(|style| style.text_color(theme::accent()))
                                         .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
@@ -461,6 +483,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                         .truncate()
                                         .cursor_pointer()
                                         .text_size(theme::Text::Small.size())
+                                        .font_weight(gpui::FontWeight::MEDIUM)
                                         .text_color(theme::text_muted())
                                         .hover(|style| style.text_color(theme::accent()))
                                         .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
@@ -595,10 +618,71 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .flex_row()
                 .items_center()
                 .justify_end()
-                .gap(px(theme::space::SM))
-                .w(px(240.0))
-                .min_w(px(180.0))
+                .gap(px(theme::space::XS))
+                .w(px(390.0))
+                .min_w(px(300.0))
                 .flex_shrink(1.0)
+                .child(
+                    icon_button(
+                        "offline-toggle",
+                        "cloud-off",
+                        theme::ICON,
+                        if root.settings.offline_mode {
+                            theme::accent()
+                        } else {
+                            theme::text_muted()
+                        },
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.set_offline_mode(!root.settings.offline_mode, cx);
+                        },
+                    )),
+                )
+                .child(
+                    icon_button(
+                        "desktop-lyrics",
+                        "captions",
+                        theme::ICON,
+                        theme::text_muted(),
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.open_desktop_lyrics(cx);
+                        },
+                    )),
+                )
+                .child(
+                    icon_button(
+                        "mini-player",
+                        "picture-in-picture",
+                        theme::ICON,
+                        theme::text_muted(),
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.open_mini_player(cx);
+                        },
+                    )),
+                )
+                .child(
+                    icon_button(
+                        "sleep-timer",
+                        "moon",
+                        theme::ICON,
+                        if root.sleep_deadline.is_some() || root.sleep_after_current {
+                            theme::accent()
+                        } else {
+                            theme::text_muted()
+                        },
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.sleep_menu_open = !root.sleep_menu_open;
+                            cx.notify();
+                        },
+                    )),
+                )
                 .child(
                     icon_button(
                         "volume",
@@ -623,7 +707,6 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         cx.listener(|root, _event: &ClickEvent, _window, cx| {
                             root.queue_open = !root.queue_open;
                             if root.queue_open {
-                                // 打开时把滚动位置锚到「正在播放」
                                 root.anchor_queue_scroll();
                             }
                             cx.notify();
@@ -631,6 +714,75 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                     ),
                 ),
         )
+        .when(root.sleep_menu_open, |this| {
+            let options = [
+                ("sleep-current", root.tr("播完当前歌曲").to_string(), 0u32),
+                ("sleep-15", root.tr("15 分钟").to_string(), 15u32),
+                ("sleep-30", root.tr("30 分钟").to_string(), 30u32),
+                ("sleep-60", root.tr("60 分钟").to_string(), 60u32),
+                ("sleep-90", root.tr("90 分钟").to_string(), 90u32),
+            ];
+            this.child(
+                gpui::deferred(
+                    div()
+                        .absolute()
+                        .right(px(112.0))
+                        .bottom(px(theme::PLAYER_H + 8.0))
+                        .w(px(220.0))
+                        .p(px(theme::space::XS))
+                        .rounded(px(theme::radius::CARD))
+                        .bg(theme::surface_elevated())
+                        .border_1()
+                        .border_color(theme::border())
+                        .shadow_lg()
+                        .child(
+                            div()
+                                .px(px(theme::space::SM))
+                                .py(px(theme::space::XS))
+                                .text_size(theme::Text::Tiny.size())
+                                .text_color(theme::text_faint())
+                                .child(root.sleep_timer_label()),
+                        )
+                        .children(options.into_iter().map(|(id, label, minutes)| {
+                            div()
+                                .id(id)
+                                .px(px(theme::space::SM))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text())
+                                .on_click(cx.listener(
+                                    move |root, _event: &ClickEvent, _window, cx| {
+                                        if minutes == 0 {
+                                            root.set_sleep_after_current(cx);
+                                        } else {
+                                            root.set_sleep_timer_minutes(minutes, cx);
+                                        }
+                                    },
+                                ))
+                                .child(label)
+                        }))
+                        .child(
+                            div()
+                                .id("sleep-off")
+                                .px(px(theme::space::SM))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.set_sleep_timer_minutes(0, cx);
+                                }))
+                                .child(root.tr("关闭睡眠定时")),
+                        ),
+                )
+                .with_priority(4),
+            )
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -740,6 +892,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
 
     let slots = Arc::new(queue_slots(root));
     let tracks = root.queue_cache.1.clone();
+    let current_index = root.queue.index();
     let covers = root.covers.clone();
     let cover_requests = root.cover_requests.clone();
     let liked_ids = root.liked_ids.clone();
@@ -820,6 +973,23 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                             .cursor_pointer()
                             .when(playing, |this| this.bg(theme::accent_soft()))
                             .hover(|style| style.bg(theme::surface_hover()))
+                            .when(!playing && index > current_index, |this| {
+                                this.cursor_move().on_drag(
+                                    QueueDrag { index },
+                                    |drag: &QueueDrag, _position, _window, cx| cx.new(|_| *drag),
+                                )
+                            })
+                            .when(index > current_index, |this| {
+                                this.on_drop({
+                                    let entity = entity.clone();
+                                    move |drag: &QueueDrag, _window, cx: &mut gpui::App| {
+                                        let from = drag.index;
+                                        entity.update(cx, |root, cx| {
+                                            root.move_queue_item(from, index, cx);
+                                        });
+                                    }
+                                })
+                            })
                             .on_click({
                                 let entity = entity.clone();
                                 move |_event: &ClickEvent, _window, cx: &mut gpui::App| {
@@ -860,6 +1030,9 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                                         div()
                                             .truncate()
                                             .text_size(theme::Text::Body.size())
+                                            .when(playing, |this| {
+                                                this.font_weight(gpui::FontWeight::SEMIBOLD)
+                                            })
                                             .text_color(if playing {
                                                 theme::accent()
                                             } else {

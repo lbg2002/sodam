@@ -2295,6 +2295,7 @@ impl Root {
             self.nav_history.remove(0);
         }
         self.nav = nav;
+        crate::experience3::clear_selection();
         if matches!(nav, Nav::Settings) {
             self.refresh_cache_stats(cx);
         }
@@ -2340,6 +2341,7 @@ impl Root {
         };
         let nav = self.nav_history.pop().unwrap_or(fallback);
         self.nav = nav;
+        crate::experience3::clear_selection();
         self.on_nav_changed(cx);
         cx.notify();
     }

@@ -289,6 +289,16 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     let liked = track
         .as_ref()
         .is_some_and(|track| root.liked_ids.contains(&track.id));
+    let downloaded = track
+        .as_ref()
+        .is_some_and(|track| root.downloaded_ids.contains(&track.id));
+    let pending_download = track
+        .as_ref()
+        .is_some_and(|track| root.pending_downloads.contains_key(&track.id));
+    let download_inflight = track
+        .as_ref()
+        .is_some_and(|track| root.download_inflight.contains(&track.id));
+    let download_track = track.clone();
     let cover_path = track.as_ref().and_then(|track| root.cover_of(&track.cover));
 
     div()
@@ -333,6 +343,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                     div()
                         .flex()
                         .flex_col()
+                        .flex_1()
                         .min_w(px(0.0))
                         .child(
                             div()
@@ -344,6 +355,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 .child(
                                     div()
                                         .id("player-title-link")
+                                        .flex_1()
                                         .min_w(px(0.0))
                                         .truncate()
                                         .cursor_pointer()
@@ -392,6 +404,42 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                                 .size(px(theme::ICON_SM))
                                                 .text_color(if liked {
                                                     theme::accent()
+                                                } else {
+                                                    theme::text_muted()
+                                                }),
+                                        ),
+                                )
+                                .child(
+                                    div()
+                                        .id("player-download")
+                                        .flex_none()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .self_center()
+                                        .size(px(theme::size::CONTROL_SM))
+                                        .rounded(px(theme::radius::PILL))
+                                        .cursor_pointer()
+                                        .hover(|style| style.bg(theme::surface_hover()))
+                                        .on_click(cx.listener({
+                                            move |root, _event: &ClickEvent, _window, cx| {
+                                                if let Some(track) = download_track.clone() {
+                                                    root.toggle_download(track, cx);
+                                                }
+                                            }
+                                        }))
+                                        .child(
+                                            svg()
+                                                .path(icons::path(if downloaded {
+                                                    "check"
+                                                } else {
+                                                    "download"
+                                                }))
+                                                .size(px(theme::ICON_SM))
+                                                .text_color(if downloaded || pending_download {
+                                                    theme::accent()
+                                                } else if download_inflight {
+                                                    theme::text_faint()
                                                 } else {
                                                     theme::text_muted()
                                                 }),

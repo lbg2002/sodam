@@ -2696,6 +2696,8 @@ impl Root {
                 .unwrap_or(QueueOrigin::Search),
             Nav::Search => QueueOrigin::Search,
             Nav::Recent => QueueOrigin::Recent,
+            Nav::LocalMusic => QueueOrigin::LocalMusic,
+            Nav::LocalPlaylists => self.queue_origin.clone(),
             Nav::Home => QueueOrigin::Feed,
             _ => self.queue_origin.clone(),
         };

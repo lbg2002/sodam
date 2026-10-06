@@ -75,11 +75,7 @@ fn settings_nav_item(
         .child(
             div()
                 .text_size(theme::Text::Small.size())
-                .font_weight(if selected {
-                    gpui::FontWeight::SEMIBOLD
-                } else {
-                    gpui::FontWeight::NORMAL
-                })
+                .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
                 .text_color(if selected {
                     theme::text()
                 } else {

@@ -708,10 +708,10 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .when(root.sleep_menu_open, |this| {
             let options = [
                 ("sleep-current", root.tr("播完当前歌曲").to_string(), 0u32),
-                ("sleep-15", "15 分钟".to_string(), 15u32),
-                ("sleep-30", "30 分钟".to_string(), 30u32),
-                ("sleep-60", "60 分钟".to_string(), 60u32),
-                ("sleep-90", "90 分钟".to_string(), 90u32),
+                ("sleep-15", root.tr("15 分钟").to_string(), 15u32),
+                ("sleep-30", root.tr("30 分钟").to_string(), 30u32),
+                ("sleep-60", root.tr("60 分钟").to_string(), 60u32),
+                ("sleep-90", root.tr("90 分钟").to_string(), 90u32),
             ];
             this.child(
                 gpui::deferred(
@@ -885,6 +885,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
 
     let slots = Arc::new(queue_slots(root));
     let tracks = root.queue_cache.1.clone();
+    let current_index = root.queue.index();
     let covers = root.covers.clone();
     let cover_requests = root.cover_requests.clone();
     let liked_ids = root.liked_ids.clone();
@@ -965,7 +966,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                             .cursor_pointer()
                             .when(playing, |this| this.bg(theme::accent_soft()))
                             .hover(|style| style.bg(theme::surface_hover()))
-                            .when(!playing, |this| {
+                            .when(!playing && index > current_index, |this| {
                                 this.cursor_move().on_drag(
                                     QueueDrag { index },
                                     |drag: &QueueDrag, _position, _window, cx| {
@@ -973,14 +974,16 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                                     },
                                 )
                             })
-                            .on_drop({
-                                let entity = entity.clone();
-                                move |drag: &QueueDrag, _window, cx: &mut gpui::App| {
-                                    let from = drag.index;
-                                    entity.update(cx, |root, cx| {
-                                        root.move_queue_item(from, index, cx);
-                                    });
-                                }
+                            .when(index > current_index, |this| {
+                                this.on_drop({
+                                    let entity = entity.clone();
+                                    move |drag: &QueueDrag, _window, cx: &mut gpui::App| {
+                                        let from = drag.index;
+                                        entity.update(cx, |root, cx| {
+                                            root.move_queue_item(from, index, cx);
+                                        });
+                                    }
+                                })
                             })
                             .on_click({
                                 let entity = entity.clone();

@@ -366,10 +366,7 @@ impl Session {
     }
 
     /// 只读取已经存在的本地歌词缓存，不触发任何网络请求。
-    pub fn cached_lyrics(
-        &self,
-        track_id: &str,
-    ) -> Option<Vec<crate::models::LyricLine>> {
+    pub fn cached_lyrics(&self, track_id: &str) -> Option<Vec<crate::models::LyricLine>> {
         let track_id = track_id.trim();
         if track_id.is_empty() {
             return None;

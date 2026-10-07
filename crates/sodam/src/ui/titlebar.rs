@@ -6,8 +6,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, hsla, px, svg, AnyElement, ClickEvent, Div, Hsla, MouseButton, MouseDownEvent,
-    ResizeEdge, WindowControlArea,
+    div, hsla, px, svg, AnyElement, ClickEvent, Div, Hsla, MouseButton, MouseDownEvent, ResizeEdge,
+    WindowControlArea,
 };
 
 use crate::ui::{icons, theme};
@@ -30,12 +30,12 @@ const RESIZE_CORNER: f32 = 12.0;
 /// 显式铺 4 条边 + 4 个角，并交给 GPUI/Wayland compositor 执行交互式缩放。
 pub fn resize_handles() -> Vec<AnyElement> {
     let handle = |id: &'static str, edge: ResizeEdge| {
-        div()
-            .id(id)
-            .absolute()
-            .on_mouse_down(MouseButton::Left, move |_event: &MouseDownEvent, window, _cx| {
+        div().id(id).absolute().on_mouse_down(
+            MouseButton::Left,
+            move |_event: &MouseDownEvent, window, _cx| {
                 window.start_window_resize(edge);
-            })
+            },
+        )
     };
 
     vec![

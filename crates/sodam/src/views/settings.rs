@@ -31,7 +31,9 @@ fn nav_item(
     let label = label.to_string();
     let icon = icon.to_string();
     div()
-        .id(gpui::ElementId::Name(format!("settings-section-{section:?}").into()))
+        .id(gpui::ElementId::Name(
+            format!("settings-section-{section:?}").into(),
+        ))
         .flex()
         .flex_row()
         .items_center()
@@ -54,13 +56,23 @@ fn nav_item(
             svg()
                 .path(icons::path(&icon))
                 .size(px(theme::ICON_SM))
-                .text_color(if selected { theme::accent() } else { theme::text_muted() }),
+                .text_color(if selected {
+                    theme::accent()
+                } else {
+                    theme::text_muted()
+                }),
         )
         .child(
             div()
                 .text_size(theme::Text::Small.size())
-                .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
-                .text_color(if selected { theme::text() } else { theme::text_muted() })
+                .when(selected, |this| {
+                    this.font_weight(gpui::FontWeight::SEMIBOLD)
+                })
+                .text_color(if selected {
+                    theme::text()
+                } else {
+                    theme::text_muted()
+                })
                 .child(label),
         )
         .into_any_element()
@@ -112,7 +124,12 @@ fn toggle_row(
                 .flex()
                 .flex_col()
                 .gap(px(theme::space::XS))
-                .child(div().text_size(theme::Text::Body.size()).text_color(theme::text()).child(title))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(title),
+                )
                 .child(
                     div()
                         .text_size(theme::Text::Tiny.size())
@@ -125,7 +142,11 @@ fn toggle_row(
                 .w(px(40.0))
                 .h(px(22.0))
                 .rounded(px(theme::radius::PILL))
-                .bg(if enabled { theme::accent() } else { theme::surface_hover() })
+                .bg(if enabled {
+                    theme::accent()
+                } else {
+                    theme::surface_hover()
+                })
                 .flex()
                 .items_center()
                 .px(px(3.0))
@@ -159,7 +180,12 @@ fn option_row(
         .when(selected, |this| this.bg(theme::surface_selected()))
         .hover(|style| style.bg(theme::surface_hover()))
         .on_click(listener)
-        .child(div().text_size(theme::Text::Body.size()).text_color(theme::text()).child(title))
+        .child(
+            div()
+                .text_size(theme::Text::Body.size())
+                .text_color(theme::text())
+                .child(title),
+        )
         .when(selected, |this| {
             this.child(
                 svg()
@@ -195,17 +221,30 @@ fn dropdown(
                 .rounded(px(theme::radius::ROW))
                 .bg(theme::surface_elevated())
                 .border_1()
-                .border_color(if expanded { theme::accent() } else { theme::border() })
+                .border_color(if expanded {
+                    theme::accent()
+                } else {
+                    theme::border()
+                })
                 .cursor_pointer()
                 .hover(|style| style.bg(theme::surface_hover()))
                 .on_click(cx.listener(move |_root, _event: &ClickEvent, _window, cx| {
                     open.store(!open.load(Ordering::Relaxed), Ordering::Relaxed);
                     cx.notify();
                 }))
-                .child(div().text_size(theme::Text::Body.size()).text_color(theme::text()).child(value))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(value),
+                )
                 .child(
                     svg()
-                        .path(icons::path(if expanded { "chevron-left" } else { "chevron-right" }))
+                        .path(icons::path(if expanded {
+                            "chevron-left"
+                        } else {
+                            "chevron-right"
+                        }))
                         .size(px(theme::ICON_SM))
                         .text_color(theme::text_muted()),
                 ),
@@ -239,14 +278,62 @@ fn shell(root: &Root, body: AnyElement, cx: &mut Context<Root>) -> AnyElement {
         .bg(theme::surface())
         .border_1()
         .border_color(theme::border())
-        .child(nav_item(root, SettingsSection::General, root.tr("常规"), "palette", cx))
-        .child(nav_item(root, SettingsSection::Playback, root.tr("播放"), "music", cx))
-        .child(nav_item(root, SettingsSection::Lyrics, root.tr("歌词"), "captions", cx))
-        .child(nav_item(root, SettingsSection::Downloads, root.tr("下载"), "download", cx))
-        .child(nav_item(root, SettingsSection::Storage, root.tr("存储"), "hard-drive", cx))
-        .child(nav_item(root, SettingsSection::Desktop, root.tr("桌面"), "captions", cx))
-        .child(nav_item(root, SettingsSection::Advanced, root.tr("高级"), "settings", cx))
-        .child(nav_item(root, SettingsSection::Account, root.tr("账户"), "user-round", cx));
+        .child(nav_item(
+            root,
+            SettingsSection::General,
+            root.tr("常规"),
+            "palette",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Playback,
+            root.tr("播放"),
+            "music",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Lyrics,
+            root.tr("歌词"),
+            "captions",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Downloads,
+            root.tr("下载"),
+            "download",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Storage,
+            root.tr("存储"),
+            "hard-drive",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Desktop,
+            root.tr("桌面"),
+            "captions",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Advanced,
+            root.tr("高级"),
+            "settings",
+            cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::Account,
+            root.tr("账户"),
+            "user-round",
+            cx,
+        ));
 
     div()
         .id("settings-layout")
@@ -365,7 +452,13 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 root.tr("已固定主题；可随时切换深色或浅色")
             },
         ))
-        .child(dropdown("theme-dropdown", theme_value, &THEME_OPEN, theme_options, cx))
+        .child(dropdown(
+            "theme-dropdown",
+            theme_value,
+            &THEME_OPEN,
+            theme_options,
+            cx,
+        ))
         .child(heading(
             root.tr("语言"),
             if root.language_follows_system {
@@ -474,8 +567,14 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     };
     let panel_options = [
         ("left", root.tr("左对齐").to_string()),
-        ("center-left", format!("{} · {}", root.tr("居中"), root.tr("左对齐"))),
-        ("center-right", format!("{} · {}", root.tr("居中"), root.tr("右对齐"))),
+        (
+            "center-left",
+            format!("{} · {}", root.tr("居中"), root.tr("左对齐")),
+        ),
+        (
+            "center-right",
+            format!("{} · {}", root.tr("居中"), root.tr("右对齐")),
+        ),
         ("right", root.tr("右对齐").to_string()),
     ]
     .into_iter()
@@ -532,13 +631,17 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .child(toggle_row(
             "desktop-click-through",
             root.tr("鼠标穿透").to_string(),
-            root.tr("受当前 Linux/窗口后端能力限制；不支持时保持普通窗口交互").to_string(),
+            root.tr("受当前 Linux/窗口后端能力限制；不支持时保持普通窗口交互")
+                .to_string(),
             root.settings.desktop_lyrics_click_through,
             cx.listener(|root, _event: &ClickEvent, _window, cx| {
                 root.e3_set_desktop_click_through(!root.settings.desktop_lyrics_click_through, cx);
             }),
         ))
-        .child(heading(root.tr("背景透明度"), root.tr("降低背景存在感，让歌词更适合悬浮在桌面")))
+        .child(heading(
+            root.tr("背景透明度"),
+            root.tr("降低背景存在感，让歌词更适合悬浮在桌面"),
+        ))
         .child(dropdown(
             "desktop-opacity-dropdown",
             format!("{opacity}%"),
@@ -546,7 +649,10 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             opacity_options,
             cx,
         ))
-        .child(heading(root.tr("桌面歌词字号"), root.tr("独立于主播放页歌词字号，适合远距离查看")))
+        .child(heading(
+            root.tr("桌面歌词字号"),
+            root.tr("独立于主播放页歌词字号，适合远距离查看"),
+        ))
         .child(dropdown(
             "desktop-font-dropdown",
             format!("{font_size} px"),
@@ -554,7 +660,10 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             font_options,
             cx,
         ))
-        .child(heading(root.tr("桌面歌词颜色"), root.tr("使用动态强调色，或跟随当前主题文字颜色")))
+        .child(heading(
+            root.tr("桌面歌词颜色"),
+            root.tr("使用动态强调色，或跟随当前主题文字颜色"),
+        ))
         .child(dropdown(
             "desktop-color-dropdown",
             color_value,
@@ -562,7 +671,10 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             color_options,
             cx,
         ))
-        .child(heading(root.tr("歌词对齐"), root.tr("设置桌面歌词文字的水平对齐方式")))
+        .child(heading(
+            root.tr("歌词对齐"),
+            root.tr("设置桌面歌词文字的水平对齐方式"),
+        ))
         .child(dropdown(
             "desktop-align-dropdown",
             align_value,
@@ -592,7 +704,10 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             panel_options,
             cx,
         ))
-        .child(heading(root.tr("歌词偏移快捷调整"), root.tr("快速提前或延后桌面歌词；与播放页歌词偏移共用")))
+        .child(heading(
+            root.tr("歌词偏移快捷调整"),
+            root.tr("快速提前或延后桌面歌词；与播放页歌词偏移共用"),
+        ))
         .child(
             div()
                 .flex()

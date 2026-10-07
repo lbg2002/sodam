@@ -419,11 +419,6 @@ impl Root {
         self.toast(self.tr("桌面歌词颜色已保存"), cx);
     }
 
-    pub fn e3_adjust_lyrics_offset(&mut self, delta_ms: i64, cx: &mut Context<Self>) {
-        let next = (self.settings.lyrics_offset_ms + delta_ms).clamp(-3000, 3000);
-        self.set_lyrics_offset_ms(next, cx);
-    }
-
     pub fn e3_set_desktop_align(&mut self, align: &str, cx: &mut Context<Self>) {
         self.settings.desktop_lyrics_align = match align {
             "left" | "right" => align.to_string(),

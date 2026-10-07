@@ -2,8 +2,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, fill, img, point, px, size, svg, uniform_list, AnyElement, Bounds, ClickEvent,
-    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ObjectFit, Window,
+    canvas, div, fill, point, px, size, svg, uniform_list, AnyElement, Bounds, ClickEvent,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, Window,
 };
 
 use crate::app::{LoginState, Nav, Root};

@@ -1176,26 +1176,6 @@ impl Root {
         cx.notify();
     }
 
-    /// 用系统默认应用打开配置文件（macOS `open` / Windows `start` / Linux `xdg-open`）。
-    pub fn open_config_file(&mut self, cx: &mut Context<Self>) {
-        let path = Settings::config_path();
-        self.status = match system_open(&path.display().to_string()) {
-            Ok(_) => self.tr("已用系统默认应用打开配置文件").to_string(),
-            Err(err) => self.localized("打开配置文件失败：{err}", &[err.to_string()]),
-        };
-        cx.notify();
-    }
-
-    /// 用系统默认浏览器打开项目 GitHub 仓库。
-    pub fn open_github_repository(&mut self, cx: &mut Context<Self>) {
-        let url = env!("CARGO_PKG_REPOSITORY");
-        self.status = match system_open(url) {
-            Ok(_) => self.tr("已在浏览器打开 GitHub 仓库").to_string(),
-            Err(err) => self.localized("打开 GitHub 仓库失败：{err}", &[err.to_string()]),
-        };
-        cx.notify();
-    }
-
     /// 打开歌词播放页，并按需加载当前（或正在装载）歌曲的歌词。
     pub fn open_lyrics(&mut self, cx: &mut Context<Self>) {
         let track = self

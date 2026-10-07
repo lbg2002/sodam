@@ -1272,7 +1272,8 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                 .bg(gpui::transparent_black())
         })
         .when(!embedded, |this| {
-            this.w(px(320.0))
+            this.w(px(QUEUE_DRAWER_W))
+                .ml_auto()
                 .flex_none()
                 .bg(theme::bg())
                 .border_l_1()

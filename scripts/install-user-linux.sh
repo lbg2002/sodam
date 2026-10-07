@@ -17,6 +17,9 @@ desktop_dir="$HOME/.local/share/applications"
 icon_dir="$HOME/.local/share/icons"
 icon_path="$icon_dir/sodam-user.png"
 desktop_path="$desktop_dir/sodam.desktop"
+ext_uuid="sodam-panel-lyrics@lbg2002"
+ext_src="packaging/gnome-extension/$ext_uuid"
+ext_dir="$HOME/.local/share/gnome-shell/extensions/$ext_uuid"
 
 mkdir -p "$bin_dir" "$desktop_dir" "$icon_dir"
 install -m755 "$binary" "$bin_dir/sodam"
@@ -36,6 +39,17 @@ Keywords=music;qishui;soda;sodam;
 StartupWMClass=SodaM
 EOF
 
+# Ubuntu / GNOME 顶栏歌词。非 GNOME 桌面会自然跳过，不影响播放器本体。
+if [[ -d "$ext_src" ]]; then
+    mkdir -p "$ext_dir"
+    install -m644 "$ext_src/metadata.json" "$ext_dir/metadata.json"
+    install -m644 "$ext_src/extension.js" "$ext_dir/extension.js"
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        # 新装扩展时当前 Shell 可能还没加载 metadata，因此 enable 失败不应阻断安装。
+        gnome-extensions enable "$ext_uuid" >/dev/null 2>&1 || true
+    fi
+fi
+
 # Bump mtimes and desktop database. The absolute icon path also avoids stale
 # hicolor-theme lookups from older installations.
 touch "$desktop_path" "$icon_path"
@@ -46,4 +60,8 @@ fi
 echo "已安装：$bin_dir/sodam"
 echo "桌面入口：$desktop_path"
 echo "图标：$icon_path"
+if [[ -d "$ext_dir" ]]; then
+    echo "GNOME 顶栏歌词扩展：$ext_dir"
+    echo "若顶栏歌词首次安装后未立即出现，请注销并重新登录，然后执行：gnome-extensions enable $ext_uuid"
+fi
 echo "如果 GNOME 应用网格仍显示旧图标，请注销并重新登录一次。"

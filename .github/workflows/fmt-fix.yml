@@ -1,0 +1,33 @@
+name: Format branch
+
+on:
+  push:
+    branches:
+      - fix/lyrics-ux-ubuntu-panel
+
+permissions:
+  contents: write
+
+jobs:
+  fmt:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/lyrics-ux-ubuntu-panel
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format Rust
+        run: cargo fmt --all
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add crates/sodam/src/main.rs crates/sodam/src/app.rs crates/sodam/src/app_actions.rs crates/sodam/src/ui/theme.rs crates/sodam/src/ui/player_bar.rs crates/sodam/src/views/lyrics.rs crates/sodam/src/views/settings.rs
+          git commit -m "chore: format Ubuntu 26 follow-up"
+          git push origin HEAD:fix/lyrics-ux-ubuntu-panel

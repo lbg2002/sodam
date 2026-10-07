@@ -55,6 +55,8 @@ pub struct Settings {
     pub lazy_startup: bool,
     /// 播放栏低于该宽度时折叠次要功能。
     pub player_bar_compact_width: u32,
+    /// 应用界面基础字号（px）；所有常规界面字号按该值成比例缩放。
+    pub ui_font_size: u32,
     /// 桌面歌词：单行模式。
     pub desktop_lyrics_single_line: bool,
     /// 桌面歌词：始终置顶。
@@ -122,6 +124,7 @@ impl Default for Settings {
             crossfade_seconds: 0,
             lazy_startup: true,
             player_bar_compact_width: 900,
+            ui_font_size: 14,
             desktop_lyrics_single_line: false,
             desktop_lyrics_always_on_top: true,
             desktop_lyrics_locked: false,

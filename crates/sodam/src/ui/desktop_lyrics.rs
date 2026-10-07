@@ -104,8 +104,8 @@ impl Render for DesktopLyrics {
         // 与主歌词页、GNOME 顶栏共用同一套索引判定。切歌装载期间如果
         // lyrics_track_id 还没追上引擎 track_id，就先显示曲名，不展示上一首歌词。
         let snapshot = root.engine.snapshot();
-        let lyrics_synced = !snapshot.track_id.is_empty()
-            && root.lyrics_track_id == snapshot.track_id;
+        let lyrics_synced =
+            !snapshot.track_id.is_empty() && root.lyrics_track_id == snapshot.track_id;
         let active = root.synced_lyrics_active();
 
         let current = if lyrics_synced {

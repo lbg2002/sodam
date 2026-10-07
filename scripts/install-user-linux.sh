@@ -41,9 +41,16 @@ EOF
 
 # Ubuntu / GNOME 顶栏歌词。非 GNOME 桌面会自然跳过，不影响播放器本体。
 if [[ -d "$ext_src" ]]; then
+    # 已启用扩展时，仅覆盖 extension.js 不会让 GNOME Shell 重新载入 JS，
+    # 会导致播放器已写入新字段但顶栏仍运行旧逻辑。安装前先 unload，复制后再 enable。
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        gnome-extensions disable "$ext_uuid" >/dev/null 2>&1 || true
+    fi
+
     mkdir -p "$ext_dir"
     install -m644 "$ext_src/metadata.json" "$ext_dir/metadata.json"
     install -m644 "$ext_src/extension.js" "$ext_dir/extension.js"
+
     if command -v gnome-extensions >/dev/null 2>&1; then
         # 新装扩展时当前 Shell 可能还没加载 metadata，因此 enable 失败不应阻断安装。
         gnome-extensions enable "$ext_uuid" >/dev/null 2>&1 || true

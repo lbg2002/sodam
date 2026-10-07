@@ -17,6 +17,7 @@ export default class SodaMPanelLyricsExtension extends Extension {
             'panel-lyrics-state',
         ]);
         this._position = null;
+        this._color = null;
         this._actor = new St.Bin({
             style_class: 'panel-button',
             reactive: false,
@@ -90,6 +91,24 @@ export default class SodaMPanelLyricsExtension extends Extension {
         }
     }
 
+    _applyColor(color) {
+        const normalized = color || null;
+        if (this._color === normalized)
+            return;
+        this._color = normalized;
+
+        // GNOME panel themes often set the foreground color on .panel-button.
+        // Apply the color to both the wrapper and label so the application
+        // setting wins consistently across Ubuntu/GNOME theme variants.
+        const colorStyle = normalized ? `color: ${normalized};` : '';
+        this._actor.set_style(colorStyle);
+        this._label.set_style(normalized
+            ? `${LABEL_BASE_STYLE} color: ${normalized};`
+            : LABEL_BASE_STYLE);
+        this._actor.queue_redraw();
+        this._label.queue_redraw();
+    }
+
     _refresh() {
         const state = this._readState();
         if (!state) {
@@ -99,9 +118,7 @@ export default class SodaMPanelLyricsExtension extends Extension {
         }
         this._place(state.position);
         this._label.text = state.lyric;
-        this._label.set_style(state.color
-            ? `${LABEL_BASE_STYLE} color: ${state.color};`
-            : LABEL_BASE_STYLE);
+        this._applyColor(state.color);
         this._actor.visible = state.enabled && state.lyric.length > 0;
     }
 
@@ -116,5 +133,6 @@ export default class SodaMPanelLyricsExtension extends Extension {
         }
         this._label = null;
         this._position = null;
+        this._color = null;
     }
 }

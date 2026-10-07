@@ -7,6 +7,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const REFRESH_MS = 200;
+const LABEL_BASE_STYLE = 'max-width: 520px; padding-left: 8px; padding-right: 8px;';
 
 export default class SodaMPanelLyricsExtension extends Extension {
     enable() {
@@ -26,7 +27,7 @@ export default class SodaMPanelLyricsExtension extends Extension {
         this._label = new St.Label({
             text: '',
             y_align: Clutter.ActorAlign.CENTER,
-            style: 'max-width: 520px; padding-left: 8px; padding-right: 8px;',
+            style: LABEL_BASE_STYLE,
         });
         this._label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         this._actor.set_child(this._label);
@@ -80,6 +81,9 @@ export default class SodaMPanelLyricsExtension extends Extension {
                 enabled: lines[0] === '1',
                 position: lines[1] || 'center-left',
                 lyric: (lines[2] || '').trim(),
+                color: /^#[0-9a-fA-F]{6}$/.test((lines[3] || '').trim())
+                    ? lines[3].trim()
+                    : null,
             };
         } catch (_error) {
             return null;
@@ -95,6 +99,9 @@ export default class SodaMPanelLyricsExtension extends Extension {
         }
         this._place(state.position);
         this._label.text = state.lyric;
+        this._label.set_style(state.color
+            ? `${LABEL_BASE_STYLE} color: ${state.color};`
+            : LABEL_BASE_STYLE);
         this._actor.visible = state.enabled && state.lyric.length > 0;
     }
 

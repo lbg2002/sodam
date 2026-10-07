@@ -194,11 +194,10 @@ fn shell(root: &Root, body: AnyElement, cx: &mut Context<Root>) -> AnyElement {
         .into_any_element()
 }
 
-fn page_header(title: String, description: String) -> AnyElement {
+fn page_header(title: String, _description: String) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::XS))
         .pb(px(theme::space::SM))
         .child(
             div()
@@ -206,12 +205,6 @@ fn page_header(title: String, description: String) -> AnyElement {
                 .font_weight(gpui::FontWeight::BOLD)
                 .text_color(theme::text())
                 .child(title),
-        )
-        .child(
-            div()
-                .text_size(theme::Text::Small.size())
-                .text_color(theme::text_muted())
-                .child(description),
         )
         .into_any_element()
 }

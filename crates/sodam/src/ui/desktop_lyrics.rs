@@ -105,8 +105,7 @@ impl Render for DesktopLyrics {
         // 更新，因此离开播放页后桌面歌词会永久停在最后一行。独立窗口应当独立于
         // 主页面路由，所以每次重绘都用真实播放进度重新定位当前歌词。
         let snapshot = root.engine.snapshot();
-        let position =
-            snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
+        let position = snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
         let active = root
             .lyrics
             .iter()

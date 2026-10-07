@@ -61,6 +61,9 @@ pub struct DesktopLyrics {
 
 impl DesktopLyrics {
     pub fn new(root: Entity<Root>, cx: &mut Context<Self>) -> Self {
+        // Root 的播放心跳会在播放期间持续 notify；这里观察 Root 后即可跟着重绘。
+        // 当前歌词索引不再依赖 Root 主窗口是否正停留在 Lyrics 页面，而是在
+        // render 中直接根据引擎位置计算，这样独立窗口切到其它页面也会继续滚动。
         cx.observe(&root, |_view, _root, cx| {
             cx.notify();
         })
@@ -97,23 +100,39 @@ impl Render for DesktopLyrics {
         } else {
             window.set_input_region(None);
         }
-        let active = root.lyrics_active.unwrap_or(0);
-        let current = root
-            .lyrics
-            .get(active)
-            .map(|line| line.text.clone())
-            .filter(|text| !text.trim().is_empty())
-            .unwrap_or_else(|| {
-                root.queue
-                    .current()
-                    .map(|track| track.title.clone())
-                    .unwrap_or_else(|| root.tr("暂无歌词").to_string())
-            });
-        let next = root
-            .lyrics
-            .get(active.saturating_add(1))
-            .map(|line| line.text.clone())
-            .unwrap_or_default();
+
+        // 与主歌词页、GNOME 顶栏共用同一套索引判定。切歌装载期间如果
+        // lyrics_track_id 还没追上引擎 track_id，就先显示曲名，不展示上一首歌词。
+        let snapshot = root.engine.snapshot();
+        let lyrics_synced =
+            !snapshot.track_id.is_empty() && root.lyrics_track_id == snapshot.track_id;
+        let active = root.synced_lyrics_active();
+
+        let current = if lyrics_synced {
+            active
+                .and_then(|index| root.lyrics.get(index))
+                .map(|line| line.text.clone())
+                .filter(|text| !text.trim().is_empty())
+                .unwrap_or_else(|| {
+                    root.queue
+                        .current()
+                        .map(|track| track.title.clone())
+                        .unwrap_or_else(|| root.tr("暂无歌词").to_string())
+                })
+        } else {
+            root.queue
+                .current()
+                .map(|track| track.title.clone())
+                .unwrap_or_else(|| root.tr("暂无歌词").to_string())
+        };
+        let next = if lyrics_synced {
+            active
+                .and_then(|index| root.lyrics.get(index.saturating_add(1)))
+                .map(|line| line.text.clone())
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
         let base = root.settings.desktop_lyrics_font_size.clamp(20, 44) as f32;
         let mut background = theme::bg();
         background.a =

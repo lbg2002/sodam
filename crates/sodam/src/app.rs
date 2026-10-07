@@ -1061,6 +1061,35 @@ impl EntityInputHandler for Root {
 }
 
 impl Root {
+    /// 所有歌词界面共用同一套“当前行”判定。
+    ///
+    /// 只有歌词与音频引擎属于同一首歌时才返回索引，避免切歌/后台装载期间
+    /// 用新歌曲的播放时间去推进上一首歌词。
+    pub fn synced_lyrics_active(&self) -> Option<usize> {
+        if self.lyrics.is_empty() {
+            return None;
+        }
+        let snapshot = self.engine.snapshot();
+        // 引擎已经自然/异常结束时不要继续显示最后一行；切歌正在装载时，
+        // 也不要用旧引擎的进度推进上一首歌词。主页面、桌面歌词和 GNOME
+        // 顶栏都调用这一方法，因此三处以同一个“音频事实源”为准。
+        if snapshot.finished
+            || snapshot.track_id.is_empty()
+            || self.lyrics_track_id != snapshot.track_id
+            || self
+                .pending_track
+                .as_ref()
+                .is_some_and(|pending| pending.id != snapshot.track_id)
+        {
+            return None;
+        }
+        let position = snapshot.position_seconds - self.settings.lyrics_offset_ms as f64 / 1000.0;
+        self.lyrics
+            .iter()
+            .rposition(|line| position + 0.25 >= line.start_seconds)
+            .or_else(|| (!self.lyrics.is_empty()).then_some(0))
+    }
+
     pub fn tr(&self, text: &'static str) -> &'static str {
         self.language.text(text)
     }
@@ -1112,6 +1141,7 @@ impl Render for Root {
             self.theme = theme::theme_from_appearance(window.appearance());
         }
         theme::set_theme(self.theme);
+        theme::set_ui_font_size(self.settings.ui_font_size);
         if self.nav == Nav::Scenes {
             self.sync_scenes_list();
         }
@@ -1129,13 +1159,7 @@ impl Render for Root {
         }
         theme::set_ambient_rgb(ambient_color);
         if self.nav == Nav::Lyrics {
-            let position = self.engine.snapshot().position_seconds
-                - self.settings.lyrics_offset_ms as f64 / 1000.0;
-            let active = self
-                .lyrics
-                .iter()
-                .rposition(|line| position + 0.25 >= line.start_seconds)
-                .or_else(|| (!self.lyrics.is_empty()).then_some(0));
+            let active = self.synced_lyrics_active();
             self.lyrics_active = active;
             if let Some(index) = active {
                 self.lyrics_scroll
@@ -1150,9 +1174,10 @@ impl Render for Root {
             // macOS 隐藏系统标题栏，顶部留出红绿灯的高度；
             // Windows 隐藏系统标题栏后由应用自绘拖拽区与控制按钮。
             .when(cfg!(target_os = "macos"), |this| this.pt(px(28.0)))
-            .when(cfg!(target_os = "windows"), |this| {
-                this.child(ui::titlebar::render())
-            })
+            .when(
+                cfg!(any(target_os = "windows", target_os = "linux")),
+                |this| this.child(ui::titlebar::render()),
+            )
             .bg(theme::ambient_background())
             .text_color(ui::theme::text())
             .child(
@@ -1168,11 +1193,14 @@ impl Render for Root {
                             .min_w(px(0.0))
                             .child(views::render(self, window, cx)),
                     )
-                    .when(self.queue_open && self.nav != Nav::Lyrics, |this| {
+                    .when(self.queue_open, |this| {
                         this.child(ui::player_bar::queue_drawer(self, cx))
                     }),
             )
             .child(ui::player_bar::render(self, cx))
+            .when(cfg!(target_os = "linux"), |this| {
+                this.children(ui::titlebar::resize_handles())
+            })
             .when_some(crate::experience3::toast_message(), |this, message| {
                 this.child(
                     gpui::deferred(

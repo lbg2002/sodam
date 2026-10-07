@@ -55,6 +55,8 @@ pub struct Settings {
     pub lazy_startup: bool,
     /// 播放栏低于该宽度时折叠次要功能。
     pub player_bar_compact_width: u32,
+    /// 应用界面基础字号（px）；所有常规界面字号按该值成比例缩放。
+    pub ui_font_size: u32,
     /// 桌面歌词：单行模式。
     pub desktop_lyrics_single_line: bool,
     /// 桌面歌词：始终置顶。
@@ -71,6 +73,12 @@ pub struct Settings {
     pub desktop_lyrics_color: String,
     /// 桌面歌词对齐：left / center / right。
     pub desktop_lyrics_align: String,
+    /// Ubuntu / GNOME 顶栏歌词开关。其他平台会忽略该设置。
+    pub panel_lyrics_enabled: bool,
+    /// GNOME 顶栏歌词位置：left / center-left / center-right / right。
+    pub panel_lyrics_position: String,
+    /// GNOME 顶栏歌词颜色：accent / text / white。默认 accent，跟随当前歌曲主题色。
+    pub panel_lyrics_color: String,
     /// 迷你播放器记忆窗口坐标/尺寸；0 表示使用默认。
     pub mini_x: f32,
     pub mini_y: f32,
@@ -118,6 +126,7 @@ impl Default for Settings {
             crossfade_seconds: 0,
             lazy_startup: true,
             player_bar_compact_width: 900,
+            ui_font_size: 14,
             desktop_lyrics_single_line: false,
             desktop_lyrics_always_on_top: true,
             desktop_lyrics_locked: false,
@@ -126,6 +135,9 @@ impl Default for Settings {
             desktop_lyrics_font_size: 30,
             desktop_lyrics_color: "accent".to_string(),
             desktop_lyrics_align: "center".to_string(),
+            panel_lyrics_enabled: true,
+            panel_lyrics_position: "center-left".to_string(),
+            panel_lyrics_color: "accent".to_string(),
             mini_x: 0.0,
             mini_y: 0.0,
             mini_w: 420.0,
@@ -238,6 +250,9 @@ mod tests {
         assert_eq!(loaded.desktop_lyrics_opacity, 86);
         assert_eq!(loaded.desktop_lyrics_font_size, 30);
         assert_eq!(loaded.desktop_lyrics_color, "accent");
+        assert!(loaded.panel_lyrics_enabled);
+        assert_eq!(loaded.panel_lyrics_position, "center-left");
+        assert_eq!(loaded.panel_lyrics_color, "accent");
         assert_eq!(loaded.download_quality, "follow");
         assert_eq!(loaded.download_format, "source");
         assert!(loaded.download_dir.is_empty());
@@ -277,6 +292,9 @@ mod tests {
         assert_eq!(loaded.crossfade_seconds, 0);
         assert_eq!(loaded.audio_output_device, "");
         assert!(!loaded.normalize_volume);
+        assert!(loaded.panel_lyrics_enabled);
+        assert_eq!(loaded.panel_lyrics_position, "center-left");
+        assert_eq!(loaded.panel_lyrics_color, "accent");
         assert!(loaded.theme.is_empty());
         assert!(loaded.language.is_empty());
         assert!(loaded.is_ready_for_vip());

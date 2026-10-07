@@ -25,6 +25,16 @@ install -Dm644 crates/sodam/assets/brand/sodam-logo.png \
   "$stage/usr/share/icons/hicolor/256x256/apps/sodam.png"
 install -Dm644 LICENSE "$stage/usr/share/licenses/sodam/LICENSE"
 
+# GNOME Shell 顶栏歌词扩展。其它桌面环境会忽略该目录。
+ext_uuid="sodam-panel-lyrics@lbg2002"
+ext_src="packaging/gnome-extension/$ext_uuid"
+if [[ -d "$ext_src" ]]; then
+  install -Dm644 "$ext_src/metadata.json" \
+    "$stage/usr/share/gnome-shell/extensions/$ext_uuid/metadata.json"
+  install -Dm644 "$ext_src/extension.js" \
+    "$stage/usr/share/gnome-shell/extensions/$ext_uuid/extension.js"
+fi
+
 installed_size=$(du -sk "$stage" | cut -f1)
 cat > "$stage/.PKGINFO" <<PKGINFO
 pkgname = sodam

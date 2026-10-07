@@ -112,6 +112,71 @@ fn start_tray_service(
 }
 
 #[cfg(target_os = "linux")]
+fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
+    // GNOME Shell 扩展不能直接读取应用内存，因此用一个很小的状态文件做桥接。
+    // 文件写入放在独立线程，避免任何磁盘 IO 卡住 GPUI 渲染线程。
+    let state_path = sodam_core::Settings::config_path().with_file_name("panel-lyrics-state");
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::Builder::new()
+        .name("sodam-panel-lyrics".into())
+        .spawn(move || {
+            if let Some(parent) = state_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            while let Ok(content) = rx.recv() {
+                let tmp = state_path.with_extension("tmp");
+                if std::fs::write(&tmp, content.as_bytes()).is_ok() {
+                    let _ = std::fs::rename(&tmp, &state_path);
+                }
+            }
+        })
+        .ok();
+
+    cx.spawn(async move |cx| {
+        let mut last_state = String::new();
+        loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(200))
+                .await;
+            let state = cx.update(|cx| {
+                let root = app.read(cx);
+                let snapshot = root.engine.snapshot();
+                let position =
+                    snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
+                let active = root
+                    .lyrics
+                    .iter()
+                    .rposition(|line| position + 0.25 >= line.start_seconds)
+                    .or_else(|| (!root.lyrics.is_empty()).then_some(0));
+                let lyric = active
+                    .and_then(|index| root.lyrics.get(index))
+                    .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
+                    .unwrap_or_default();
+                let position = match root.settings.panel_lyrics_position.as_str() {
+                    "left" | "center-right" | "right" => {
+                        root.settings.panel_lyrics_position.as_str()
+                    }
+                    _ => "center-left",
+                };
+                format!(
+                    "{}\n{}\n{}\n",
+                    if root.settings.panel_lyrics_enabled { "1" } else { "0" },
+                    position,
+                    lyric
+                )
+            });
+            if state != last_state {
+                last_state = state.clone();
+                if tx.send(state).is_err() {
+                    break;
+                }
+            }
+        }
+    })
+    .detach();
+}
+
+#[cfg(target_os = "linux")]
 fn start_mpris_service(bridge: mpris::MprisBridge, app: Entity<app::Root>, cx: &mut App) {
     let state = bridge.state.clone();
     let receiver = bridge.receiver;
@@ -275,7 +340,10 @@ fn main() {
             }
 
             #[cfg(target_os = "linux")]
-            start_mpris_service(mpris::start(), app.clone(), cx);
+            {
+                start_mpris_service(mpris::start(), app.clone(), cx);
+                start_panel_lyrics_service(app.clone(), cx);
+            }
 
             cx.activate(true);
         });

@@ -14,11 +14,11 @@ mod tray;
 mod ui;
 mod views;
 
+#[cfg(target_os = "linux")]
+use gpui::WindowDecorations;
 use gpui::{
     px, size, App, AppContext as _, Bounds, Entity, TitlebarOptions, WindowBounds, WindowOptions,
 };
-#[cfg(target_os = "linux")]
-use gpui::WindowDecorations;
 use std::sync::Arc;
 
 /// 启动窗口尺寸（参考官方客户端的 16:10 主窗口）。

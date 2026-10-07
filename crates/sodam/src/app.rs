@@ -1070,7 +1070,17 @@ impl Root {
             return None;
         }
         let snapshot = self.engine.snapshot();
-        if snapshot.track_id.is_empty() || self.lyrics_track_id != snapshot.track_id {
+        // 引擎已经自然/异常结束时不要继续显示最后一行；切歌正在装载时，
+        // 也不要用旧引擎的进度推进上一首歌词。主页面、桌面歌词和 GNOME
+        // 顶栏都调用这一方法，因此三处以同一个“音频事实源”为准。
+        if snapshot.finished
+            || snapshot.track_id.is_empty()
+            || self.lyrics_track_id != snapshot.track_id
+            || self
+                .pending_track
+                .as_ref()
+                .is_some_and(|pending| pending.id != snapshot.track_id)
+        {
             return None;
         }
         let position =

@@ -51,6 +51,7 @@ impl ThemeKind {
 }
 
 static CURRENT_THEME: AtomicU8 = AtomicU8::new(0);
+static UI_FONT_SIZE: AtomicU32 = AtomicU32::new(14);
 // bit31 表示存在主色；低 24 位是 RGB。渲染线程每帧设置，后台只传值不读全局。
 static AMBIENT_COLOR: AtomicU32 = AtomicU32::new(0);
 
@@ -70,6 +71,14 @@ pub fn current_theme() -> ThemeKind {
         1 => ThemeKind::Light,
         _ => ThemeKind::Dark,
     }
+}
+
+pub fn set_ui_font_size(size: u32) {
+    UI_FONT_SIZE.store(size.clamp(12, 20), Ordering::Relaxed);
+}
+
+pub fn ui_font_size() -> u32 {
+    UI_FONT_SIZE.load(Ordering::Relaxed).clamp(12, 20)
 }
 
 pub fn theme_from_appearance(appearance: gpui::WindowAppearance) -> ThemeKind {
@@ -273,14 +282,21 @@ pub fn text() -> Rgba {
 
 /// 次要文本。
 pub fn text_muted() -> Rgba {
-    tint(hex(0x737373), TEXT_TINT)
+    tint(
+        if is_dark() {
+            hex(0xA3A3A3)
+        } else {
+            hex(0x737373)
+        },
+        TEXT_TINT,
+    )
 }
 
 /// 三级文本。
 pub fn text_faint() -> Rgba {
     tint(
         if is_dark() {
-            hex(0x525252)
+            hex(0x7A7A7A)
         } else {
             hex(0x737373)
         },
@@ -424,7 +440,7 @@ impl Text {
     }
 
     pub fn size(self) -> Pixels {
-        px((BASE * self.ratio()).round())
+        px((ui_font_size() as f32 * self.ratio()).round())
     }
 }
 

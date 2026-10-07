@@ -163,19 +163,21 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
     } else {
         (viewport_height * 0.40).min(viewport_width * 0.30)
     };
-    let mut lyrics_width = if root.queue_open {
-        (viewport_width * 0.30).clamp(320.0, 480.0)
-    } else {
-        (viewport_width * 0.30).clamp(300.0, 500.0)
-    };
+    let mut lyrics_width = (viewport_width * 0.30).clamp(300.0, 500.0);
 
     // 窗口被平铺 WM 压得比官方最小尺寸还窄时，整体收缩。
     let centered_width = (viewport_width - theme::SIDEBAR_W - 100.0).max(220.0);
-    let natural_width = cover_size + 50.0 + lyrics_width;
+    let natural_width = if root.queue_open {
+        cover_size
+    } else {
+        cover_size + 50.0 + lyrics_width
+    };
     if natural_width > centered_width {
         let scale = centered_width / natural_width;
         cover_size *= scale;
-        lyrics_width *= scale;
+        if !root.queue_open {
+            lyrics_width *= scale;
+        }
     }
 
     let track_info = div()
@@ -282,17 +284,10 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
     };
 
     let right_module = if root.queue_open {
-        div()
-            .w(px(lyrics_width))
-            .max_w(px(500.0))
-            .min_w(px(260.0))
-            .h_full()
-            .flex_none()
-            .min_h(px(0.0))
-            .child(crate::ui::player_bar::queue_panel(root, cx))
-            .into_any_element()
+        None
     } else {
-        div()
+        Some(
+            div()
             .flex()
             .flex_col()
             .w(px(lyrics_width))
@@ -349,7 +344,8 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
             } else {
                 list.expect("loaded lyrics have a list")
             })
-            .into_any_element()
+            .into_any_element(),
+        )
     };
 
     div()
@@ -402,7 +398,7 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                                 .child(track_info)
                                 .when_some(compact_lyrics, |this, lyrics| this.child(lyrics)),
                         )
-                        .child(right_module),
+                        .when_some(right_module, |this, module| this.child(module)),
                 ),
         )
         .into_any_element()

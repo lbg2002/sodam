@@ -6,7 +6,8 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, hsla, px, svg, ClickEvent, Div, Hsla, MouseButton, MouseDownEvent, WindowControlArea,
+    div, hsla, px, svg, AnyElement, ClickEvent, Div, Hsla, MouseButton, MouseDownEvent,
+    ResizeEdge, WindowControlArea,
 };
 
 use crate::ui::{icons, theme};
@@ -19,6 +20,71 @@ const BUTTON_WIDTH: f32 = 44.0;
 const GLYPH_SIZE: f32 = 12.0;
 /// 关闭按钮悬停色（沿用 Windows 惯例红）。
 const CLOSE_HOVER: Hsla = hsla(4.0 / 360.0, 0.83, 0.49, 1.0);
+
+/// Linux 客户端装饰下用于窗口缩放的命中区宽度。
+const RESIZE_EDGE: f32 = 6.0;
+/// 四角命中区略大，避免高 DPI 下难以抓住。
+const RESIZE_CORNER: f32 = 12.0;
+
+/// Ubuntu/Wayland 自绘边框不会自动获得系统 resize hit-test；
+/// 显式铺 4 条边 + 4 个角，并交给 GPUI/Wayland compositor 执行交互式缩放。
+pub fn resize_handles() -> Vec<AnyElement> {
+    let handle = |id: &'static str, edge: ResizeEdge| {
+        div()
+            .id(id)
+            .absolute()
+            .on_mouse_down(MouseButton::Left, move |_event: &MouseDownEvent, window, _cx| {
+                window.start_window_resize(edge);
+            })
+    };
+
+    vec![
+        handle("resize-top", ResizeEdge::Top)
+            .top(px(0.0))
+            .left(px(RESIZE_CORNER))
+            .right(px(RESIZE_CORNER))
+            .h(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-right", ResizeEdge::Right)
+            .top(px(RESIZE_CORNER))
+            .right(px(0.0))
+            .bottom(px(RESIZE_CORNER))
+            .w(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-bottom", ResizeEdge::Bottom)
+            .left(px(RESIZE_CORNER))
+            .right(px(RESIZE_CORNER))
+            .bottom(px(0.0))
+            .h(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-left", ResizeEdge::Left)
+            .top(px(RESIZE_CORNER))
+            .left(px(0.0))
+            .bottom(px(RESIZE_CORNER))
+            .w(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-top-left", ResizeEdge::TopLeft)
+            .top(px(0.0))
+            .left(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+        handle("resize-top-right", ResizeEdge::TopRight)
+            .top(px(0.0))
+            .right(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+        handle("resize-bottom-right", ResizeEdge::BottomRight)
+            .right(px(0.0))
+            .bottom(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+        handle("resize-bottom-left", ResizeEdge::BottomLeft)
+            .left(px(0.0))
+            .bottom(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+    ]
+}
 
 /// 渲染标题栏条：左侧空白为拖拽区，右侧是三个窗口控制按钮。
 pub fn render() -> Div {

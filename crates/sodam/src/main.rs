@@ -153,9 +153,7 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
                     .map(|line| {
                         line.text
                             .trim()
-                            .replace('\n', " ")
-                            .replace('\r', " ")
-                            .replace('\t', " ")
+                            .replace(['\n', '\r', '\t'], " ")
                     })
                     .unwrap_or_default();
                 let position = match root.settings.panel_lyrics_position.as_str() {
@@ -166,7 +164,11 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
                 };
                 format!(
                     "{}\n{}\n{}\n",
-                    if root.settings.panel_lyrics_enabled { "1" } else { "0" },
+                    if root.settings.panel_lyrics_enabled {
+                        "1"
+                    } else {
+                        "0"
+                    },
                     position,
                     lyric
                 )

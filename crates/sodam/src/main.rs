@@ -138,7 +138,7 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(200))
                 .await;
-            let state = cx.update(|cx| {
+            let Ok(state) = cx.update(|cx| {
                 let root = app.read(cx);
                 let snapshot = root.engine.snapshot();
                 let position =
@@ -150,7 +150,13 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
                     .or_else(|| (!root.lyrics.is_empty()).then_some(0));
                 let lyric = active
                     .and_then(|index| root.lyrics.get(index))
-                    .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
+                    .map(|line| {
+                        line.text
+                            .trim()
+                            .replace('\n', " ")
+                            .replace('\r', " ")
+                            .replace('\t', " ")
+                    })
                     .unwrap_or_default();
                 let position = match root.settings.panel_lyrics_position.as_str() {
                     "left" | "center-right" | "right" => {
@@ -164,7 +170,9 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
                     position,
                     lyric
                 )
-            });
+            }) else {
+                continue;
+            };
             if state != last_state {
                 last_state = state.clone();
                 if tx.send(state).is_err() {

@@ -1600,6 +1600,33 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     })
     .collect::<Vec<_>>();
 
+    let panel_color_value = match root.settings.panel_lyrics_color.as_str() {
+        "text" => text(root, "主题文字色", "Theme text color"),
+        "white" => text(root, "白色", "White"),
+        _ => text(root, "歌曲主题色", "Track theme color"),
+    };
+    let panel_color_options = [
+        ("accent", text(root, "歌曲主题色", "Track theme color")),
+        ("text", text(root, "主题文字色", "Theme text color")),
+        ("white", text(root, "白色", "White")),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, (value, label))| {
+        option_row(
+            format!("panel-color-{index}"),
+            label,
+            root.settings.panel_lyrics_color == value,
+            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.settings.panel_lyrics_color = value.to_string();
+                let _ = root.settings.save();
+                OPEN_SELECT.store(0, Ordering::Relaxed);
+                cx.notify();
+            }),
+        )
+    })
+    .collect::<Vec<_>>();
+
     let body = div()
         .flex()
         .flex_col()
@@ -1781,6 +1808,19 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     ),
                     panel_value,
                     panel_options,
+                    cx,
+                ),
+                select_row(
+                    "panel-color-select",
+                    10,
+                    text(root, "顶栏歌词颜色", "Panel lyrics color"),
+                    text(
+                        root,
+                        "默认跟随当前歌曲主题强调色。",
+                        "Defaults to the current track theme accent.",
+                    ),
+                    panel_color_value,
+                    panel_color_options,
                     cx,
                 ),
             ],

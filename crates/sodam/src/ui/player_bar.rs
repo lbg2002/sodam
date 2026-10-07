@@ -938,6 +938,7 @@ enum QueueSlot {
 
 /// 和「我喜欢的音乐」列表保持一致的行高（虚拟列表要求等高）。
 const QUEUE_ROW_H: f32 = theme::size::LIST_ROW;
+pub const QUEUE_DRAWER_W: f32 = 320.0;
 
 fn queue_slots(root: &Root) -> Vec<QueueSlot> {
     let tracks = root.queue.tracks();

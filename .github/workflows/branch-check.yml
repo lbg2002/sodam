@@ -1,0 +1,25 @@
+name: Branch pre-test check
+
+on:
+  push:
+    branches:
+      - fix/lyrics-ux-ubuntu-panel
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config git \
+            libasound2-dev libdbus-1-dev libfontconfig1-dev \
+            libfreetype-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+      - name: Check
+        run: ./scripts/check.sh

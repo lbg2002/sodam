@@ -93,7 +93,12 @@ export default class SodaMPanelLyricsExtension extends Extension {
 
     _applyLyric(text, color) {
         const normalized = color || null;
-        const escaped = GLib.markup_escape_text(text || '', -1);
+        const escaped = (text || '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&apos;');
 
         // St.Widget inline CSS is supposed to override theme CSS, but on
         // Ubuntu/GNOME panel themes the actual glyph color can still be

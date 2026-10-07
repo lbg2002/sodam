@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Pango from 'gi://Pango';
@@ -19,7 +20,6 @@ export default class SodaMPanelLyricsExtension extends Extension {
         this._position = null;
         this._color = null;
         this._actor = new St.Bin({
-            style_class: 'panel-button',
             reactive: false,
             can_focus: false,
             track_hover: false,
@@ -91,21 +91,25 @@ export default class SodaMPanelLyricsExtension extends Extension {
         }
     }
 
-    _applyColor(color) {
-        const normalized = color || null;
-        if (this._color === normalized)
-            return;
-        this._color = normalized;
+    _applyLyric(text, color) {
+        const normalized = color || '#FFFFFF';
 
-        // GNOME panel themes often set the foreground color on .panel-button.
-        // Apply the color to both the wrapper and label so the application
-        // setting wins consistently across Ubuntu/GNOME theme variants.
-        const colorStyle = normalized ? `color: ${normalized};` : '';
-        this._actor.set_style(colorStyle);
-        this._label.set_style(normalized
-            ? `${LABEL_BASE_STYLE} color: ${normalized};`
-            : LABEL_BASE_STYLE);
-        this._actor.queue_redraw();
+        // Ubuntu 26.04 uses GNOME 50. The panel theme can re-apply its
+        // foreground color after St/Pango styling, so write the final color
+        // directly to Clutter.Text using Cogl.Color. Do this on every refresh
+        // (not only when the lyric changes) so a later theme/style refresh
+        // cannot leave the glyphs white.
+        this._label.set_style(
+            `${LABEL_BASE_STYLE} color: ${normalized};`
+        );
+        this._label.clutter_text.set_use_markup(false);
+        this._label.clutter_text.set_text(text || '');
+
+        const [ok, coglColor] = Cogl.Color.from_string(normalized);
+        if (ok)
+            this._label.clutter_text.set_color(coglColor);
+
+        this._color = normalized;
         this._label.queue_redraw();
     }
 
@@ -117,8 +121,7 @@ export default class SodaMPanelLyricsExtension extends Extension {
             return;
         }
         this._place(state.position);
-        this._label.text = state.lyric;
-        this._applyColor(state.color);
+        this._applyLyric(state.lyric, state.color);
         this._actor.visible = state.enabled && state.lyric.length > 0;
     }
 

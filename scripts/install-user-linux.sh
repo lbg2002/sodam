@@ -41,8 +41,9 @@ EOF
 
 # Ubuntu / GNOME 顶栏歌词。非 GNOME 桌面会自然跳过，不影响播放器本体。
 if [[ -d "$ext_src" ]]; then
-    # 已启用扩展时，仅覆盖 extension.js 不会让 GNOME Shell 重新载入 JS，
-    # 会导致播放器已写入新字段但顶栏仍运行旧逻辑。安装前先 unload，复制后再 enable。
+    # 已启用扩展时，仅覆盖 extension.js 不会让 GNOME Shell 重新载入 JS。
+    # 先 disable/enable 可刷新扩展状态；但 GNOME 45+ 的 ES module 仍会被 Shell
+    # 进程缓存，Wayland 会话更新 JS 后通常还需要注销并重新登录才能载入新模块。
     if command -v gnome-extensions >/dev/null 2>&1; then
         gnome-extensions disable "$ext_uuid" >/dev/null 2>&1 || true
     fi
@@ -69,6 +70,7 @@ echo "桌面入口：$desktop_path"
 echo "图标：$icon_path"
 if [[ -d "$ext_dir" ]]; then
     echo "GNOME 顶栏歌词扩展：$ext_dir"
-    echo "若顶栏歌词首次安装后未立即出现，请注销并重新登录，然后执行：gnome-extensions enable $ext_uuid"
+    echo "若本次更新了顶栏扩展代码，请注销并重新登录 GNOME 后再测试；Wayland 下仅 disable/enable 不能保证刷新 ES module 缓存。"
+    echo "重新登录后如扩展未启用，执行：gnome-extensions enable $ext_uuid"
 fi
 echo "如果 GNOME 应用网格仍显示旧图标，请注销并重新登录一次。"

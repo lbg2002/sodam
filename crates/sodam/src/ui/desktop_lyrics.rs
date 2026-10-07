@@ -61,6 +61,9 @@ pub struct DesktopLyrics {
 
 impl DesktopLyrics {
     pub fn new(root: Entity<Root>, cx: &mut Context<Self>) -> Self {
+        // Root 的播放心跳会在播放期间持续 notify；这里观察 Root 后即可跟着重绘。
+        // 当前歌词索引不再依赖 Root 主窗口是否正停留在 Lyrics 页面，而是在
+        // render 中直接根据引擎位置计算，这样独立窗口切到其它页面也会继续滚动。
         cx.observe(&root, |_view, _root, cx| {
             cx.notify();
         })
@@ -97,7 +100,20 @@ impl Render for DesktopLyrics {
         } else {
             window.set_input_region(None);
         }
-        let active = root.lyrics_active.unwrap_or(0);
+
+        // 旧实现直接读取 root.lyrics_active。该字段只在主窗口处于 Nav::Lyrics 时
+        // 更新，因此离开播放页后桌面歌词会永久停在最后一行。独立窗口应当独立于
+        // 主页面路由，所以每次重绘都用真实播放进度重新定位当前歌词。
+        let snapshot = root.engine.snapshot();
+        let position =
+            snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
+        let active = root
+            .lyrics
+            .iter()
+            .rposition(|line| position + 0.25 >= line.start_seconds)
+            .or_else(|| (!root.lyrics.is_empty()).then_some(0))
+            .unwrap_or(0);
+
         let current = root
             .lyrics
             .get(active)

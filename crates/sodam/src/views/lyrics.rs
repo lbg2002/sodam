@@ -155,18 +155,25 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
     // 队列展开时给右侧队列固定更多空间，并主动缩小封面，避免只是把原歌词列
     // 生硬替换成队列后造成左侧视觉中心不变、歌词完全消失的问题。
     let viewport_width = f32::from(window.viewport_size().width);
+    // 队列始终由 Root 在最右侧渲染同一个全局 drawer。歌词页的自适应尺寸
+    // 只使用 drawer 左侧剩余空间，避免视觉上把队列“挤离”右边缘。
+    let content_viewport_width = if root.queue_open {
+        (viewport_width - crate::ui::player_bar::QUEUE_DRAWER_W).max(520.0)
+    } else {
+        viewport_width
+    };
     let viewport_height = (f32::from(window.viewport_size().height) - theme::PLAYER_H).max(360.0);
     let mut cover_size = if root.queue_open {
         (viewport_height * 0.32)
-            .min(viewport_width * 0.22)
+            .min(content_viewport_width * 0.22)
             .clamp(180.0, 330.0)
     } else {
-        (viewport_height * 0.40).min(viewport_width * 0.30)
+        (viewport_height * 0.40).min(content_viewport_width * 0.30)
     };
-    let mut lyrics_width = (viewport_width * 0.30).clamp(300.0, 500.0);
+    let mut lyrics_width = (content_viewport_width * 0.30).clamp(300.0, 500.0);
 
     // 窗口被平铺 WM 压得比官方最小尺寸还窄时，整体收缩。
-    let centered_width = (viewport_width - theme::SIDEBAR_W - 100.0).max(220.0);
+    let centered_width = (content_viewport_width - theme::SIDEBAR_W - 100.0).max(220.0);
     let natural_width = if root.queue_open {
         cover_size
     } else {

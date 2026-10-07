@@ -1,29 +1,92 @@
-//! Windows 自绘标题栏：拖拽区 + 最小化/最大化/关闭按钮。
+//! 应用自绘标题栏：拖拽区 + 最小化/最大化/关闭按钮。
 //!
-//! gpui Windows 后端在 `TitlebarOptions::appears_transparent` 时会移除系统
-//! 标题栏（WM_NCCALCSIZE），由应用通过 `window_control_area` 提供控制区：
-//! WM_NCHITTEST 把这些区域映射为 HTCAPTION / HTMINBUTTON / HTMAXBUTTON /
-//! HTCLOSE，拖拽、双击最大化、Win11 贴靠布局全部由系统处理。
-//!
-//! 命中匹配取「第一个包含光标的 hitbox」，因此按钮必须与拖拽区是
-//! 兄弟节点，不能嵌套 —— 否则拖拽区先匹配，按钮会失效。
-//! macOS 走系统红绿灯，不使用本组件。
+//! Windows 通过 `window_control_area` 交给系统完成命中测试；Linux/Wayland
+//! 不能依赖这套 Windows 命中机制，因此在控件上显式调用 GPUI 的窗口操作 API。
+//! 这样 Ubuntu 新版采用客户端装饰时，顶部空白区仍可拖动，窗口按钮也始终可用。
 
 use gpui::prelude::*;
-use gpui::{div, hsla, px, svg, Div, Hsla, WindowControlArea};
+use gpui::{
+    div, hsla, px, svg, AnyElement, ClickEvent, Div, Hsla, MouseButton, MouseDownEvent, ResizeEdge,
+    WindowControlArea,
+};
 
 use crate::ui::{icons, theme};
 
-/// 标题栏条高度（逻辑像素，与 Windows 惯例一致）。
+/// 标题栏条高度（逻辑像素）。
 const STRIP_HEIGHT: f32 = 32.0;
 /// 单个标题栏按钮宽度。
 const BUTTON_WIDTH: f32 = 44.0;
 /// 控制图标边长。
 const GLYPH_SIZE: f32 = 12.0;
-/// 关闭按钮悬停色（Windows 惯例红）。
+/// 关闭按钮悬停色（沿用 Windows 惯例红）。
 const CLOSE_HOVER: Hsla = hsla(4.0 / 360.0, 0.83, 0.49, 1.0);
 
-/// 渲染标题栏条：左侧全部为拖拽区，右侧是三个窗口控制按钮。
+/// Linux 客户端装饰下用于窗口缩放的命中区宽度。
+const RESIZE_EDGE: f32 = 6.0;
+/// 四角命中区略大，避免高 DPI 下难以抓住。
+const RESIZE_CORNER: f32 = 12.0;
+
+/// Ubuntu/Wayland 自绘边框不会自动获得系统 resize hit-test；
+/// 显式铺 4 条边 + 4 个角，并交给 GPUI/Wayland compositor 执行交互式缩放。
+pub fn resize_handles() -> Vec<AnyElement> {
+    let handle = |id: &'static str, edge: ResizeEdge| {
+        div().id(id).absolute().on_mouse_down(
+            MouseButton::Left,
+            move |_event: &MouseDownEvent, window, _cx| {
+                window.start_window_resize(edge);
+            },
+        )
+    };
+
+    vec![
+        handle("resize-top", ResizeEdge::Top)
+            .top(px(0.0))
+            .left(px(RESIZE_CORNER))
+            .right(px(RESIZE_CORNER))
+            .h(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-right", ResizeEdge::Right)
+            .top(px(RESIZE_CORNER))
+            .right(px(0.0))
+            .bottom(px(RESIZE_CORNER))
+            .w(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-bottom", ResizeEdge::Bottom)
+            .left(px(RESIZE_CORNER))
+            .right(px(RESIZE_CORNER))
+            .bottom(px(0.0))
+            .h(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-left", ResizeEdge::Left)
+            .top(px(RESIZE_CORNER))
+            .left(px(0.0))
+            .bottom(px(RESIZE_CORNER))
+            .w(px(RESIZE_EDGE))
+            .into_any_element(),
+        handle("resize-top-left", ResizeEdge::TopLeft)
+            .top(px(0.0))
+            .left(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+        handle("resize-top-right", ResizeEdge::TopRight)
+            .top(px(0.0))
+            .right(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+        handle("resize-bottom-right", ResizeEdge::BottomRight)
+            .right(px(0.0))
+            .bottom(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+        handle("resize-bottom-left", ResizeEdge::BottomLeft)
+            .left(px(0.0))
+            .bottom(px(0.0))
+            .size(px(RESIZE_CORNER))
+            .into_any_element(),
+    ]
+}
+
+/// 渲染标题栏条：左侧空白为拖拽区，右侧是三个窗口控制按钮。
 pub fn render() -> Div {
     div()
         .flex()
@@ -31,6 +94,7 @@ pub fn render() -> Div {
         .items_center()
         .w_full()
         .h(px(STRIP_HEIGHT))
+        .flex_none()
         .child(drag_area())
         .child(caption_button(
             "titlebar-min",
@@ -58,6 +122,11 @@ fn drag_area() -> impl IntoElement {
         .flex_1()
         .h_full()
         .window_control_area(WindowControlArea::Drag)
+        .when(cfg!(target_os = "linux"), |this| {
+            this.on_mouse_down(MouseButton::Left, |_event: &MouseDownEvent, window, _cx| {
+                window.start_window_move();
+            })
+        })
 }
 
 fn caption_button(
@@ -75,6 +144,14 @@ fn caption_button(
         .h(px(STRIP_HEIGHT))
         .window_control_area(area)
         .group(id)
+        .when(cfg!(target_os = "linux"), |this| {
+            this.on_click(move |_event: &ClickEvent, window, _cx| match area {
+                WindowControlArea::Min => window.minimize_window(),
+                WindowControlArea::Max => window.zoom_window(),
+                WindowControlArea::Close => window.remove_window(),
+                WindowControlArea::Drag => window.start_window_move(),
+            })
+        })
         .child(
             svg()
                 .path(icons::path(icon))

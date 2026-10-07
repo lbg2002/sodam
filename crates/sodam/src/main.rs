@@ -14,6 +14,8 @@ mod tray;
 mod ui;
 mod views;
 
+#[cfg(target_os = "linux")]
+use gpui::WindowDecorations;
 use gpui::{
     px, size, App, AppContext as _, Bounds, Entity, TitlebarOptions, WindowBounds, WindowOptions,
 };
@@ -28,15 +30,19 @@ fn main_window_options(cx: &mut App) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         window_min_size: Some(size(px(MIN_SIZE.0), px(MIN_SIZE.1))),
+        is_resizable: true,
         titlebar: Some(TitlebarOptions {
             title: Some("SodaM".into()),
-            // macOS 隐藏系统标题栏（红绿灯悬浮）；Windows 同样隐藏，
-            // 由 ui::titlebar 自绘拖拽区与最小化/最大化/关闭按钮。
-            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            // 三个平台都使用透明标题栏。Windows/Linux 由 ui::titlebar
+            // 自绘拖拽区与最小化/最大化/关闭按钮；Linux/Wayland（Ubuntu 26）
+            // 不再依赖系统窗口装饰是否提供按钮。
+            #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             appears_transparent: true,
             ..Default::default()
         }),
         app_id: Some("SodaM".into()),
+        #[cfg(target_os = "linux")]
+        window_decorations: Some(WindowDecorations::Client),
         icon: Some(Arc::new(
             image::load_from_memory(include_bytes!("../assets/brand/sodam-logo-tray.png"))
                 .expect("内置应用图标应为有效 PNG")
@@ -105,6 +111,99 @@ fn start_tray_service(
                         });
                     });
                 });
+            }
+        }
+    })
+    .detach();
+}
+
+#[cfg(target_os = "linux")]
+fn panel_color_hex(color: gpui::Rgba) -> String {
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        channel(color.r),
+        channel(color.g),
+        channel(color.b)
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
+    // GNOME Shell 扩展不能直接读取应用内存，因此用一个很小的状态文件做桥接。
+    // 文件写入放在独立线程，避免任何磁盘 IO 卡住 GPUI 渲染线程。
+    let state_path = sodam_core::Settings::config_path().with_file_name("panel-lyrics-state");
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::Builder::new()
+        .name("sodam-panel-lyrics".into())
+        .spawn(move || {
+            if let Some(parent) = state_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            while let Ok(content) = rx.recv() {
+                let tmp = state_path.with_extension("tmp");
+                if std::fs::write(&tmp, content.as_bytes()).is_ok() {
+                    let _ = std::fs::rename(&tmp, &state_path);
+                }
+            }
+        })
+        .ok();
+
+    cx.spawn(async move |cx| {
+        let mut last_state = String::new();
+        loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(200))
+                .await;
+            let state = cx.update(|cx| {
+                let root = app.read(cx);
+                let snapshot = root.engine.snapshot();
+                let lyric = if root.lyrics_track_id == snapshot.track_id {
+                    root.synced_lyrics_active()
+                        .and_then(|index| root.lyrics.get(index))
+                        .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                let position = match root.settings.panel_lyrics_position.as_str() {
+                    "left" | "center-right" | "right" => {
+                        root.settings.panel_lyrics_position.as_str()
+                    }
+                    _ => "center-left",
+                };
+
+                // 顶栏颜色与应用当前主题/封面强调色保持一致。
+                ui::theme::set_theme(root.theme);
+                let ambient = root
+                    .queue
+                    .current()
+                    .and_then(|track| root.ambient_colors.get(&track.cover).copied());
+                ui::theme::set_ambient_rgb(ambient);
+                let color = match root.settings.panel_lyrics_color.as_str() {
+                    "text" => panel_color_hex(ui::theme::text()),
+                    "white" => "#FFFFFF".to_string(),
+                    // 默认：与桌面歌词默认模式一致，跟随当前歌曲封面主题强调色。
+                    _ => panel_color_hex(ui::theme::accent()),
+                };
+
+                format!(
+                    "{}\n{}\n{}\n{}\n",
+                    if root.settings.panel_lyrics_enabled {
+                        "1"
+                    } else {
+                        "0"
+                    },
+                    position,
+                    lyric,
+                    color
+                )
+            });
+            if state != last_state {
+                last_state = state.clone();
+                if tx.send(state).is_err() {
+                    break;
+                }
             }
         }
     })
@@ -275,7 +374,10 @@ fn main() {
             }
 
             #[cfg(target_os = "linux")]
-            start_mpris_service(mpris::start(), app.clone(), cx);
+            {
+                start_mpris_service(mpris::start(), app.clone(), cx);
+                start_panel_lyrics_service(app.clone(), cx);
+            }
 
             cx.activate(true);
         });

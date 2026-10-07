@@ -211,13 +211,24 @@ impl Root {
                 .await;
             let _ = this.update(cx, |root, cx| {
                 let snap = root.engine.snapshot();
+
+                // 歌词时钟属于播放状态，不属于某个可见页面。即使主窗口最小化、
+                // 关闭到托盘或当前不在歌词页，也持续维护同一个 active index。
+                // DesktopLyrics 观察 Root 的 notify；GNOME 顶栏则读取同一方法生成的状态。
+                let active = root.synced_lyrics_active();
+                let lyric_changed = active != root.lyrics_active;
+                if lyric_changed {
+                    root.lyrics_active = active;
+                    cx.notify();
+                }
+
                 // 加载完成：引擎已切到 pending 曲目 → 清 loading 态
                 if let Some(pending) = &root.pending_track {
                     if snap.track_id == pending.id {
                         root.pending_track = None;
                     }
                 }
-                if snap.playing || root.pending_track.is_some() {
+                if snap.playing || root.pending_track.is_some() || snap.finished {
                     cx.notify();
                 }
                 if snap.playing
@@ -1172,26 +1183,6 @@ impl Root {
                 }
             ),
             Err(err) => self.localized("主题已切换，但保存失败：{err}", &[err.to_string()]),
-        };
-        cx.notify();
-    }
-
-    /// 用系统默认应用打开配置文件（macOS `open` / Windows `start` / Linux `xdg-open`）。
-    pub fn open_config_file(&mut self, cx: &mut Context<Self>) {
-        let path = Settings::config_path();
-        self.status = match system_open(&path.display().to_string()) {
-            Ok(_) => self.tr("已用系统默认应用打开配置文件").to_string(),
-            Err(err) => self.localized("打开配置文件失败：{err}", &[err.to_string()]),
-        };
-        cx.notify();
-    }
-
-    /// 用系统默认浏览器打开项目 GitHub 仓库。
-    pub fn open_github_repository(&mut self, cx: &mut Context<Self>) {
-        let url = env!("CARGO_PKG_REPOSITORY");
-        self.status = match system_open(url) {
-            Ok(_) => self.tr("已在浏览器打开 GitHub 仓库").to_string(),
-            Err(err) => self.localized("打开 GitHub 仓库失败：{err}", &[err.to_string()]),
         };
         cx.notify();
     }
@@ -2906,6 +2897,7 @@ impl Root {
         .detach();
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn play(&mut self, cx: &mut Context<Self>) {
         let snapshot = self.engine.snapshot();
         if snapshot.track_id.is_empty() {
@@ -2918,6 +2910,7 @@ impl Root {
         cx.notify();
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn pause(&mut self, cx: &mut Context<Self>) {
         self.engine.pause();
         self.playing = false;
@@ -2926,6 +2919,7 @@ impl Root {
         cx.notify();
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn stop_playback(&mut self, cx: &mut Context<Self>) {
         self.engine.stop();
         self.playing = false;
@@ -2973,9 +2967,9 @@ impl Root {
         self.progress_preview = None;
         self.set_status("正在准备播放：{}…", std::slice::from_ref(&track.title));
         self.ensure_covers(std::slice::from_ref(&track.cover), cx);
-        if self.nav == Nav::Lyrics {
-            self.load_lyrics(track.clone(), false, cx);
-        }
+        // 歌词是播放状态的一部分，不应依赖主窗口当前是否停留在歌词页。
+        // 桌面歌词和 GNOME 顶栏在窗口隐藏/后台播放时同样需要当前曲目的歌词。
+        self.load_lyrics(track.clone(), false, cx);
         cx.notify();
 
         let settings = self.settings.clone();
@@ -3236,10 +3230,10 @@ impl Root {
     }
 }
 
-fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<PathBuf>> {
+fn choose_directory_dialog(_initial: &std::path::Path) -> anyhow::Result<Option<PathBuf>> {
     #[cfg(target_os = "linux")]
     {
-        let initial = initial.display().to_string();
+        let initial = _initial.display().to_string();
         let initial_arg = format!("--filename={initial}/");
         let zenity = std::process::Command::new("zenity")
             .args([
@@ -3280,18 +3274,18 @@ fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<P
             return Ok(None);
         }
         let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+        Ok((!value.is_empty()).then(|| PathBuf::from(value)))
     }
 
     #[cfg(windows)]
     {
-        let _ = initial;
+        let _ = _initial;
         anyhow::bail!("Windows 目录选择暂未接入")
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
-        let _ = initial;
+        let _ = _initial;
         anyhow::bail!("当前平台暂不支持目录选择器")
     }
 }

@@ -1,5 +1,6 @@
 //! 桌面系统音频集成：输出设备枚举/切换与切歌通知。
 
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -116,5 +117,9 @@ pub fn notify_track(title: &str, artist: &str, cover: Option<&std::path::Path>) 
             command.arg("-i").arg(path);
         }
         let _ = command.arg(title).arg(artist).spawn();
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (title, artist, cover);
     }
 }

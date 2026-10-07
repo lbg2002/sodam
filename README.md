@@ -6,7 +6,7 @@
     <a href="https://github.com/sodahub-org/sodam/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPL%203.0%20or%20later-blue.svg" alt="License: AGPL-3.0-or-later"></a>
     <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.85%2B-orange.svg" alt="Rust 1.85+"></a>
     <a href="https://github.com/sodahub-org/gpui"><img src="https://img.shields.io/badge/UI-GPUI%200.2.2-8B5CF6.svg" alt="GPUI 0.2.2"></a>
-    <a href="https://omarchy.org/"><img src="https://img.shields.io/badge/Linux%20%7C%20Omarchy-tested-success.svg" alt="Linux / Omarchy tested"></a>
+    <img src="https://img.shields.io/badge/Linux%20%7C%20Ubuntu%2026%20GNOME-tested-success.svg" alt="Linux / Ubuntu 26 GNOME tested">
     <a href="https://github.com/sodahub-org/sodam/releases"><img src="https://img.shields.io/badge/macOS%20arm64%20%7C%20Apple%20Silicon-tested-success.svg" alt="macOS arm64 tested"></a>
     <img src="https://img.shields.io/badge/Windows%20x64-tested-success.svg" alt="Windows x64 tested">
   </p>
@@ -56,7 +56,7 @@ SodaM 面向 Linux / macOS / Windows 桌面，重点做四件事：**接近官�
 
 | 平台 | 状态 |
 | --- | --- |
-| Linux / Omarchy | 已实测 |
+| Linux / Ubuntu 26（GNOME）/ Omarchy | 已实测；Ubuntu 26 支持 Wayland / X11、自绘窗口控制与 GNOME 顶栏歌词 |
 | macOS（Apple Silicon） | 已实测，提供 Homebrew Cask 与 `.app` 下载 |
 | Windows（x64） | 已实测，提供安装包 |
 
@@ -106,8 +106,10 @@ SodaM 面向 Linux / macOS / Windows 桌面，重点做四件事：**接近官�
 - 歌词随播放进度滚动，当前句自动放大、加粗并使用强调背景
 - 歌词字号、行距与时间偏移可配置；设置独立持久化
 - 独立桌面歌词窗口：单行 / 双行、左中右对齐、背景透明度、置顶、锁定位置、Linux 鼠标穿透
+- 主歌词页、桌面歌词与 GNOME 顶栏歌词共用同一播放器时钟；切歌、会员歌曲提前结束、主窗口关闭到后台后仍保持同步
+- Ubuntu / GNOME 顶栏歌词：可开关、可调整左侧 / 日期左侧 / 日期右侧 / 右侧状态区位置，默认使用当前歌曲封面主题强调色，也可切换主题文字色或白色
 - 迷你播放器与桌面歌词记忆窗口位置和尺寸，下次打开恢复
-- 播放页可在歌词视图与队列视图之间切换
+- 播放队列统一为右侧抽屉；歌词页打开队列时封面与精简歌词自动适配剩余宽度，抽屉尺寸与其他页面一致
 - 封面与歌词加载失败时提供重试，并校验资源与当前歌曲是否匹配
 
 ### 推荐、听歌模式与音乐库
@@ -145,21 +147,24 @@ SodaM 面向 Linux / macOS / Windows 桌面，重点做四件事：**接近官�
 
 ### 设置
 
-- 设置页使用二级分类导航：常规 / 播放 / 歌词 / 下载 / 存储 / 桌面 / 高级 / 账户
-- 高级设置集中管理系统切歌通知、Linux 音频输出设备、响度标准化、Gapless / Crossfade、启动延迟加载和播放栏折叠阈值
-- 左侧分类固定，右侧仅滚动当前分类，避免功能增多后形成超长单页
+- 设置页重新按任务分类：**外观与通知 / 播放与音频 / 歌词显示 / 下载 / 缓存与离线 / 桌面与系统 / 性能 / 账户**
+- 控件按设置语义统一：离散选项使用下拉框，连续数值使用可拖动滑条，布尔能力使用开关，执行型操作使用按钮
+- 支持全局界面基础字号调节；主歌词字号 / 行距 / 时间偏移、桌面歌词字号 / 透明度、Crossfade、预加载深度、缓存上限等均可直接滑动调整
+- 桌面与系统页集中管理桌面歌词和 Ubuntu / GNOME 顶栏歌词，包括顶栏位置与顶栏歌词颜色
+- 设置项去除长期占位的固定解释文字，分类子标题高于普通设置项字号，左侧分类固定、右侧仅滚动当前分类
 
 ### 桌面体验
 
-- Dark / Light 双主题，首次启动跟随系统偏好
+- Dark / Light 双主题，首次启动跟随系统偏好；深色主题提高次要文字对比度，侧栏与列表在暗色背景下更易读
 - 中文 / English 界面语言，首次启动跟随系统语言
+- 全局界面字体大小可在设置中调整，侧栏、列表、设置等常规文字按基础字号统一缩放
 - 系统托盘：播放控制、显示主窗口、真正退出（Linux 为 SNI 托盘，macOS 为菜单栏 NSStatusItem，Windows 为通知区域图标）
 - 独立迷你播放器：封面、歌曲信息、进度、上一首 / 播放暂停 / 下一首，并记忆位置与尺寸
 - 底部播放栏根据窗口宽度自动折叠；窄窗口把离线、桌面歌词、迷你播放器和睡眠定时收进“···”
 - 统一 Toast：下载、离线切换、歌词设置、缓存清理等即时操作会在播放器上方显示短提示
 - Linux 支持系统切歌通知和 PipeWire-Pulse / PulseAudio 输出设备切换
 - 关闭主窗口不退出进程，保留后台播放
-- Linux 提供原生窗口与桌面入口；macOS 提供自绘标题栏的 `.app`；Windows 提供自绘标题栏（拖拽、双击最大化、Win11 贴靠布局）的安装包
+- Linux（含 Ubuntu 26 / GNOME）使用自绘标题栏：顶部空白区可拖动，提供最小化 / 最大化 / 关闭按钮，并支持从四边与四角调整窗口大小；macOS 提供自绘标题栏的 `.app`；Windows 提供自绘标题栏（拖拽、双击最大化、Win11 贴靠布局）的安装包
 
 ### 性能与稳定性
 
@@ -216,6 +221,15 @@ scripts/run.sh
 
 首次启动进入设置页，扫码登录后配置会写入本地。已登录用户会直接进入播放页，
 并自动准备推荐队列。
+
+Ubuntu / GNOME 用户需要把当前 release 构建安装到用户目录（同时安装 GNOME 顶栏歌词扩展）时，可执行：
+
+```bash
+./scripts/build.sh --release
+./scripts/install-user-linux.sh
+```
+
+首次安装 GNOME Shell 扩展后，如系统尚未识别扩展，可注销并重新登录一次。
 
 ## 配置
 

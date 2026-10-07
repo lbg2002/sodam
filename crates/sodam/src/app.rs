@@ -1083,8 +1083,7 @@ impl Root {
         {
             return None;
         }
-        let position =
-            snapshot.position_seconds - self.settings.lyrics_offset_ms as f64 / 1000.0;
+        let position = snapshot.position_seconds - self.settings.lyrics_offset_ms as f64 / 1000.0;
         self.lyrics
             .iter()
             .rposition(|line| position + 0.25 >= line.start_seconds)

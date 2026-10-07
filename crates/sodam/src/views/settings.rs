@@ -231,7 +231,7 @@ fn card(title: String, _description: String, children: Vec<AnyElement>) -> AnyEl
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::text())
                         .child(title),
-                )
+                ),
         )
         .children(children)
         .into_any_element()
@@ -269,7 +269,7 @@ fn toggle_row(
                         .text_size(theme::Text::Body.size())
                         .text_color(theme::text())
                         .child(title),
-                )
+                ),
         )
         .child(
             div()
@@ -381,7 +381,7 @@ fn select_row(
                                 .text_size(theme::Text::Body.size())
                                 .text_color(theme::text())
                                 .child(title),
-                        )
+                        ),
                 )
                 .child(
                     div()
@@ -509,7 +509,7 @@ fn slider_row(
                                 .text_size(theme::Text::Body.size())
                                 .text_color(theme::text())
                                 .child(title),
-                        )
+                        ),
                 )
                 .child(
                     div()

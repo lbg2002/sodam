@@ -295,63 +295,63 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
     } else {
         Some(
             div()
-            .flex()
-            .flex_col()
-            .w(px(lyrics_width))
-            .max_w(px(500.0))
-            .min_w(px(260.0))
-            .h_full()
-            .flex_none()
-            .min_h(px(0.0))
-            .gap(px(theme::space::MD))
-            .child(
-                div()
-                    .text_size(theme::Text::Title.size())
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(theme::text())
-                    .truncate()
-                    .child(track.title.clone()),
-            )
-            .child(
-                div()
-                    .text_size(theme::Text::Small.size())
-                    .text_color(theme::text_muted())
-                    .child(format!(
-                        "{} · {} · {}",
-                        track.artist,
-                        track.duration_label(),
-                        snapshot.progress_label()
-                    )),
-            )
-            .child(if root.loading_lyrics {
-                loading_state(root.tr("正在读取歌词…")).into_any_element()
-            } else if let Some(error) = &root.lyrics_error {
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(theme::space::SM))
-                    .child(
-                        div()
-                            .text_size(theme::Text::Small.size())
-                            .text_color(theme::text_muted())
-                            .child(error.clone()),
-                    )
-                    .child(retry_button(root.language, cx))
-                    .into_any_element()
-            } else if root.lyrics.is_empty() {
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(theme::space::SM))
-                    .child(empty_state("music", root.tr("这首歌暂时没有歌词")))
-                    .child(retry_button(root.language, cx))
-                    .into_any_element()
-            } else {
-                list.expect("loaded lyrics have a list")
-            })
-            .into_any_element(),
+                .flex()
+                .flex_col()
+                .w(px(lyrics_width))
+                .max_w(px(500.0))
+                .min_w(px(260.0))
+                .h_full()
+                .flex_none()
+                .min_h(px(0.0))
+                .gap(px(theme::space::MD))
+                .child(
+                    div()
+                        .text_size(theme::Text::Title.size())
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(theme::text())
+                        .truncate()
+                        .child(track.title.clone()),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(format!(
+                            "{} · {} · {}",
+                            track.artist,
+                            track.duration_label(),
+                            snapshot.progress_label()
+                        )),
+                )
+                .child(if root.loading_lyrics {
+                    loading_state(root.tr("正在读取歌词…")).into_any_element()
+                } else if let Some(error) = &root.lyrics_error {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(
+                            div()
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .child(error.clone()),
+                        )
+                        .child(retry_button(root.language, cx))
+                        .into_any_element()
+                } else if root.lyrics.is_empty() {
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(empty_state("music", root.tr("这首歌暂时没有歌词")))
+                        .child(retry_button(root.language, cx))
+                        .into_any_element()
+                } else {
+                    list.expect("loaded lyrics have a list")
+                })
+                .into_any_element(),
         )
     };
 

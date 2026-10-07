@@ -2953,9 +2953,9 @@ impl Root {
         self.progress_preview = None;
         self.set_status("正在准备播放：{}…", std::slice::from_ref(&track.title));
         self.ensure_covers(std::slice::from_ref(&track.cover), cx);
-        if self.nav == Nav::Lyrics {
-            self.load_lyrics(track.clone(), false, cx);
-        }
+        // 歌词是播放状态的一部分，不应依赖主窗口当前是否停留在歌词页。
+        // 桌面歌词和 GNOME 顶栏在窗口隐藏/后台播放时同样需要当前曲目的歌词。
+        self.load_lyrics(track.clone(), false, cx);
         cx.notify();
 
         let settings = self.settings.clone();

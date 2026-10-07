@@ -57,12 +57,9 @@ fn drag_area() -> impl IntoElement {
         .h_full()
         .window_control_area(WindowControlArea::Drag)
         .when(cfg!(target_os = "linux"), |this| {
-            this.on_mouse_down(
-                MouseButton::Left,
-                |_event: &MouseDownEvent, window, _cx| {
-                    window.start_window_move();
-                },
-            )
+            this.on_mouse_down(MouseButton::Left, |_event: &MouseDownEvent, window, _cx| {
+                window.start_window_move();
+            })
         })
 }
 

@@ -15,7 +15,8 @@ mod ui;
 mod views;
 
 use gpui::{
-    px, size, App, AppContext as _, Bounds, Entity, TitlebarOptions, WindowBounds, WindowOptions,
+    px, size, App, AppContext as _, Bounds, Entity, TitlebarOptions, WindowBounds,
+    WindowDecorations, WindowOptions,
 };
 use std::sync::Arc;
 
@@ -37,6 +38,8 @@ fn main_window_options(cx: &mut App) -> WindowOptions {
             ..Default::default()
         }),
         app_id: Some("SodaM".into()),
+        #[cfg(target_os = "linux")]
+        window_decorations: Some(WindowDecorations::Client),
         icon: Some(Arc::new(
             image::load_from_memory(include_bytes!("../assets/brand/sodam-logo-tray.png"))
                 .expect("内置应用图标应为有效 PNG")
@@ -112,6 +115,17 @@ fn start_tray_service(
 }
 
 #[cfg(target_os = "linux")]
+fn panel_color_hex(color: gpui::Rgba) -> String {
+    let channel = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    format!(
+        "#{:02X}{:02X}{:02X}",
+        channel(color.r),
+        channel(color.g),
+        channel(color.b)
+    )
+}
+
+#[cfg(target_os = "linux")]
 fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
     // GNOME Shell 扩展不能直接读取应用内存，因此用一个很小的状态文件做桥接。
     // 文件写入放在独立线程，避免任何磁盘 IO 卡住 GPUI 渲染线程。
@@ -141,32 +155,40 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
             let state = cx.update(|cx| {
                 let root = app.read(cx);
                 let snapshot = root.engine.snapshot();
-                let position =
-                    snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
-                let active = root
-                    .lyrics
-                    .iter()
-                    .rposition(|line| position + 0.25 >= line.start_seconds)
-                    .or_else(|| (!root.lyrics.is_empty()).then_some(0));
-                let lyric = active
-                    .and_then(|index| root.lyrics.get(index))
-                    .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
-                    .unwrap_or_default();
+                let lyric = if root.lyrics_track_id == snapshot.track_id {
+                    root.synced_lyrics_active()
+                        .and_then(|index| root.lyrics.get(index))
+                        .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
                 let position = match root.settings.panel_lyrics_position.as_str() {
                     "left" | "center-right" | "right" => {
                         root.settings.panel_lyrics_position.as_str()
                     }
                     _ => "center-left",
                 };
+
+                // 顶栏颜色与应用当前主题/封面强调色保持一致。
+                ui::theme::set_theme(root.theme);
+                let ambient = root
+                    .queue
+                    .current()
+                    .and_then(|track| root.ambient_colors.get(&track.cover).copied());
+                ui::theme::set_ambient_rgb(ambient);
+                let color = panel_color_hex(ui::theme::accent());
+
                 format!(
-                    "{}\n{}\n{}\n",
+                    "{}\n{}\n{}\n{}\n",
                     if root.settings.panel_lyrics_enabled {
                         "1"
                     } else {
                         "0"
                     },
                     position,
-                    lyric
+                    lyric,
+                    color
                 )
             });
             if state != last_state {

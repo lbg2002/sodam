@@ -29,6 +29,7 @@ fn main_window_options(cx: &mut App) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         window_min_size: Some(size(px(MIN_SIZE.0), px(MIN_SIZE.1))),
+        is_resizable: true,
         titlebar: Some(TitlebarOptions {
             title: Some("SodaM".into()),
             // 三个平台都使用透明标题栏。Windows/Linux 由 ui::titlebar
@@ -178,7 +179,12 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
                     .current()
                     .and_then(|track| root.ambient_colors.get(&track.cover).copied());
                 ui::theme::set_ambient_rgb(ambient);
-                let color = panel_color_hex(ui::theme::accent());
+                let color = match root.settings.panel_lyrics_color.as_str() {
+                    "text" => panel_color_hex(ui::theme::text()),
+                    "white" => "#FFFFFF".to_string(),
+                    // 默认：与桌面歌词默认模式一致，跟随当前歌曲封面主题强调色。
+                    _ => panel_color_hex(ui::theme::accent()),
+                };
 
                 format!(
                     "{}\n{}\n{}\n{}\n",

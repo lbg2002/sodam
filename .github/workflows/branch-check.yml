@@ -23,5 +23,6 @@ jobs:
           components: clippy,rustfmt
       - name: Prime Cargo cache
         run: cargo fetch --locked
+      # Use the same gate as the user's local verification.
       - name: Check
         run: ./scripts/check.sh

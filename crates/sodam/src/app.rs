@@ -1198,6 +1198,9 @@ impl Render for Root {
                     }),
             )
             .child(ui::player_bar::render(self, cx))
+            .when(cfg!(target_os = "linux"), |this| {
+                this.children(ui::titlebar::resize_handles())
+            })
             .when_some(crate::experience3::toast_message(), |this, message| {
                 this.child(
                     gpui::deferred(

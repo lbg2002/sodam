@@ -3,5 +3,5 @@
   "name": "SodaM Panel Lyrics",
   "description": "Show SodaM's current lyric in the GNOME top panel.",
   "shell-version": ["45", "46", "47", "48", "49", "50", "51"],
-  "version": 1
+  "version": 2
 }

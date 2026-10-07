@@ -1007,17 +1007,11 @@ fn queue_section_row(title: &str) -> gpui::AnyElement {
         .into_any_element()
 }
 
-/// 主界面的右侧队列抽屉。
+/// 全局右侧播放队列抽屉。所有页面（包括歌词页）统一使用同一尺寸与对齐方式。
 pub fn queue_drawer(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     queue_drawer_inner(root, cx, false)
 }
 
-/// 歌词页内嵌队列：无侧边分割线，背景融入歌词页。
-pub fn queue_panel(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
-    queue_drawer_inner(root, cx, true)
-}
-
-/// 队列内容：主界面为 320px 抽屉；歌词页为无边界内嵌面板。
 fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> impl IntoElement {
     use std::sync::Arc;
 

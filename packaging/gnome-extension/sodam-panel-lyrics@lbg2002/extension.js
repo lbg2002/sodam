@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
 import Pango from 'gi://Pango';
@@ -19,7 +20,6 @@ export default class SodaMPanelLyricsExtension extends Extension {
         this._position = null;
         this._color = null;
         this._actor = new St.Bin({
-            style_class: 'panel-button',
             reactive: false,
             can_focus: false,
             track_hover: false,
@@ -92,26 +92,22 @@ export default class SodaMPanelLyricsExtension extends Extension {
     }
 
     _applyLyric(text, color) {
-        const normalized = color || null;
-        const escaped = (text || '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&apos;');
+        const normalized = color || '#FFFFFF';
 
-        // St.Widget inline CSS is supposed to override theme CSS, but on
-        // Ubuntu/GNOME panel themes the actual glyph color can still be
-        // refreshed from the panel theme. Put the foreground on the Pango
-        // text itself so the final rendered glyphs use SodaM's color.
-        this._label.set_style(LABEL_BASE_STYLE);
-        this._label.clutter_text.set_use_markup(true);
-        if (normalized)
-            this._label.clutter_text.set_markup(
-                `<span foreground="${normalized}">${escaped}</span>`
-            );
-        else
-            this._label.clutter_text.set_markup(escaped);
+        // Ubuntu 26.04 uses GNOME 50. The panel theme can re-apply its
+        // foreground color after St/Pango styling, so write the final color
+        // directly to Clutter.Text using Cogl.Color. Do this on every refresh
+        // (not only when the lyric changes) so a later theme/style refresh
+        // cannot leave the glyphs white.
+        this._label.set_style(
+            `${LABEL_BASE_STYLE} color: ${normalized};`
+        );
+        this._label.clutter_text.set_use_markup(false);
+        this._label.clutter_text.set_text(text || '');
+
+        const [ok, coglColor] = Cogl.Color.from_string(normalized);
+        if (ok)
+            this._label.clutter_text.set_color(coglColor);
 
         this._color = normalized;
         this._label.queue_redraw();
@@ -125,8 +121,7 @@ export default class SodaMPanelLyricsExtension extends Extension {
             return;
         }
         this._place(state.position);
-        if (this._label.text !== state.lyric || this._color !== state.color)
-            this._applyLyric(state.lyric, state.color);
+        this._applyLyric(state.lyric, state.color);
         this._actor.visible = state.enabled && state.lyric.length > 0;
     }
 

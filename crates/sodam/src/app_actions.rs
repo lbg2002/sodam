@@ -211,13 +211,24 @@ impl Root {
                 .await;
             let _ = this.update(cx, |root, cx| {
                 let snap = root.engine.snapshot();
+
+                // 歌词时钟属于播放状态，不属于某个可见页面。即使主窗口最小化、
+                // 关闭到托盘或当前不在歌词页，也持续维护同一个 active index。
+                // DesktopLyrics 观察 Root 的 notify；GNOME 顶栏则读取同一方法生成的状态。
+                let active = root.synced_lyrics_active();
+                let lyric_changed = active != root.lyrics_active;
+                if lyric_changed {
+                    root.lyrics_active = active;
+                    cx.notify();
+                }
+
                 // 加载完成：引擎已切到 pending 曲目 → 清 loading 态
                 if let Some(pending) = &root.pending_track {
                     if snap.track_id == pending.id {
                         root.pending_track = None;
                     }
                 }
-                if snap.playing || root.pending_track.is_some() {
+                if snap.playing || root.pending_track.is_some() || snap.finished {
                     cx.notify();
                 }
                 if snap.playing

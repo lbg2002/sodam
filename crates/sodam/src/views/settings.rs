@@ -216,7 +216,7 @@ fn page_header(title: String, description: String) -> AnyElement {
         .into_any_element()
 }
 
-fn card(title: String, description: String, children: Vec<AnyElement>) -> AnyElement {
+fn card(title: String, _description: String, children: Vec<AnyElement>) -> AnyElement {
     div()
         .flex()
         .flex_col()
@@ -234,17 +234,11 @@ fn card(title: String, description: String, children: Vec<AnyElement>) -> AnyEle
                 .px(px(theme::space::XS))
                 .child(
                     div()
-                        .text_size(theme::Text::Body.size())
+                        .text_size(theme::Text::Large.size())
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .text_color(theme::text())
                         .child(title),
                 )
-                .child(
-                    div()
-                        .text_size(theme::Text::Tiny.size())
-                        .text_color(theme::text_muted())
-                        .child(description),
-                ),
         )
         .children(children)
         .into_any_element()
@@ -253,7 +247,7 @@ fn card(title: String, description: String, children: Vec<AnyElement>) -> AnyEle
 fn toggle_row(
     id: &'static str,
     title: String,
-    description: String,
+    _description: String,
     enabled: bool,
     listener: impl Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> AnyElement {
@@ -283,12 +277,6 @@ fn toggle_row(
                         .text_color(theme::text())
                         .child(title),
                 )
-                .child(
-                    div()
-                        .text_size(theme::Text::Tiny.size())
-                        .text_color(theme::text_muted())
-                        .child(description),
-                ),
         )
         .child(
             div()
@@ -356,7 +344,7 @@ fn select_row(
     id: &'static str,
     menu_id: u8,
     title: String,
-    description: String,
+    _description: String,
     current: String,
     options: Vec<AnyElement>,
     cx: &mut Context<Root>,
@@ -401,12 +389,6 @@ fn select_row(
                                 .text_color(theme::text())
                                 .child(title),
                         )
-                        .child(
-                            div()
-                                .text_size(theme::Text::Tiny.size())
-                                .text_color(theme::text_muted())
-                                .child(description),
-                        ),
                 )
                 .child(
                     div()
@@ -487,7 +469,7 @@ fn slider_value_at(
 fn slider_row(
     id: &'static str,
     title: String,
-    description: String,
+    _description: String,
     value: f32,
     min: f32,
     max: f32,
@@ -535,12 +517,6 @@ fn slider_row(
                                 .text_color(theme::text())
                                 .child(title),
                         )
-                        .child(
-                            div()
-                                .text_size(theme::Text::Tiny.size())
-                                .text_color(theme::text_muted())
-                                .child(description),
-                        ),
                 )
                 .child(
                     div()
@@ -681,6 +657,19 @@ fn action_button(
         .on_click(listener)
         .child(label)
         .into_any_element()
+}
+
+fn preview_ui_font(root: &mut Root, value: f32, cx: &mut Context<Root>) {
+    root.settings.ui_font_size = value.round() as u32;
+    theme::set_ui_font_size(root.settings.ui_font_size);
+    cx.notify();
+}
+
+fn commit_ui_font(root: &mut Root, cx: &mut Context<Root>) {
+    root.settings.ui_font_size = root.settings.ui_font_size.clamp(12, 20);
+    theme::set_ui_font_size(root.settings.ui_font_size);
+    let _ = root.settings.save();
+    cx.notify();
 }
 
 fn preview_lyrics_font(root: &mut Root, value: f32, cx: &mut Context<Root>) {
@@ -909,6 +898,23 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     ),
                     language_value,
                     language_options,
+                    cx,
+                ),
+                slider_row(
+                    "ui-font-size",
+                    text(root, "软件字体大小", "App font size"),
+                    text(
+                        root,
+                        "统一调整侧栏、列表、设置等常规界面的基础字号。",
+                        "Adjust the base font size used across the interface.",
+                    ),
+                    root.settings.ui_font_size as f32,
+                    12.0,
+                    20.0,
+                    1.0,
+                    format!("{} px", root.settings.ui_font_size),
+                    preview_ui_font,
+                    commit_ui_font,
                     cx,
                 ),
             ],

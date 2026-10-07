@@ -284,7 +284,7 @@ pub fn text() -> Rgba {
 pub fn text_muted() -> Rgba {
     tint(
         if is_dark() {
-            hex(0xA3A3A3)
+            hex(0xC7C7C7)
         } else {
             hex(0x737373)
         },
@@ -296,7 +296,7 @@ pub fn text_muted() -> Rgba {
 pub fn text_faint() -> Rgba {
     tint(
         if is_dark() {
-            hex(0x7A7A7A)
+            hex(0xA8A8A8)
         } else {
             hex(0x737373)
         },

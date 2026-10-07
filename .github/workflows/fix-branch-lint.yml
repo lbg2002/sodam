@@ -1,0 +1,82 @@
+name: Fix branch lint
+
+on:
+  push:
+    branches:
+      - fix/lyrics-ux-ubuntu-panel
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Remove obsolete settings leftovers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          mod = Path('crates/sodam/src/views/mod.rs')
+          text = mod.read_text()
+          text = text.replace('canvas, div, fill, img, point, px, size, svg, uniform_list, AnyElement, Bounds, ClickEvent,',
+                              'canvas, div, fill, point, px, size, svg, uniform_list, AnyElement, Bounds, ClickEvent,')
+          text = text.replace('IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, ObjectFit, Window,',
+                              'IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, Window,')
+          mod.write_text(text)
+
+          app = Path('crates/sodam/src/app_actions.rs')
+          text = app.read_text()
+          block = '''    /// 用系统默认应用打开配置文件（macOS `open` / Windows `start` / Linux `xdg-open`）。
+              pub fn open_config_file(&mut self, cx: &mut Context<Self>) {
+                  let path = Settings::config_path();
+                  self.status = match system_open(&path.display().to_string()) {
+                      Ok(_) => self.tr("已用系统默认应用打开配置文件").to_string(),
+                      Err(err) => self.localized("打开配置文件失败：{err}", &[err.to_string()]),
+                  };
+                  cx.notify();
+              }
+
+              /// 用系统默认浏览器打开项目 GitHub 仓库。
+              pub fn open_github_repository(&mut self, cx: &mut Context<Self>) {
+                  let url = env!("CARGO_PKG_REPOSITORY");
+                  self.status = match system_open(url) {
+                      Ok(_) => self.tr("已在浏览器打开 GitHub 仓库").to_string(),
+                      Err(err) => self.localized("打开 GitHub 仓库失败：{err}", &[err.to_string()]),
+                  };
+                  cx.notify();
+              }
+
+          '''
+          if block not in text:
+              raise SystemExit('app_actions obsolete block not found')
+          app.write_text(text.replace(block, '', 1))
+
+          exp = Path('crates/sodam/src/experience3.rs')
+          text = exp.read_text()
+          block = '''    pub fn e3_adjust_lyrics_offset(&mut self, delta_ms: i64, cx: &mut Context<Self>) {
+                  let next = (self.settings.lyrics_offset_ms + delta_ms).clamp(-3000, 3000);
+                  self.set_lyrics_offset_ms(next, cx);
+              }
+
+          '''
+          if block not in text:
+              raise SystemExit('experience3 obsolete block not found')
+          exp.write_text(text.replace(block, '', 1))
+          PY
+          cargo fmt --all
+          rm .github/workflows/fix-branch-lint.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: clean settings rewrite lint leftovers"
+          git push

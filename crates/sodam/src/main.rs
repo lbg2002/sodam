@@ -150,11 +150,7 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
                     .or_else(|| (!root.lyrics.is_empty()).then_some(0));
                 let lyric = active
                     .and_then(|index| root.lyrics.get(index))
-                    .map(|line| {
-                        line.text
-                            .trim()
-                            .replace(['\n', '\r', '\t'], " ")
-                    })
+                    .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
                     .unwrap_or_default();
                 let position = match root.settings.panel_lyrics_position.as_str() {
                     "left" | "center-right" | "right" => {

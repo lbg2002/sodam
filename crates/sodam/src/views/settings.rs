@@ -470,9 +470,10 @@ fn slider_value_at(
     max: f32,
     step: f32,
 ) -> Option<f32> {
-    let (left, width) = bounds.lock().ok().and_then(|slot| {
-        slot.map(|rect| (f32::from(rect.left()), f32::from(rect.size.width)))
-    })?;
+    let (left, width) = bounds
+        .lock()
+        .ok()
+        .and_then(|slot| slot.map(|rect| (f32::from(rect.left()), f32::from(rect.size.width))))?;
     if width <= 1.0 {
         return None;
     }
@@ -606,19 +607,17 @@ fn slider_row(
                         .size_full()
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(
-                                move |root, event: &MouseDownEvent, _window, cx| {
-                                    if let Some(next) = slider_value_at(
-                                        &bounds_for_down,
-                                        f32::from(event.position.x),
-                                        min,
-                                        max,
-                                        step,
-                                    ) {
-                                        preview(root, next, cx);
-                                    }
-                                },
-                            ),
+                            cx.listener(move |root, event: &MouseDownEvent, _window, cx| {
+                                if let Some(next) = slider_value_at(
+                                    &bounds_for_down,
+                                    f32::from(event.position.x),
+                                    min,
+                                    max,
+                                    step,
+                                ) {
+                                    preview(root, next, cx);
+                                }
+                            }),
                         )
                         .on_mouse_move(cx.listener(
                             move |root, event: &MouseMoveEvent, _window, cx| {
@@ -880,13 +879,21 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "界面", "Interface"),
-            text(root, "主题和语言使用离散下拉选择。", "Theme and language use compact selectors."),
+            text(
+                root,
+                "主题和语言使用离散下拉选择。",
+                "Theme and language use compact selectors.",
+            ),
             vec![
                 select_row(
                     "theme-select",
                     1,
                     text(root, "主题", "Theme"),
-                    text(root, "可跟随系统，也可以固定深色或浅色。", "Follow the system or pin a theme."),
+                    text(
+                        root,
+                        "可跟随系统，也可以固定深色或浅色。",
+                        "Follow the system or pin a theme.",
+                    ),
                     theme_value,
                     theme_options,
                     cx,
@@ -895,7 +902,11 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     "language-select",
                     2,
                     text(root, "语言", "Language"),
-                    text(root, "切换后立即刷新界面文本。", "Updates the interface immediately."),
+                    text(
+                        root,
+                        "切换后立即刷新界面文本。",
+                        "Updates the interface immediately.",
+                    ),
                     language_value,
                     language_options,
                     cx,
@@ -904,11 +915,19 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "通知", "Notifications"),
-            text(root, "系统级行为单独放在这里。", "System-level app behavior."),
+            text(
+                root,
+                "系统级行为单独放在这里。",
+                "System-level app behavior.",
+            ),
             vec![toggle_row(
                 "system-notifications",
                 text(root, "切歌系统通知", "Track-change notifications"),
-                text(root, "换歌时使用系统通知显示歌曲信息。", "Show song information in system notifications."),
+                text(
+                    root,
+                    "换歌时使用系统通知显示歌曲信息。",
+                    "Show song information in system notifications.",
+                ),
                 root.settings.system_notifications,
                 cx.listener(|root, _event: &ClickEvent, _window, cx| {
                     root.e3_set_notifications(!root.settings.system_notifications, cx);
@@ -1007,13 +1026,21 @@ fn playback_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "音质与输出", "Quality & output"),
-            text(root, "离散项目使用下拉框，避免大量平铺选项。", "Discrete values use selectors instead of long option lists."),
+            text(
+                root,
+                "离散项目使用下拉框，避免大量平铺选项。",
+                "Discrete values use selectors instead of long option lists.",
+            ),
             vec![
                 select_row(
                     "quality-select",
                     3,
                     text(root, "播放音质", "Playback quality"),
-                    text(root, "自动模式会按账号权限和歌曲可用档位择优。", "Auto chooses the best available tier for the account and track."),
+                    text(
+                        root,
+                        "自动模式会按账号权限和歌曲可用档位择优。",
+                        "Auto chooses the best available tier for the account and track.",
+                    ),
                     quality_value,
                     quality_options,
                     cx,
@@ -1022,7 +1049,11 @@ fn playback_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     "audio-device-select",
                     4,
                     text(root, "音频输出设备", "Audio output device"),
-                    text(root, "Ubuntu 下可切换扬声器、耳机、HDMI 或蓝牙输出。", "Switch speakers, headphones, HDMI, or Bluetooth output."),
+                    text(
+                        root,
+                        "Ubuntu 下可切换扬声器、耳机、HDMI 或蓝牙输出。",
+                        "Switch speakers, headphones, HDMI, or Bluetooth output.",
+                    ),
                     current_device,
                     device_options,
                     cx,
@@ -1031,12 +1062,20 @@ fn playback_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "播放处理", "Playback processing"),
-            text(root, "连续参数用滑动条，布尔能力使用开关。", "Continuous values use sliders; capabilities use switches."),
+            text(
+                root,
+                "连续参数用滑动条，布尔能力使用开关。",
+                "Continuous values use sliders; capabilities use switches.",
+            ),
             vec![
                 toggle_row(
                     "normalize-volume",
                     text(root, "响度标准化", "Loudness normalization"),
-                    text(root, "减少不同歌曲之间的音量突变。", "Reduce loudness jumps between tracks."),
+                    text(
+                        root,
+                        "减少不同歌曲之间的音量突变。",
+                        "Reduce loudness jumps between tracks.",
+                    ),
                     root.settings.normalize_volume,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_normalize_volume(!root.settings.normalize_volume, cx);
@@ -1045,7 +1084,11 @@ fn playback_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 toggle_row(
                     "gapless-playback",
                     text(root, "无缝衔接", "Gapless playback"),
-                    text(root, "提前准备下一首，尽量缩短曲目边界空白。", "Prepare the next track to reduce boundary gaps."),
+                    text(
+                        root,
+                        "提前准备下一首，尽量缩短曲目边界空白。",
+                        "Prepare the next track to reduce boundary gaps.",
+                    ),
                     root.settings.gapless_playback,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_gapless(!root.settings.gapless_playback, cx);
@@ -1054,7 +1097,11 @@ fn playback_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 slider_row(
                     "crossfade-slider",
                     text(root, "交叉淡化", "Crossfade"),
-                    text(root, "0 秒表示关闭；拖动后松手保存。", "0 seconds disables crossfade; release to save."),
+                    text(
+                        root,
+                        "0 秒表示关闭；拖动后松手保存。",
+                        "0 seconds disables crossfade; release to save.",
+                    ),
                     root.settings.crossfade_seconds as f32,
                     0.0,
                     8.0,
@@ -1077,16 +1124,28 @@ fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .gap(px(theme::space::LG))
         .child(page_header(
             text(root, "歌词显示", "Lyrics"),
-            text(root, "主播放页歌词的排版与时间同步设置。", "Typography and timing for the main lyrics view."),
+            text(
+                root,
+                "主播放页歌词的排版与时间同步设置。",
+                "Typography and timing for the main lyrics view.",
+            ),
         ))
         .child(card(
             text(root, "排版", "Typography"),
-            text(root, "字号和行距都支持连续拖动调节。", "Font size and line spacing are adjustable with sliders."),
+            text(
+                root,
+                "字号和行距都支持连续拖动调节。",
+                "Font size and line spacing are adjustable with sliders.",
+            ),
             vec![
                 slider_row(
                     "lyrics-font-slider",
                     text(root, "歌词字号", "Lyrics font size"),
-                    text(root, "影响主播放页滚动歌词。", "Affects scrolling lyrics in the playback view."),
+                    text(
+                        root,
+                        "影响主播放页滚动歌词。",
+                        "Affects scrolling lyrics in the playback view.",
+                    ),
                     root.settings.lyrics_font_size as f32,
                     14.0,
                     30.0,
@@ -1099,7 +1158,11 @@ fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 slider_row(
                     "lyrics-line-slider",
                     text(root, "歌词行距", "Lyrics line spacing"),
-                    text(root, "增大后阅读更舒展，减小后显示更多行。", "Increase for breathing room or reduce to fit more lines."),
+                    text(
+                        root,
+                        "增大后阅读更舒展，减小后显示更多行。",
+                        "Increase for breathing room or reduce to fit more lines.",
+                    ),
                     root.settings.lyrics_line_height as f32,
                     24.0,
                     52.0,
@@ -1113,11 +1176,19 @@ fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "同步", "Timing"),
-            text(root, "针对歌词整体提前或延后，不改变音频进度。", "Shift lyrics timing without changing audio position."),
+            text(
+                root,
+                "针对歌词整体提前或延后，不改变音频进度。",
+                "Shift lyrics timing without changing audio position.",
+            ),
             vec![slider_row(
                 "lyrics-offset-slider",
                 text(root, "歌词偏移", "Lyrics offset"),
-                text(root, "负值提前，正值延后。", "Negative values show earlier; positive values later."),
+                text(
+                    root,
+                    "负值提前，正值延后。",
+                    "Negative values show earlier; positive values later.",
+                ),
                 root.settings.lyrics_offset_ms as f32,
                 -3000.0,
                 3000.0,
@@ -1134,7 +1205,10 @@ fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 
 fn downloads_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     let quality_items = [
-        ("follow", text(root, "跟随播放音质", "Follow playback quality")),
+        (
+            "follow",
+            text(root, "跟随播放音质", "Follow playback quality"),
+        ),
         ("lossless", text(root, "无损", "Lossless")),
         ("highest", text(root, "极高", "Highest")),
         ("medium", text(root, "较高", "Medium")),
@@ -1186,9 +1260,7 @@ fn downloads_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             )
         })
         .collect::<Vec<_>>();
-    let download_path = sodam_core::downloads::download_dir()
-        .display()
-        .to_string();
+    let download_path = sodam_core::downloads::download_dir().display().to_string();
 
     let body = div()
         .flex()
@@ -1196,17 +1268,29 @@ fn downloads_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .gap(px(theme::space::LG))
         .child(page_header(
             text(root, "下载", "Downloads"),
-            text(root, "只包含导出文件相关设置，缓存策略移动到了“缓存与离线”。", "Only exported-file settings live here; cache policy is under Cache & offline."),
+            text(
+                root,
+                "只包含导出文件相关设置，缓存策略移动到了“缓存与离线”。",
+                "Only exported-file settings live here; cache policy is under Cache & offline.",
+            ),
         ))
         .child(card(
             text(root, "文件质量", "File quality"),
-            text(root, "音质和格式都是离散选项，统一使用下拉框。", "Quality and format are discrete choices and use selectors."),
+            text(
+                root,
+                "音质和格式都是离散选项，统一使用下拉框。",
+                "Quality and format are discrete choices and use selectors.",
+            ),
             vec![
                 select_row(
                     "download-quality-select",
                     5,
                     text(root, "下载音质", "Download quality"),
-                    text(root, "可以独立于播放音质选择。", "Can be chosen independently from playback quality."),
+                    text(
+                        root,
+                        "可以独立于播放音质选择。",
+                        "Can be chosen independently from playback quality.",
+                    ),
                     quality_value,
                     quality_options,
                     cx,
@@ -1215,7 +1299,11 @@ fn downloads_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     "download-format-select",
                     6,
                     text(root, "下载格式", "Download format"),
-                    text(root, "源格式保留服务端提供的原始容器。", "Source keeps the original container when possible."),
+                    text(
+                        root,
+                        "源格式保留服务端提供的原始容器。",
+                        "Source keeps the original container when possible.",
+                    ),
                     format_value,
                     format_options,
                     cx,
@@ -1225,39 +1313,37 @@ fn downloads_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .child(card(
             text(root, "下载目录", "Download folder"),
             download_path,
-            vec![
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_wrap()
-                    .gap(px(theme::space::SM))
-                    .px(px(theme::space::SM))
-                    .child(action_button(
-                        "choose-download-dir",
-                        text(root, "更改目录", "Change folder"),
-                        true,
-                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                            root.choose_download_directory(cx);
-                        }),
-                    ))
-                    .child(action_button(
-                        "open-download-dir",
-                        text(root, "打开目录", "Open folder"),
-                        false,
-                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                            root.open_download_folder(cx);
-                        }),
-                    ))
-                    .child(action_button(
-                        "reset-download-dir",
-                        text(root, "恢复默认", "Reset default"),
-                        false,
-                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                            root.reset_download_directory(cx);
-                        }),
-                    ))
-                    .into_any_element(),
-            ],
+            vec![div()
+                .flex()
+                .flex_row()
+                .flex_wrap()
+                .gap(px(theme::space::SM))
+                .px(px(theme::space::SM))
+                .child(action_button(
+                    "choose-download-dir",
+                    text(root, "更改目录", "Change folder"),
+                    true,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.choose_download_directory(cx);
+                    }),
+                ))
+                .child(action_button(
+                    "open-download-dir",
+                    text(root, "打开目录", "Open folder"),
+                    false,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.open_download_folder(cx);
+                    }),
+                ))
+                .child(action_button(
+                    "reset-download-dir",
+                    text(root, "恢复默认", "Reset default"),
+                    false,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.reset_download_directory(cx);
+                    }),
+                ))
+                .into_any_element()],
         ))
         .into_any_element();
     shell(root, body, cx)
@@ -1294,7 +1380,11 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     let mut prefetch_controls = vec![toggle_row(
         "adaptive-prefetch",
         text(root, "自适应预加载", "Adaptive prefetch"),
-        text(root, "根据未来播放时长动态决定缓存深度。", "Choose prefetch depth based on upcoming playback duration."),
+        text(
+            root,
+            "根据未来播放时长动态决定缓存深度。",
+            "Choose prefetch depth based on upcoming playback duration.",
+        ),
         root.settings.prefetch_adaptive,
         cx.listener(|root, _event: &ClickEvent, _window, cx| {
             root.set_prefetch_adaptive(!root.settings.prefetch_adaptive, cx);
@@ -1304,7 +1394,11 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         prefetch_controls.push(slider_row(
             "prefetch-minutes-slider",
             text(root, "预加载目标时长", "Prefetch target duration"),
-            text(root, "希望前方至少准备多少分钟的歌曲。", "Minimum duration to keep prepared ahead."),
+            text(
+                root,
+                "希望前方至少准备多少分钟的歌曲。",
+                "Minimum duration to keep prepared ahead.",
+            ),
             root.settings.prefetch_minutes as f32,
             5.0,
             30.0,
@@ -1336,15 +1430,27 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .gap(px(theme::space::LG))
         .child(page_header(
             text(root, "缓存与离线", "Cache & offline"),
-            text(root, "预加载、离线播放和缓存上限统一放在同一个数据策略板块。", "Prefetching, offline playback, and cache limits are grouped as one data policy."),
+            text(
+                root,
+                "预加载、离线播放和缓存上限统一放在同一个数据策略板块。",
+                "Prefetching, offline playback, and cache limits are grouped as one data policy.",
+            ),
         ))
         .child(card(
             text(root, "离线播放", "Offline playback"),
-            text(root, "离线模式只使用已有本地音频缓存。", "Offline mode only uses audio already cached locally."),
+            text(
+                root,
+                "离线模式只使用已有本地音频缓存。",
+                "Offline mode only uses audio already cached locally.",
+            ),
             vec![toggle_row(
                 "offline-mode",
                 text(root, "离线模式", "Offline mode"),
-                text(root, "开启后禁止新的音频网络请求。", "Block new audio network requests while enabled."),
+                text(
+                    root,
+                    "开启后禁止新的音频网络请求。",
+                    "Block new audio network requests while enabled.",
+                ),
                 root.settings.offline_mode,
                 cx.listener(|root, _event: &ClickEvent, _window, cx| {
                     root.set_offline_mode(!root.settings.offline_mode, cx);
@@ -1353,7 +1459,11 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "智能预加载", "Smart prefetch"),
-            text(root, "这是缓存策略，不再放在播放设置里。", "This is a cache policy, so it no longer lives under Playback."),
+            text(
+                root,
+                "这是缓存策略，不再放在播放设置里。",
+                "This is a cache policy, so it no longer lives under Playback.",
+            ),
             prefetch_controls,
         ))
         .child(card(
@@ -1363,7 +1473,11 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 slider_row(
                     "cache-limit-slider",
                     text(root, "缓存上限", "Cache limit"),
-                    text(root, "0 GB 表示不限制；达到上限后按最近使用自动清理。", "0 GB means unlimited; old cache is trimmed automatically after the limit."),
+                    text(
+                        root,
+                        "0 GB 表示不限制；达到上限后按最近使用自动清理。",
+                        "0 GB means unlimited; old cache is trimmed automatically after the limit.",
+                    ),
                     root.settings.cache_limit_gb as f32,
                     0.0,
                     20.0,
@@ -1394,10 +1508,8 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         false,
                         cx.listener(|root, _event: &ClickEvent, _window, cx| {
                             let removed = sodam_core::audio::clear_cache();
-                            let message = root.localized(
-                                "已清理缓存：{} 个文件",
-                                &[removed.to_string()],
-                            );
+                            let message =
+                                root.localized("已清理缓存：{} 个文件", &[removed.to_string()]);
                             root.refresh_cache_stats(cx);
                             root.refresh_audio_cache_index(cx);
                             root.toast(message, cx);
@@ -1495,16 +1607,28 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .gap(px(theme::space::LG))
         .child(page_header(
             text(root, "桌面与系统", "Desktop & system"),
-            text(root, "桌面歌词窗口和 Ubuntu/GNOME 顶栏歌词统一管理。", "Manage the floating lyrics window and Ubuntu/GNOME panel lyrics together."),
+            text(
+                root,
+                "桌面歌词窗口和 Ubuntu/GNOME 顶栏歌词统一管理。",
+                "Manage the floating lyrics window and Ubuntu/GNOME panel lyrics together.",
+            ),
         ))
         .child(card(
             text(root, "桌面歌词窗口", "Floating desktop lyrics"),
-            text(root, "窗口行为使用开关，视觉参数使用滑动条或下拉框。", "Window behavior uses switches; visual parameters use sliders or selectors."),
+            text(
+                root,
+                "窗口行为使用开关，视觉参数使用滑动条或下拉框。",
+                "Window behavior uses switches; visual parameters use sliders or selectors.",
+            ),
             vec![
                 toggle_row(
                     "desktop-single-line",
                     text(root, "单行歌词", "Single-line lyrics"),
-                    text(root, "关闭时显示当前行和下一行。", "Show current and next line when disabled."),
+                    text(
+                        root,
+                        "关闭时显示当前行和下一行。",
+                        "Show current and next line when disabled.",
+                    ),
                     root.settings.desktop_lyrics_single_line,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_single_line(
@@ -1516,7 +1640,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 toggle_row(
                     "desktop-always-top",
                     text(root, "始终置顶", "Always on top"),
-                    text(root, "让歌词窗口保持在普通窗口上方。", "Keep the lyrics window above normal windows."),
+                    text(
+                        root,
+                        "让歌词窗口保持在普通窗口上方。",
+                        "Keep the lyrics window above normal windows.",
+                    ),
                     root.settings.desktop_lyrics_always_on_top,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_always_on_top(
@@ -1528,7 +1656,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 toggle_row(
                     "desktop-lock",
                     text(root, "锁定位置", "Lock position"),
-                    text(root, "锁定后禁止拖动和调整窗口大小。", "Disable moving and resizing while locked."),
+                    text(
+                        root,
+                        "锁定后禁止拖动和调整窗口大小。",
+                        "Disable moving and resizing while locked.",
+                    ),
                     root.settings.desktop_lyrics_locked,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_locked(!root.settings.desktop_lyrics_locked, cx);
@@ -1537,7 +1669,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 toggle_row(
                     "desktop-click-through",
                     text(root, "鼠标穿透", "Click-through"),
-                    text(root, "开启后鼠标事件穿过桌面歌词窗口。", "Pass pointer events through the floating lyrics window."),
+                    text(
+                        root,
+                        "开启后鼠标事件穿过桌面歌词窗口。",
+                        "Pass pointer events through the floating lyrics window.",
+                    ),
                     root.settings.desktop_lyrics_click_through,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_click_through(
@@ -1549,7 +1685,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 slider_row(
                     "desktop-opacity-slider",
                     text(root, "背景透明度", "Background opacity"),
-                    text(root, "支持 30%–100% 无级拖动。", "Continuously adjustable from 30% to 100%."),
+                    text(
+                        root,
+                        "支持 30%–100% 无级拖动。",
+                        "Continuously adjustable from 30% to 100%.",
+                    ),
                     root.settings.desktop_lyrics_opacity as f32,
                     30.0,
                     100.0,
@@ -1562,7 +1702,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 slider_row(
                     "desktop-font-slider",
                     text(root, "桌面歌词字号", "Desktop lyrics font size"),
-                    text(root, "独立于主播放页歌词字号。", "Independent from the main lyrics font size."),
+                    text(
+                        root,
+                        "独立于主播放页歌词字号。",
+                        "Independent from the main lyrics font size.",
+                    ),
                     root.settings.desktop_lyrics_font_size as f32,
                     20.0,
                     44.0,
@@ -1576,7 +1720,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     "desktop-color-select",
                     7,
                     text(root, "歌词颜色", "Lyrics color"),
-                    text(root, "这是离散模式，使用下拉选择。", "A discrete display mode, so it uses a selector."),
+                    text(
+                        root,
+                        "这是离散模式，使用下拉选择。",
+                        "A discrete display mode, so it uses a selector.",
+                    ),
                     color_value,
                     color_options,
                     cx,
@@ -1585,7 +1733,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     "desktop-align-select",
                     8,
                     text(root, "歌词对齐", "Lyrics alignment"),
-                    text(root, "选择左对齐、居中或右对齐。", "Choose left, center, or right alignment."),
+                    text(
+                        root,
+                        "选择左对齐、居中或右对齐。",
+                        "Choose left, center, or right alignment.",
+                    ),
                     align_value,
                     align_options,
                     cx,
@@ -1593,13 +1745,25 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             ],
         ))
         .child(card(
-            text(root, "Ubuntu / GNOME 顶栏歌词", "Ubuntu / GNOME panel lyrics"),
-            text(root, "顶栏歌词跟随当前播放进度，位置使用离散下拉选择。", "Panel lyrics follow playback and use a discrete position selector."),
+            text(
+                root,
+                "Ubuntu / GNOME 顶栏歌词",
+                "Ubuntu / GNOME panel lyrics",
+            ),
+            text(
+                root,
+                "顶栏歌词跟随当前播放进度，位置使用离散下拉选择。",
+                "Panel lyrics follow playback and use a discrete position selector.",
+            ),
             vec![
                 toggle_row(
                     "panel-lyrics-enabled",
                     text(root, "显示顶栏歌词", "Show panel lyrics"),
-                    text(root, "关闭后 GNOME 扩展会隐藏歌词。", "Hide the GNOME extension lyric label when disabled."),
+                    text(
+                        root,
+                        "关闭后 GNOME 扩展会隐藏歌词。",
+                        "Hide the GNOME extension lyric label when disabled.",
+                    ),
                     root.settings.panel_lyrics_enabled,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.settings.panel_lyrics_enabled = !root.settings.panel_lyrics_enabled;
@@ -1611,7 +1775,11 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     "panel-position-select",
                     9,
                     text(root, "顶栏位置", "Panel position"),
-                    text(root, "默认放在日期时间左侧。", "Defaults to the left of the clock."),
+                    text(
+                        root,
+                        "默认放在日期时间左侧。",
+                        "Defaults to the left of the clock.",
+                    ),
                     panel_value,
                     panel_options,
                     cx,
@@ -1629,15 +1797,27 @@ fn advanced_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .gap(px(theme::space::LG))
         .child(page_header(
             text(root, "性能", "Performance"),
-            text(root, "这里只保留界面性能与启动策略，不再混放音频和缓存选项。", "Only startup and interface-performance tuning live here."),
+            text(
+                root,
+                "这里只保留界面性能与启动策略，不再混放音频和缓存选项。",
+                "Only startup and interface-performance tuning live here.",
+            ),
         ))
         .child(card(
             text(root, "启动", "Startup"),
-            text(root, "减少首次打开时不必要的后台工作。", "Reduce unnecessary background work on first launch."),
+            text(
+                root,
+                "减少首次打开时不必要的后台工作。",
+                "Reduce unnecessary background work on first launch.",
+            ),
             vec![toggle_row(
                 "lazy-startup",
                 text(root, "延迟加载非首屏内容", "Lazy-load non-primary content"),
-                text(root, "优先让主界面可用，再逐步加载次要内容。", "Make the main UI usable first, then load secondary content."),
+                text(
+                    root,
+                    "优先让主界面可用，再逐步加载次要内容。",
+                    "Make the main UI usable first, then load secondary content.",
+                ),
                 root.settings.lazy_startup,
                 cx.listener(|root, _event: &ClickEvent, _window, cx| {
                     root.e3_set_lazy_startup(!root.settings.lazy_startup, cx);
@@ -1646,11 +1826,19 @@ fn advanced_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         ))
         .child(card(
             text(root, "响应式布局", "Responsive layout"),
-            text(root, "控制底部播放栏何时进入紧凑模式。", "Controls when the bottom player switches to compact mode."),
+            text(
+                root,
+                "控制底部播放栏何时进入紧凑模式。",
+                "Controls when the bottom player switches to compact mode.",
+            ),
             vec![slider_row(
                 "compact-width-slider",
                 text(root, "播放栏折叠阈值", "Player compact threshold"),
-                text(root, "窗口低于该宽度时隐藏次要按钮。", "Hide secondary controls below this width."),
+                text(
+                    root,
+                    "窗口低于该宽度时隐藏次要按钮。",
+                    "Hide secondary controls below this width.",
+                ),
                 root.settings.player_bar_compact_width as f32,
                 720.0,
                 1200.0,
@@ -1689,7 +1877,11 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     } else if logged_in {
         text(root, "正在读取账号信息…", "Loading account information…")
     } else {
-        text(root, "登录后才能使用在线搜索、歌单与完整播放能力。", "Sign in to use online search, playlists, and full playback features.")
+        text(
+            root,
+            "登录后才能使用在线搜索、歌单与完整播放能力。",
+            "Sign in to use online search, playlists, and full playback features.",
+        )
     };
     let signer = if root.settings.signer_url.trim().is_empty() {
         text(root, "未配置", "Not configured")
@@ -1724,45 +1916,49 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .gap(px(theme::space::LG))
         .child(page_header(
             text(root, "账户", "Account"),
-            text(root, "登录状态与服务诊断信息。", "Sign-in state and service diagnostics."),
+            text(
+                root,
+                "登录状态与服务诊断信息。",
+                "Sign-in state and service diagnostics.",
+            ),
         ))
         .child(card(
             account_title,
             account_detail,
-            vec![
-                div()
-                    .flex()
-                    .px(px(theme::space::SM))
-                    .child(account_action)
-                    .into_any_element(),
-            ],
+            vec![div()
+                .flex()
+                .px(px(theme::space::SM))
+                .child(account_action)
+                .into_any_element()],
         ))
         .child(card(
             text(root, "服务信息", "Service information"),
-            text(root, "用于排查 VIP 整曲和签名服务问题。", "Useful for diagnosing full-track and signing-service issues."),
-            vec![
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(px(4.0))
-                    .px(px(theme::space::SM))
-                    .py(px(theme::space::SM))
-                    .rounded(px(theme::radius::ROW))
-                    .bg(theme::surface_elevated())
-                    .child(
-                        div()
-                            .text_size(theme::Text::Tiny.size())
-                            .text_color(theme::text_muted())
-                            .child(text(root, "签名服务", "Signer service")),
-                    )
-                    .child(
-                        div()
-                            .text_size(theme::Text::Small.size())
-                            .text_color(theme::text())
-                            .child(signer),
-                    )
-                    .into_any_element(),
-            ],
+            text(
+                root,
+                "用于排查 VIP 整曲和签名服务问题。",
+                "Useful for diagnosing full-track and signing-service issues.",
+            ),
+            vec![div()
+                .flex()
+                .flex_col()
+                .gap(px(4.0))
+                .px(px(theme::space::SM))
+                .py(px(theme::space::SM))
+                .rounded(px(theme::radius::ROW))
+                .bg(theme::surface_elevated())
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_muted())
+                        .child(text(root, "签名服务", "Signer service")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text())
+                        .child(signer),
+                )
+                .into_any_element()],
         ))
         .into_any_element();
     shell(root, body, cx)

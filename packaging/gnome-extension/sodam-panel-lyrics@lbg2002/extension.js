@@ -91,21 +91,24 @@ export default class SodaMPanelLyricsExtension extends Extension {
         }
     }
 
-    _applyColor(color) {
+    _applyLyric(text, color) {
         const normalized = color || null;
-        if (this._color === normalized)
-            return;
-        this._color = normalized;
+        const escaped = GLib.markup_escape_text(text || '', -1);
 
-        // GNOME panel themes often set the foreground color on .panel-button.
-        // Apply the color to both the wrapper and label so the application
-        // setting wins consistently across Ubuntu/GNOME theme variants.
-        const colorStyle = normalized ? `color: ${normalized};` : '';
-        this._actor.set_style(colorStyle);
-        this._label.set_style(normalized
-            ? `${LABEL_BASE_STYLE} color: ${normalized};`
-            : LABEL_BASE_STYLE);
-        this._actor.queue_redraw();
+        // St.Widget inline CSS is supposed to override theme CSS, but on
+        // Ubuntu/GNOME panel themes the actual glyph color can still be
+        // refreshed from the panel theme. Put the foreground on the Pango
+        // text itself so the final rendered glyphs use SodaM's color.
+        this._label.set_style(LABEL_BASE_STYLE);
+        this._label.clutter_text.set_use_markup(true);
+        if (normalized)
+            this._label.clutter_text.set_markup(
+                `<span foreground="${normalized}">${escaped}</span>`
+            );
+        else
+            this._label.clutter_text.set_markup(escaped);
+
+        this._color = normalized;
         this._label.queue_redraw();
     }
 
@@ -117,8 +120,8 @@ export default class SodaMPanelLyricsExtension extends Extension {
             return;
         }
         this._place(state.position);
-        this._label.text = state.lyric;
-        this._applyColor(state.color);
+        if (this._label.text !== state.lyric || this._color !== state.color)
+            this._applyLyric(state.lyric, state.color);
         this._actor.visible = state.enabled && state.lyric.length > 0;
     }
 

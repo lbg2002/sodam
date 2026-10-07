@@ -2897,6 +2897,7 @@ impl Root {
         .detach();
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn play(&mut self, cx: &mut Context<Self>) {
         let snapshot = self.engine.snapshot();
         if snapshot.track_id.is_empty() {
@@ -2909,6 +2910,7 @@ impl Root {
         cx.notify();
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn pause(&mut self, cx: &mut Context<Self>) {
         self.engine.pause();
         self.playing = false;
@@ -2917,6 +2919,7 @@ impl Root {
         cx.notify();
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn stop_playback(&mut self, cx: &mut Context<Self>) {
         self.engine.stop();
         self.playing = false;
@@ -3227,10 +3230,10 @@ impl Root {
     }
 }
 
-fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<PathBuf>> {
+fn choose_directory_dialog(_initial: &std::path::Path) -> anyhow::Result<Option<PathBuf>> {
     #[cfg(target_os = "linux")]
     {
-        let initial = initial.display().to_string();
+        let initial = _initial.display().to_string();
         let initial_arg = format!("--filename={initial}/");
         let zenity = std::process::Command::new("zenity")
             .args([
@@ -3271,18 +3274,18 @@ fn choose_directory_dialog(initial: &std::path::Path) -> anyhow::Result<Option<P
             return Ok(None);
         }
         let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        return Ok((!value.is_empty()).then(|| PathBuf::from(value)));
+        Ok((!value.is_empty()).then(|| PathBuf::from(value)))
     }
 
     #[cfg(windows)]
     {
-        let _ = initial;
+        let _ = _initial;
         anyhow::bail!("Windows 目录选择暂未接入")
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     {
-        let _ = initial;
+        let _ = _initial;
         anyhow::bail!("当前平台暂不支持目录选择器")
     }
 }

@@ -52,3 +52,11 @@
 - 当前主机有 Node.js 24.16.0 / npm 11.13.0。
 - 官方 REA 文档给出的安装入口是 `npx rea-agents setup`，CLI 入口是 `rea`；当前 npm 缓存没有 `rea-agents`，外部 registry DNS/网络不可达，`npx --offline --yes rea-agents --version` 返回 `ENOTCACHED`。
 - Codex 当前工具清单也未注册 REA MCP，因此本轮继续保持“未执行动态 REA 分析”的证据边界。
+
+## 安装包 PE 证据补充
+
+对 `SodaMusic-v3.7.0-official-win32_x64.exe` 的 `objdump -x` 结果：
+
+- PE 为 GUI 可执行文件，导入表位于 `.rdata`，可见导入主要来自 `KERNEL32.dll`、`USER32.dll`、`GDI32.dll`、`SHELL32.dll`、`ADVAPI32.dll`、`COMCTL32.dll`、`ole32.dll`。
+- CLR Runtime Header 为零，未显示 .NET 程序特征。
+- stub 中没有 `Electron`、`WebView2`、`Qt6Core`、`Qt6Gui`、`Qt6Widgets`、`libcef.dll` 或 `node.dll` 的明确导入；这些结论只适用于安装器 stub，不能代表解压后的客户端 payload。

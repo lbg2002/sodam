@@ -43,8 +43,8 @@
 
 ## 启动烟测
 
-- 当前容器设置了 `WAYLAND_DISPLAY=wayland-0`，但没有可用 Wayland compositor；release 启动得到 GPUI `NoCompositor`。
-- 去掉 `WAYLAND_DISPLAY` 后尝试 X11，得到 `Failed to initialize X11 client`，说明 `DISPLAY=:0` 也不是可用 X server。
+- 当前容器设置了 `WAYLAND_DISPLAY=wayland-0`，但没有可用 Wayland compositor；已加入启动预检，release 现在会输出明确错误并退出，不再触发 GPUI `NoCompositor` panic。
+- 去掉 `WAYLAND_DISPLAY` 后，X11 socket `/tmp/.X11-unix/X0` 也不可用；启动预检会在进入 GPUI 前报告 X11 不可用。
 - 因此已验证二进制能够进入 GPUI 平台初始化路径，但无法在本容器完成窗口绘制、登录、播放和桌面媒体控制验证。
 
 ## REA 可用性复核

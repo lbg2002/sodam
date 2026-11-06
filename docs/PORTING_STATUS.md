@@ -39,3 +39,9 @@
 - `scripts/check.sh`：已加入 systemd-run 用户总线不可用时的自动回退；当前容器中脚本完整通过（check、fmt、clippy、test）。
 - `packaging/make-deb.sh`：新增 Debian 打包脚本，release 构建后输出 `dist/sodam_<version>_<arch>.deb` 及 SHA-256 文件。
 - 真实账号登录、在线搜索、播放、歌词和连续切歌尚未在本环境完成：缺少授权账号、网络服务可达性和可启动的 Wayland/音频桌面会话。
+
+## 启动烟测
+
+- 当前容器设置了 `WAYLAND_DISPLAY=wayland-0`，但没有可用 Wayland compositor；release 启动得到 GPUI `NoCompositor`。
+- 去掉 `WAYLAND_DISPLAY` 后尝试 X11，得到 `Failed to initialize X11 client`，说明 `DISPLAY=:0` 也不是可用 X server。
+- 因此已验证二进制能够进入 GPUI 平台初始化路径，但无法在本容器完成窗口绘制、登录、播放和桌面媒体控制验证。

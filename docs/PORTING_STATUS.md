@@ -5,7 +5,7 @@
 ## 可核验输入
 
 - Windows 安装包：`SodaMusic-v3.7.0-official-win32_x64.exe`，PE32 GUI、Nullsoft/NSIS 自解压安装包，大小约 144 MiB。
-- 安装包字符串中出现 `Qt6` 与 `app_name: SodaMusic`；当前证据支持“Qt 6 原生客户端”，不支持 Electron、CEF 或 WebView2 的判断。
+- 安装包是 NSIS stub，导入表仅包含 Windows 系统 DLL；压缩 payload 中出现 `app_name: SodaMusic` 以及零散 `Qt6`/`CEF` 字节，但未能从 stub 可靠确定最终 UI 框架，因此 Qt/CEF 结论暂记为未定。
 - 工作区已提供 `sodam-main.zip`，解压到 `sodam/`。压缩包没有 `.git` 目录，因此本地 Git 历史从导入提交开始保存；未覆盖上游历史。
 - REA MCP/CLI 未在当前 Codex 环境注册，REA 仓库只能作为公开工具说明参考，未执行未提供的伪造命令。没有对 DRM、付费访问控制或安全保护进行绕过。
 
@@ -25,7 +25,7 @@
 
 | 能力 | Windows 官方 Qt 客户端 | SodaM Linux |
 |---|---|---|
-| 程序框架 | Qt 6 原生（由安装包静态证据判断） | Rust + GPUI 原生 |
+| 程序框架 | NSIS 安装 stub；最终 UI 框架尚未由静态证据确定 | Rust + GPUI 原生 |
 | 登录/账号 | 官方账号体系 | libresoda 会话与扫码登录；未使用授权账号验证 |
 | 首页/推荐/搜索 | 安装包未能在无 Windows 运行时解包到页面资源 | 已有推荐、场景、综合/垂直搜索 |
 | 播放/歌词/队列 | 未完成运行时动态观测 | 已有 rodio 播放、歌词同步、队列、睡眠定时、淡入淡出 |

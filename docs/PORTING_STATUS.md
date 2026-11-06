@@ -36,6 +36,6 @@
 ## 构建与交付
 
 - `cargo check --offline --workspace`：已通过（Rust 1.96，jobs=2）。
-- `scripts/check.sh`：当前容器的 `systemd --user` 总线不可用，脚本在 systemd-run 入口处提前失败；应直接运行 cargo 检查或在有用户总线的桌面会话中运行脚本。
+- `scripts/check.sh`：已加入 systemd-run 用户总线不可用时的自动回退；当前容器中脚本完整通过（check、fmt、clippy、test）。
 - `packaging/make-deb.sh`：新增 Debian 打包脚本，release 构建后输出 `dist/sodam_<version>_<arch>.deb` 及 SHA-256 文件。
 - 真实账号登录、在线搜索、播放、歌词和连续切歌尚未在本环境完成：缺少授权账号、网络服务可达性和可启动的 Wayland/音频桌面会话。

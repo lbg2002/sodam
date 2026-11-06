@@ -14,15 +14,14 @@ SWAP_MAX="${SODAM_BUILD_SWAP_MAX:-2G}"
 CPU_QUOTA="${SODAM_BUILD_CPU_QUOTA:-400%}"
 
 run() {
-    if command -v systemd-run >/dev/null 2>&1; then
-        systemd-run --user --scope --quiet \
-            -p "MemoryMax=${MEM_MAX}" -p "MemorySwapMax=${SWAP_MAX}" -p "CPUQuota=${CPU_QUOTA}" \
-            -- env CARGO_BUILD_JOBS="${JOBS}" "$@"
-    else
-        echo "提示：systemd-run 不可用，退化为 ulimit（约 6GB）" >&2
-        # macOS 的 ulimit -v 不可用（Invalid argument），失败时退化为仅限并发数。
-        ( ulimit -v 6291456 2>/dev/null || true; env CARGO_BUILD_JOBS="${JOBS}" "$@" )
+    if command -v systemd-run >/dev/null 2>&1 && systemd-run --user --scope --quiet \
+        -p "MemoryMax=${MEM_MAX}" -p "MemorySwapMax=${SWAP_MAX}" -p "CPUQuota=${CPU_QUOTA}" \
+        -- env CARGO_BUILD_JOBS="${JOBS}" "$@"; then
+        return 0
     fi
+    echo "提示：systemd-run 用户总线不可用，退化为 ulimit（约 6GB）" >&2
+    # macOS/容器的 ulimit -v 可能不可用；失败时退化为仅限并发数。
+    ( ulimit -v 6291456 2>/dev/null || true; env CARGO_BUILD_JOBS="${JOBS}" "$@" )
 }
 
 echo "== cargo check（jobs=${JOBS}, mem<=${MEM_MAX}）=="

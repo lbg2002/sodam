@@ -38,6 +38,7 @@
 - `cargo check --offline --workspace`：已通过（Rust 1.96，jobs=2）。
 - `scripts/check.sh`：已加入 systemd-run 用户总线不可用时的自动回退；当前容器中脚本完整通过（check、fmt、clippy、test）。
 - `packaging/make-deb.sh`：新增 Debian 打包脚本，release 构建后输出 `dist/sodam_<version>_<arch>.deb` 及 SHA-256 文件。
+- `packaging/verify-deb.sh`：验证包元数据、依赖、二进制、desktop 文件、GNOME 扩展和 SHA-256；当前产物验证通过。
 - 真实账号登录、在线搜索、播放、歌词和连续切歌尚未在本环境完成：缺少授权账号、网络服务可达性和可启动的 Wayland/音频桌面会话。
 
 ## 启动烟测

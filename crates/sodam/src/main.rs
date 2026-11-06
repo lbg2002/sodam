@@ -335,6 +335,50 @@ fn show_window(cx: &mut App, app: &Entity<app::Root>) {
 }
 
 #[cfg(target_os = "linux")]
+fn graphical_session_preflight() -> Result<(), String> {
+    use std::os::unix::net::UnixStream;
+
+    if let Some(display) = std::env::var_os("WAYLAND_DISPLAY") {
+        let display = display.to_string_lossy();
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| "XDG_RUNTIME_DIR 未设置，无法连接 Wayland compositor".to_string())?;
+        let socket = if display.starts_with('/') {
+            std::path::PathBuf::from(display.as_ref())
+        } else {
+            runtime.join(display.as_ref())
+        };
+        if UnixStream::connect(&socket).is_ok() {
+            return Ok(());
+        }
+        return Err(format!(
+            "Wayland compositor 不可用（{}）；请在 GNOME/Wayland 会话中启动 SodaM",
+            socket.display()
+        ));
+    }
+
+    if let Some(display) = std::env::var_os("DISPLAY") {
+        let display = display.to_string_lossy();
+        if let Some(number) = display
+            .strip_prefix(':')
+            .and_then(|value| value.split('.').next())
+        {
+            let socket = std::path::PathBuf::from(format!("/tmp/.X11-unix/X{number}"));
+            if UnixStream::connect(&socket).is_ok() {
+                return Ok(());
+            }
+            return Err(format!(
+                "X11 server 不可用（{}）；请启动 X11 或 Wayland 会话",
+                socket.display()
+            ));
+        }
+        return Ok(());
+    }
+
+    Err("未检测到 WAYLAND_DISPLAY 或 DISPLAY；无法创建图形窗口".to_string())
+}
+
+#[cfg(target_os = "linux")]
 fn desktop_integration_available() -> bool {
     // Headless CI/containers often expose no user D-Bus session. Starting ksni
     // there causes an avoidable panic in its worker thread; the main window and
@@ -353,6 +397,12 @@ fn desktop_integration_available() -> bool {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if let Err(error) = graphical_session_preflight() {
+        eprintln!("SodaM 启动失败：{error}");
+        return;
+    }
+
     gpui_platform::application()
         .with_assets(ui::icons::Assets)
         .with_quit_mode(gpui::QuitMode::Explicit)

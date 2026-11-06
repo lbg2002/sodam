@@ -45,3 +45,9 @@
 - 当前容器设置了 `WAYLAND_DISPLAY=wayland-0`，但没有可用 Wayland compositor；release 启动得到 GPUI `NoCompositor`。
 - 去掉 `WAYLAND_DISPLAY` 后尝试 X11，得到 `Failed to initialize X11 client`，说明 `DISPLAY=:0` 也不是可用 X server。
 - 因此已验证二进制能够进入 GPUI 平台初始化路径，但无法在本容器完成窗口绘制、登录、播放和桌面媒体控制验证。
+
+## REA 可用性复核
+
+- 当前主机有 Node.js 24.16.0 / npm 11.13.0。
+- 官方 REA 文档给出的安装入口是 `npx rea-agents setup`，CLI 入口是 `rea`；当前 npm 缓存没有 `rea-agents`，外部 registry DNS/网络不可达，`npx --offline --yes rea-agents --version` 返回 `ENOTCACHED`。
+- Codex 当前工具清单也未注册 REA MCP，因此本轮继续保持“未执行动态 REA 分析”的证据边界。

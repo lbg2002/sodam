@@ -371,6 +371,8 @@ pub struct Root {
     /// 预取失败冷却表（曲目 id → 最近失败时刻）：巡检不能把永久失败的歌
     /// （下架/地区受限）每 5 秒无限重试，60s 内不再排。
     pub(crate) prefetch_failed: HashMap<String, std::time::Instant>,
+    /// 预取代际令牌：队列/账号切换后，旧任务结果不得回写当前状态。
+    pub(crate) prefetch_generation: u64,
     /// 预取巡检节拍：心跳每 100ms 自增，每 50 拍（约 5s）补一次预取。
     pub(crate) prefetch_patrol: u32,
     /// 缓存统计快照（音频字节, 歌曲数, 封面字节, 封面张数）：
@@ -599,6 +601,7 @@ impl Root {
             volume_track_bounds: Arc::new(Mutex::new(None)),
             prefetch_inflight: HashSet::new(),
             prefetch_failed: HashMap::new(),
+            prefetch_generation: 0,
             prefetch_patrol: 0,
             cache_summary: (0, 0, 0, 0),
             cached_ids: Arc::new(HashSet::new()),

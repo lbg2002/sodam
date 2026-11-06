@@ -66,6 +66,14 @@ impl Root {
             .unwrap_or(self.search_input.len()..self.search_input.len())
     }
 
+    /// 使正在运行的预取任务失效。底层阻塞请求会自然结束，但其结果不会
+    /// 回写到新队列，也不会触发新一轮补位；这样切换账号/队列时不会串歌。
+    pub(crate) fn invalidate_prefetch(&mut self) {
+        self.prefetch_generation = self.prefetch_generation.wrapping_add(1);
+        self.prefetch_inflight.clear();
+        self.prefetch_failed.clear();
+    }
+
     /// 预取队列接下来几首到本地缓存（只落盘，不动界面状态）。
     ///
     /// 保持「拉完再播」的简单架构不变，但把等待时间提前吃掉：
@@ -92,6 +100,7 @@ impl Root {
             return;
         }
         let max_inflight = prefetch_concurrency().max(1);
+        let generation = self.prefetch_generation;
         // 多看一些候选项：如果最近几首处于失败冷却，也继续把更后面的歌缓存起来，
         // 避免一个坏条目让整个预加载窗口停住。
         let scan_count = ahead
@@ -184,6 +193,10 @@ impl Root {
                 }
                 let _ = this.update(cx, |root, cx| {
                     root.prefetch_inflight.remove(&track.id);
+                    if root.prefetch_generation != generation {
+                        // 队列或账号已切换；丢弃旧任务结果，不污染新队列。
+                        return;
+                    }
                     if succeeded {
                         root.prefetch_failed.remove(&track.id);
                         Arc::make_mut(&mut root.cached_ids).insert(track.id.clone());
@@ -1313,6 +1326,7 @@ impl Root {
         cx: &mut Context<Self>,
     ) {
         self.queue.replace(tracks, 0);
+        self.invalidate_prefetch();
         self.played_history.clear();
         self.playback_error = None;
         self.queue_origin = match source.scene.as_ref() {
@@ -1604,6 +1618,7 @@ impl Root {
         self.lyrics_error = None;
         self.loading_lyrics = false;
         self.playback_error = None;
+        self.invalidate_prefetch();
     }
 
     pub(crate) fn ensure_playback_assets(&mut self, track: TrackItem, cx: &mut Context<Self>) {
@@ -1717,6 +1732,7 @@ impl Root {
                         match result {
                             Ok(tracks) if !tracks.is_empty() => {
                                 root.queue.replace(tracks, 0);
+                                root.invalidate_prefetch();
                                 root.played_history.clear();
                                 root.playback_error = None;
                                 root.queue_origin = QueueOrigin::Radio(card.playlist.id.clone());
@@ -1778,6 +1794,7 @@ impl Root {
                 match result {
                     Ok(tracks) if !tracks.is_empty() => {
                         root.queue.replace(tracks, 0);
+                        root.invalidate_prefetch();
                         root.played_history.clear();
                         root.playback_error = None;
                         root.queue_origin = QueueOrigin::Playlist(playlist.id.clone());
@@ -1881,8 +1898,7 @@ impl Root {
         self.played_history.clear();
         self.restore_seek_seconds = None;
         self.restore_was_playing = None;
-        self.prefetch_inflight.clear();
-        self.prefetch_failed.clear();
+        self.invalidate_prefetch();
         sodam_core::PlaybackState::clear();
         self.sync_queue_cache();
 

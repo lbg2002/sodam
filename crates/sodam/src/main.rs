@@ -334,6 +334,24 @@ fn show_window(cx: &mut App, app: &Entity<app::Root>) {
     cx.activate(true);
 }
 
+#[cfg(target_os = "linux")]
+fn desktop_integration_available() -> bool {
+    // Headless CI/containers often expose no user D-Bus session. Starting ksni
+    // there causes an avoidable panic in its worker thread; the main window and
+    // audio engine remain useful without tray/MPRIS integration.
+    if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some() {
+        return true;
+    }
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .is_some_and(|runtime| runtime.join("bus").exists())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn desktop_integration_available() -> bool {
+    true
+}
+
 fn main() {
     gpui_platform::application()
         .with_assets(ui::icons::Assets)
@@ -346,7 +364,7 @@ fn main() {
                 .expect("打开主窗口失败");
 
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
-            {
+            if desktop_integration_available() {
                 let (tray_tx, tray_rx) = std::sync::mpsc::channel();
 
                 #[cfg(target_os = "linux")]
@@ -375,8 +393,10 @@ fn main() {
 
             #[cfg(target_os = "linux")]
             {
-                start_mpris_service(mpris::start(), app.clone(), cx);
-                start_panel_lyrics_service(app.clone(), cx);
+                if desktop_integration_available() {
+                    start_mpris_service(mpris::start(), app.clone(), cx);
+                    start_panel_lyrics_service(app.clone(), cx);
+                }
             }
 
             cx.activate(true);

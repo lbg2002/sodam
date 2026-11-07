@@ -75,3 +75,5 @@ REA 证据摘要保存在工作区外的 `rea-evidence/2026-11-07-sodam-installe
 `app.asar` 静态分析记录了 8 个未解包 native addon 的 ASAR integrity contradiction，因此按 REA 的 `record-and-continue` 策略标为 observed-untrusted；没有执行 JavaScript。`main.asar` 全量语义分析超过 450 秒客户端工具期限；随后对播放器、preload、renderer 三个精确 JS 分片完成读取，但该压缩 bundle 在当前 REA JS 解析器下产生 3 个 parse failure，未生成可靠语义 findings。
 
 静态 bundle 字符串/源码片段还暴露出官方客户端的状态边界（仅为静态候选，未执行）：`ServiceId.user`、`player`、`queue`、`sharedState`、`freqCtrl`、`applog`、`renderer`；UI 状态包含搜索、播放队列、全屏播放页、音质面板、评论面板、登录等待、VIP/付费拦截、创建歌单和反馈弹窗。SodaM 已有搜索、队列、歌词、质量设置、歌单、登录和缓存模块，可继续复用这些领域功能。
+
+`app.asar` 的清单进一步显示：`package.json` 版本为 `3.7.0`，主入口是 `./entry.js`；`entry.js` 和 `main.js` 都是极薄的 Node bootstrap，分别把模块控制权交给 `entry.node` 和 `main.node`。这说明官方客户端的关键主进程逻辑位于原生 Node addon，而不是普通可读 JavaScript；Linux 迁移继续使用 libresoda 和 Rust 领域层是合理边界。

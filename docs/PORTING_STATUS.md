@@ -77,3 +77,5 @@ REA 证据摘要保存在工作区外的 `rea-evidence/2026-11-07-sodam-installe
 静态 bundle 字符串/源码片段还暴露出官方客户端的状态边界（仅为静态候选，未执行）：`ServiceId.user`、`player`、`queue`、`sharedState`、`freqCtrl`、`applog`、`renderer`；UI 状态包含搜索、播放队列、全屏播放页、音质面板、评论面板、登录等待、VIP/付费拦截、创建歌单和反馈弹窗。SodaM 已有搜索、队列、歌词、质量设置、歌单、登录和缓存模块，可继续复用这些领域功能。
 
 `app.asar` 的清单进一步显示：`package.json` 版本为 `3.7.0`，主入口是 `./entry.js`；`entry.js` 和 `main.js` 都是极薄的 Node bootstrap，分别把模块控制权交给 `entry.node` 和 `main.node`。这说明官方客户端的关键主进程逻辑位于原生 Node addon，而不是普通可读 JavaScript；Linux 迁移继续使用 libresoda 和 Rust 领域层是合理边界。
+
+REA 还对 `main.node`、`entry.node` 和 `ttnet.node` 做了 PE export 摘要：三者均为 PE32+ amd64 Node addon，各有 2 个导出；这进一步支持“关键主进程/网络能力在原生 addon 中”的架构判断，但未观察到导出函数运行时是否被调用。

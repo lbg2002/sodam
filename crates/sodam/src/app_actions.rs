@@ -16,6 +16,25 @@ use std::sync::Arc;
 use super::{status_label, LoginState, Nav, QueueOrigin, Root, ROW_BATCH};
 use sodam_core::queue::Queue;
 
+/// QR 登录会话生成的设备身份必须与签名器和 Cookie 一起用于 VIP 取流。
+/// 之前只保存了 Cookie，账号接口能识别为 SVIP，但 App 取流端点会回退到试听。
+fn qr_device_credentials() -> Option<(String, String, String)> {
+    let path = Settings::config_path().with_file_name("qr-state.json");
+    let text = std::fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let device_id = value.get("device_id")?.as_str()?.trim().to_string();
+    let install_id = value.get("install_id")?.as_str()?.trim().to_string();
+    if device_id.is_empty() || install_id.is_empty() {
+        return None;
+    }
+    Some((device_id.clone(), install_id, device_id))
+}
+
+fn clear_qr_device_state() {
+    let path = Settings::config_path().with_file_name("qr-state.json");
+    let _ = std::fs::remove_file(path);
+}
+
 impl Root {
     pub(crate) fn search_input_focused(&self, window: &Window) -> bool {
         self.search_focus.is_focused(window)
@@ -955,6 +974,10 @@ impl Root {
     pub fn start_login(&mut self, cx: &mut Context<Self>) {
         let language = self.language;
         let settings = self.settings.clone();
+        // 让 libresoda 将本次二维码会话的 device_id/install_id 写到私有临时状态，
+        // 登录成功后迁移到 config.json，避免 VIP 取流缺少匹配设备指纹。
+        let qr_state_path = Settings::config_path().with_file_name("qr-state.json");
+        std::env::set_var("SODA_QR_STATE", &qr_state_path);
         self.login = LoginState::Loading;
         cx.notify();
 
@@ -1037,23 +1060,34 @@ impl Root {
                 if finished {
                     let _ = this.update(cx, |root, cx| {
                         match root.session.as_mut() {
-                            Some(session) => match session.apply_login_cookie(&cookie) {
-                                Ok(()) => {
-                                    root.settings = session.settings().clone();
-                                    root.status =
-                                        language.text("登录成功，正在读取账号信息…").to_string();
+                            Some(session) => {
+                                let mut next = session.settings().clone();
+                                next.cookie = cookie.clone();
+                                if let Some((device_id, iid, fp)) = qr_device_credentials() {
+                                    next.device_id = device_id;
+                                    next.iid = iid;
+                                    next.fp = fp;
                                 }
-                                Err(err) => {
-                                    root.set_status(
-                                        "登录成功但保存失败：{err}",
-                                        &[err.to_string()],
-                                    );
+                                match session.apply(next) {
+                                    Ok(()) => {
+                                        root.settings = session.settings().clone();
+                                        root.status = language
+                                            .text("登录成功，正在读取账号信息…")
+                                            .to_string();
+                                    }
+                                    Err(err) => {
+                                        root.set_status(
+                                            "登录成功但保存失败：{err}",
+                                            &[err.to_string()],
+                                        );
+                                    }
                                 }
-                            },
+                            }
                             None => {
                                 root.status = language.text("登录成功（会话未初始化）").to_string()
                             }
                         }
+                        clear_qr_device_state();
                         root.login = LoginState::Idle;
                         root.login_modal_open = false;
                         cx.notify();

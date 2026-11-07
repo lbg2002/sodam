@@ -12,25 +12,42 @@ const AUDIO_DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 /// 取流元数据仍由 libresoda 处理；音频实体下载使用独立的长读取超时。
 /// libresoda 的通用下载器默认 30 秒，慢 CDN 会在文件已经开始返回时被误判为失败。
 fn download_audio_bytes(info: &libresoda::soda::types::DownloadInfo) -> anyhow::Result<Vec<u8>> {
-    let response = ureq::get(info.url.trim())
-        .timeout(AUDIO_DOWNLOAD_TIMEOUT)
-        .set("User-Agent", libresoda::soda::types::USER_AGENT)
-        .call()
-        .map_err(|err| anyhow::anyhow!("音频响应失败：{err}"))?;
-    let mut body = Vec::new();
-    response
-        .into_reader()
-        .read_to_end(&mut body)
-        .map_err(|err| anyhow::anyhow!("读取音频响应失败：{err}"))?;
-    if body.is_empty() {
-        anyhow::bail!("音频响应为空");
+    let mut last_error = String::new();
+    for attempt in 0..3 {
+        let response = ureq::get(info.url.trim())
+            .timeout(AUDIO_DOWNLOAD_TIMEOUT)
+            .set("User-Agent", libresoda::soda::types::USER_AGENT)
+            .set("Accept", "*/*")
+            .set("Connection", "close")
+            .call();
+        let response = match response {
+            Ok(response) => response,
+            Err(err) => {
+                last_error = format!("音频响应失败：{err}");
+                if attempt < 2 {
+                    std::thread::sleep(std::time::Duration::from_millis(350 * (attempt + 1)));
+                    continue;
+                }
+                anyhow::bail!("{last_error}");
+            }
+        };
+        let mut body = Vec::new();
+        match response.into_reader().read_to_end(&mut body) {
+            Ok(_) if !body.is_empty() => {
+                if info.play_auth.trim().is_empty() {
+                    return Ok(body);
+                }
+                return libresoda::soda::crypto::decrypt_audio(&body, &info.play_auth)
+                    .map_err(|err| anyhow::anyhow!("音频解密失败：{err}"));
+            }
+            Ok(_) => last_error = "音频响应为空".to_string(),
+            Err(err) => last_error = format!("读取音频响应失败：{err}"),
+        }
+        if attempt < 2 {
+            std::thread::sleep(std::time::Duration::from_millis(350 * (attempt + 1)));
+        }
     }
-    if info.play_auth.trim().is_empty() {
-        Ok(body)
-    } else {
-        libresoda::soda::crypto::decrypt_audio(&body, &info.play_auth)
-            .map_err(|err| anyhow::anyhow!("音频解密失败：{err}"))
-    }
+    anyhow::bail!("{last_error}");
 }
 
 /// 封面 URL → 缓存文件名用的稳定哈希（FNV-1a 64）。

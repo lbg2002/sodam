@@ -104,6 +104,9 @@ fn nav_item(
 
 fn shell(root: &Root, body: AnyElement, cx: &mut Context<Root>) -> AnyElement {
     let nav = div()
+        .id("settings-nav-scroll")
+        .h_full()
+        .min_h(px(0.0))
         .flex()
         .flex_col()
         .flex_none()
@@ -114,6 +117,7 @@ fn shell(root: &Root, body: AnyElement, cx: &mut Context<Root>) -> AnyElement {
         .bg(theme::surface())
         .border_1()
         .border_color(theme::border())
+        .overflow_y_scroll()
         .child(nav_item(
             root,
             SettingsSection::General,

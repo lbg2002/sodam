@@ -3044,6 +3044,7 @@ impl Root {
             // 拉流失败重试 2 次（共 3 次），退避逐渐拉长
             let mut last_err = None;
             for attempt in 1..=3 {
+                let session = Session::new(settings.clone());
                 match session.download_to_cache(&work_track) {
                     Ok(cached) => return Ok(cached),
                     Err(err) => {
@@ -3053,7 +3054,7 @@ impl Root {
                         last_err = Some(err);
                         if attempt < 3 {
                             std::thread::sleep(std::time::Duration::from_millis(
-                                800 * attempt as u64,
+                                1_200 * attempt as u64,
                             ));
                         }
                     }

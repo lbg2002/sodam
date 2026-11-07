@@ -7,6 +7,32 @@ use libresoda::{AppCredentials, Soda};
 use std::io::Read;
 use std::sync::Arc;
 
+const AUDIO_DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// 取流元数据仍由 libresoda 处理；音频实体下载使用独立的长读取超时。
+/// libresoda 的通用下载器默认 30 秒，慢 CDN 会在文件已经开始返回时被误判为失败。
+fn download_audio_bytes(info: &libresoda::soda::types::DownloadInfo) -> anyhow::Result<Vec<u8>> {
+    let response = ureq::get(info.url.trim())
+        .timeout(AUDIO_DOWNLOAD_TIMEOUT)
+        .set("User-Agent", libresoda::soda::types::USER_AGENT)
+        .call()
+        .map_err(|err| anyhow::anyhow!("音频响应失败：{err}"))?;
+    let mut body = Vec::new();
+    response
+        .into_reader()
+        .read_to_end(&mut body)
+        .map_err(|err| anyhow::anyhow!("读取音频响应失败：{err}"))?;
+    if body.is_empty() {
+        anyhow::bail!("音频响应为空");
+    }
+    if info.play_auth.trim().is_empty() {
+        Ok(body)
+    } else {
+        libresoda::soda::crypto::decrypt_audio(&body, &info.play_auth)
+            .map_err(|err| anyhow::anyhow!("音频解密失败：{err}"))
+    }
+}
+
 /// 封面 URL → 缓存文件名用的稳定哈希（FNV-1a 64）。
 /// 封面缓存的最大边长：列表缩略图 40px、卡片 156px，160 足够且解码开销极小。
 const COVER_MAX_EDGE: u32 = 160;
@@ -325,11 +351,13 @@ impl Session {
         let part = dir.join(part_file_name(&track.id, &tag));
         let info = self
             .pumpkin
-            .download_with_info(&song, &part)
-            .map_err(|err| {
-                let _ = std::fs::remove_file(&part);
-                anyhow::anyhow!("下载失败: {err}")
-            })?;
+            .get_download_info(&song)
+            .map_err(|err| anyhow::anyhow!("解析播放流失败：{err}"))?;
+        let data = download_audio_bytes(&info).map_err(|err| {
+            let _ = std::fs::remove_file(&part);
+            anyhow::anyhow!("下载失败: {err}")
+        })?;
+        std::fs::write(&part, data).map_err(|err| anyhow::anyhow!("写入音频缓存失败：{err}"))?;
 
         // 完整性校验：只拒绝「比服务端声明更少」的截断下载（静默 EOF 时可能发生）。
         // 允许实际字节数更多：个别曲目的 play_info size 元数据会滞后于真实资产

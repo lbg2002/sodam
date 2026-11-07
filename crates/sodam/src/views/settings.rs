@@ -2053,6 +2053,28 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 )
                 .into_any_element()],
         ))
+        .child(card(
+            text(root, "关于 SodaM", "About SodaM"),
+            text(root, "当前版本与项目许可。", "Version and project license."),
+            vec![div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::XS))
+                .px(px(theme::space::SM))
+                .py(px(theme::space::SM))
+                .child(format!("SodaM v{}", env!("CARGO_PKG_VERSION")))
+                .child(text(
+                    root,
+                    "Rust + GPUI + libresoda",
+                    "Rust + GPUI + libresoda",
+                ))
+                .child(text(
+                    root,
+                    "许可证：AGPL-3.0-or-later",
+                    "License: AGPL-3.0-or-later",
+                ))
+                .into_any_element()],
+        ))
         .into_any_element();
     shell(root, body, cx)
 }

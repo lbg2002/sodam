@@ -43,6 +43,12 @@
 - 播放主按钮增加低频循环呼吸动画，GPUI 的 reduced-motion 会自动降级为静态状态。
 - 视觉方向、组件和动效原则记录在仓库根目录 `PRODUCT.md` 与 `DESIGN.md`。
 
+### QQ 音乐 Linux 前端参考
+
+- 本机 `qqmusic` 1.1.8 的安装包确认是 Electron + React 17，使用 React Router、react-virtualized 和独立深色主题资源。
+- 静态资源包含推荐/播放全部、封面悬停播放、歌词窗口、深色皮肤和紧凑播放器图标；这些只作为交互和布局参考。
+- QQ 音乐启动失败的根因记录在 `docs/QQMUSIC_UBUNTU_SANDBOX.md`，与 SodaM 的 GPUI 渲染无关。
+
 - `cargo check --offline --workspace`：已通过（Rust 1.96，jobs=2）。
 - `scripts/check.sh`：已加入 systemd-run 用户总线不可用时的自动回退；当前容器中脚本完整通过（check、fmt、clippy、test）。
 - `packaging/make-deb.sh`：新增 Debian 打包脚本，release 构建后输出 `dist/sodam_<version>_<arch>.deb` 及 SHA-256 文件。

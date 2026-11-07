@@ -1,6 +1,163 @@
 //! 听歌模式页。
 
 use super::*;
+
+/// 首页推荐：采用 QQ 音乐 Linux 版中“封面主视觉 + 播放全部 + 推荐卡片”的信息结构，
+/// 但使用 SodaM 自己的组件和数据模型，不复制对方的资源或实现。
+pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let cards = root.scene_cards.clone();
+    if cards.is_empty() {
+        return div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(loading_state(root.tr("正在准备推荐内容…")))
+            .into_any_element();
+    }
+
+    let featured = cards[0].clone();
+    let featured_cover = root.cover_of(&featured.playlist.cover);
+    let featured_title = featured.playlist.title.clone();
+    let featured_count = featured.playlist.track_count.to_string();
+    let featured_card = featured.clone();
+    let card_items = cards
+        .iter()
+        .take(8)
+        .map(|card| {
+            let cover_path = root.cover_of(&card.playlist.cover);
+            let title = card.playlist.title.clone();
+            let count = card.playlist.track_count.to_string();
+            let click_card = card.clone();
+            div()
+                .id(gpui::ElementId::Name(
+                    format!("home-recommend-{}", card.inner_block_id).into(),
+                ))
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::SM))
+                .w(px(154.0))
+                .p(px(theme::space::SM))
+                .rounded(px(theme::radius::CARD))
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.018))
+                .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.start_scene_card(click_card.clone(), cx);
+                }))
+                .child(cover(cover_path, 138.0, theme::radius::CARD))
+                .child(
+                    div()
+                        .w_full()
+                        .truncate()
+                        .text_size(theme::Text::Body.size())
+                        .text_color(theme::text())
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(root.localized("{} 首", &[count])),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
+    div()
+        .id("home-scroll")
+        .flex()
+        .flex_col()
+        .flex_1()
+        .min_h(px(0.0))
+        .overflow_y_scroll()
+        .gap(px(theme::space::XXL))
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::XXL))
+                .p(px(theme::space::XXL))
+                .rounded(px(theme::radius::CARD))
+                .bg(theme::surface_elevated())
+                .border_1()
+                .border_color(theme::border())
+                .child(cover(featured_cover, 216.0, theme::radius::CARD))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::MD))
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .child(
+                            div()
+                                .text_size(px(28.0))
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme::text())
+                                .child(root.tr("为你推荐")),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Title.size())
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme::text())
+                                .truncate()
+                                .child(featured_title),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Body.size())
+                                .text_color(theme::text_muted())
+                                .child(
+                                    root.localized(
+                                        "{} 首歌曲，按你的听歌习惯整理",
+                                        &[featured_count],
+                                    ),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .id("home-play-all")
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .gap(px(theme::space::SM))
+                                .w(px(132.0))
+                                .h(px(theme::size::CONTROL))
+                                .rounded(px(theme::radius::PILL))
+                                .bg(theme::accent())
+                                .text_color(theme::accent_foreground())
+                                .cursor_pointer()
+                                .hover(|style| style.layer_scale(1.04))
+                                .on_click(cx.listener(
+                                    move |root, _event: &ClickEvent, _window, cx| {
+                                        root.start_scene_card(featured_card.clone(), cx);
+                                    },
+                                ))
+                                .child(svg().path(icons::path("play")).size(px(theme::ICON_SM)))
+                                .child(root.tr("播放全部")),
+                        ),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::LG))
+                .child(section_title(root.tr("今日推荐")))
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .flex_wrap()
+                        .gap(px(theme::space::LG))
+                        .children(card_items),
+                ),
+        )
+        .into_any_element()
+}
+
 /// 听歌模式页：常用模式 + 探索歌单，使用变高虚拟列表只渲染可视行。
 pub(crate) fn scenes_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     let scenes = root.scenes.clone();

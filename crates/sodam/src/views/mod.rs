@@ -1539,7 +1539,7 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
     let body = match root.nav {
         // 首页直接承载推荐内容。此前这里只显示加载状态，即使推荐队列已经
         // 就绪也不会进入内容页，导致用户看到一张“永远加载中”的首页。
-        Nav::Home => scenes::scenes_view(root, cx),
+        Nav::Home => scenes::home_view(root, cx),
         Nav::Scenes => scenes::scenes_view(root, cx),
         Nav::Search => search::search_page(root, window, cx),
         Nav::Liked => div()

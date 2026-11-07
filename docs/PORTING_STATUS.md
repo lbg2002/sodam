@@ -60,3 +60,16 @@
 - PE 为 GUI 可执行文件，导入表位于 `.rdata`，可见导入主要来自 `KERNEL32.dll`、`USER32.dll`、`GDI32.dll`、`SHELL32.dll`、`ADVAPI32.dll`、`COMCTL32.dll`、`ole32.dll`。
 - CLR Runtime Header 为零，未显示 .NET 程序特征。
 - stub 中没有 `Electron`、`WebView2`、`Qt6Core`、`Qt6Gui`、`Qt6Widgets`、`libcef.dll` 或 `node.dll` 的明确导入；这些结论只适用于安装器 stub，不能代表解压后的客户端 payload。
+
+## REA 首轮实际分析（2026-11-07）
+
+REA MCP 已成功注册到 Codex。对 NSIS payload 解包后，`app.7z` 显示：`SodaMusic.exe`、Chromium `resources.pak`/`icudtl.dat`/`snapshot_blob.bin`、多个 ASAR（`app.asar`、`main.asar`、`desktopLyrics.asar`、`offline.asar`、`taskbarWidget.asar` 等）以及多个 `.node` 原生插件。这是已提取 shipped artifact 的直接证据，当前框架判断为 **Electron/Chromium + ASAR + native Node addons**。
+
+REA 证据摘要保存在工作区外的 `rea-evidence/2026-11-07-sodam-installer.md`，关键 Evidence ID：
+
+- 安装器导入表：`ev_bd8edeeda760ad5bf529d4e5da272a8fc91594eed119b258cafc883b41966520`
+- 安装器资源树：`ev_5f0fe502256670be650709068d29857f4418ecb7dff25b2459d2207f691918a5`
+- 解包 `SodaMusic.exe` 导入表：`ev_f37c394b47990c29aede35989f4166cd7a6cb5c8d45a75b8e6f6a4552b4ab21a`
+- `app.asar` 静态摘要：`ev_3e1c4febcb212a5a40d142610e500d903876e8b67bb884a7f549df7b59b7c48d`
+
+`app.asar` 静态分析记录了 8 个未解包 native addon 的 ASAR integrity contradiction，因此按 REA 的 `record-and-continue` 策略标为 observed-untrusted；没有执行 JavaScript。`main.asar` 全量语义分析超过 450 秒客户端工具期限，后续应按精确 JS 文件分片分析。

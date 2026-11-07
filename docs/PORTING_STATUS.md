@@ -79,3 +79,5 @@ REA 证据摘要保存在工作区外的 `rea-evidence/2026-11-07-sodam-installe
 `app.asar` 的清单进一步显示：`package.json` 版本为 `3.7.0`，主入口是 `./entry.js`；`entry.js` 和 `main.js` 都是极薄的 Node bootstrap，分别把模块控制权交给 `entry.node` 和 `main.node`。这说明官方客户端的关键主进程逻辑位于原生 Node addon，而不是普通可读 JavaScript；Linux 迁移继续使用 libresoda 和 Rust 领域层是合理边界。
 
 REA 还对 `main.node`、`entry.node` 和 `ttnet.node` 做了 PE export 摘要：三者均为 PE32+ amd64 Node addon，各有 2 个导出；这进一步支持“关键主进程/网络能力在原生 addon 中”的架构判断，但未观察到导出函数运行时是否被调用。
+
+新增 `scripts/extract-windows-artifact.sh`，可在 Linux 上重复提取 NSIS 的 `app.7z`、列出客户端文件并生成 SHA-256 manifest；脚本保留安装器 checksum warning，不把它误当成 payload 提取失败。

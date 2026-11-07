@@ -353,6 +353,17 @@ impl Session {
             .pumpkin
             .get_download_info(&song)
             .map_err(|err| anyhow::anyhow!("解析播放流失败：{err}"))?;
+        if info.is_preview && std::env::var_os("SODAM_PLAYER_LOG").is_some() {
+            eprintln!(
+                "[player] 试听回退：{}（{}）",
+                track.title,
+                if info.note.trim().is_empty() {
+                    "上游未提供原因"
+                } else {
+                    info.note.trim()
+                }
+            );
+        }
         let data = download_audio_bytes(&info).map_err(|err| {
             let _ = std::fs::remove_file(&part);
             anyhow::anyhow!("下载失败: {err}")

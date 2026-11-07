@@ -35,6 +35,8 @@ pub struct Settings {
     pub prefetch_count: usize,
     /// 预加载并行下载数；过高会增加网络波动和签名服务压力。
     pub prefetch_concurrency: usize,
+    /// 单次音频连接与读取超时（秒）。
+    pub audio_download_timeout_seconds: u32,
     /// 是否启用自适应预加载。
     pub prefetch_adaptive: bool,
     /// 自适应预加载目标时长（分钟）。
@@ -97,8 +99,10 @@ pub struct Settings {
     pub language: String,
 }
 
-pub const DEFAULT_SIGNER_URL: &str = "http://222.186.10.201:8921/sign";
-pub const DEFAULT_SIGNER_TOKEN: &str = "05f8089b8c5f60c63f2a6dcfe1028d28ee2725a504f3e59b";
+pub const DEFAULT_SIGNER_URL: &str = "http://103.236.75.83:8899/sign";
+pub const DEFAULT_SIGNER_TOKEN: &str = "b356ad402bc31ee9e5a99cfdbf41eaa39961a562251c3359";
+const LEGACY_SIGNER_URL: &str = "http://222.186.10.201:8921/sign";
+const LEGACY_SIGNER_TOKEN: &str = "05f8089b8c5f60c63f2a6dcfe1028d28ee2725a504f3e59b";
 
 impl Default for Settings {
     fn default() -> Self {
@@ -118,6 +122,7 @@ impl Default for Settings {
             lyrics_offset_ms: 0,
             prefetch_count: 3,
             prefetch_concurrency: 2,
+            audio_download_timeout_seconds: 90,
             prefetch_adaptive: true,
             prefetch_minutes: 12,
             offline_mode: false,
@@ -194,10 +199,24 @@ impl Settings {
     }
 
     pub fn load_from(path: &Path) -> Self {
-        std::fs::read_to_string(path)
+        let Some(mut settings) = std::fs::read_to_string(path)
             .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default()
+            .and_then(|text| serde_json::from_str::<Self>(&text).ok())
+        else {
+            return Self::default();
+        };
+        let mut migrated = false;
+        if settings.signer_url.trim() == LEGACY_SIGNER_URL {
+            settings.signer_url = DEFAULT_SIGNER_URL.to_string();
+            if settings.signer_token.trim() == LEGACY_SIGNER_TOKEN {
+                settings.signer_token = DEFAULT_SIGNER_TOKEN.to_string();
+            }
+            migrated = true;
+        }
+        if migrated {
+            let _ = settings.save_to(path);
+        }
+        settings
     }
 
     pub fn save(&self) -> anyhow::Result<()> {

@@ -746,6 +746,22 @@ fn commit_prefetch_concurrency(root: &mut Root, cx: &mut Context<Root>) {
     root.set_prefetch_concurrency(value, cx);
 }
 
+fn preview_audio_timeout(root: &mut Root, value: f32, cx: &mut Context<Root>) {
+    root.settings.audio_download_timeout_seconds = value.round().clamp(15.0, 600.0) as u32;
+    cx.notify();
+}
+
+fn commit_audio_timeout(root: &mut Root, cx: &mut Context<Root>) {
+    let value = root.settings.audio_download_timeout_seconds;
+    root.settings.audio_download_timeout_seconds = value.clamp(15, 600);
+    root.status = match root.settings.save() {
+        Ok(()) => root.localized("音频缓存等待时间：{} 秒", &[value.to_string()]),
+        Err(err) => root.localized("缓存等待时间保存失败：{err}", &[err.to_string()]),
+    };
+    root.toast(root.status.clone(), cx);
+    cx.notify();
+}
+
 fn preview_cache_limit(root: &mut Root, value: f32, cx: &mut Context<Root>) {
     root.settings.cache_limit_gb = value.round() as u64;
     cx.notify();
@@ -1444,6 +1460,23 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         root.settings.prefetch_count.to_string(),
         preview_prefetch_count,
         commit_prefetch_count,
+        cx,
+    ));
+    prefetch_controls.push(slider_row(
+        "audio-timeout-slider",
+        text(root, "缓存等待时间", "Cache wait timeout"),
+        text(
+            root,
+            "单首歌曲连接和读取的最长等待时间，网络较慢时可调高。",
+            "Maximum connection and read time for one song; raise it on slow networks.",
+        ),
+        root.settings.audio_download_timeout_seconds as f32,
+        15.0,
+        600.0,
+        15.0,
+        format!("{} s", root.settings.audio_download_timeout_seconds),
+        preview_audio_timeout,
+        commit_audio_timeout,
         cx,
     ));
     prefetch_controls.push(slider_row(

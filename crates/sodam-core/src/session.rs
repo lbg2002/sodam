@@ -7,15 +7,18 @@ use libresoda::{AppCredentials, Soda};
 use std::io::Read;
 use std::sync::Arc;
 
-const AUDIO_DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
-
 /// 取流元数据仍由 libresoda 处理；音频实体下载使用独立的长读取超时。
 /// libresoda 的通用下载器默认 30 秒，慢 CDN 会在文件已经开始返回时被误判为失败。
-fn download_audio_bytes(info: &libresoda::soda::types::DownloadInfo) -> anyhow::Result<Vec<u8>> {
+fn download_audio_bytes(
+    info: &libresoda::soda::types::DownloadInfo,
+    timeout_seconds: u32,
+) -> anyhow::Result<Vec<u8>> {
     let mut last_error = String::new();
     for attempt in 0..3 {
         let response = ureq::get(info.url.trim())
-            .timeout(AUDIO_DOWNLOAD_TIMEOUT)
+            .timeout(std::time::Duration::from_secs(
+                timeout_seconds.clamp(15, 600) as u64,
+            ))
             .set("User-Agent", libresoda::soda::types::USER_AGENT)
             .set("Accept", "*/*")
             .set("Connection", "close")
@@ -381,10 +384,11 @@ impl Session {
                 }
             );
         }
-        let data = download_audio_bytes(&info).map_err(|err| {
-            let _ = std::fs::remove_file(&part);
-            anyhow::anyhow!("下载失败: {err}")
-        })?;
+        let data = download_audio_bytes(&info, self.settings.audio_download_timeout_seconds)
+            .map_err(|err| {
+                let _ = std::fs::remove_file(&part);
+                anyhow::anyhow!("下载失败: {err}")
+            })?;
         std::fs::write(&part, data).map_err(|err| anyhow::anyhow!("写入音频缓存失败：{err}"))?;
 
         // 完整性校验：只拒绝「比服务端声明更少」的截断下载（静默 EOF 时可能发生）。

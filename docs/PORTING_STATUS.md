@@ -35,6 +35,14 @@
 
 ## 构建与交付
 
+### 2026-11-07 UI polish pass
+
+- 首页不再在推荐队列就绪后停留在永久加载态，直接复用推荐/听歌模式内容承载首页。
+- 深色主题无封面时使用汽水红强调色；有封面时继续使用封面色相 wash。
+- 侧栏、场景卡片、歌单卡片和图标按钮增加轻微层级抬升反馈。
+- 播放主按钮增加低频循环呼吸动画，GPUI 的 reduced-motion 会自动降级为静态状态。
+- 视觉方向、组件和动效原则记录在仓库根目录 `PRODUCT.md` 与 `DESIGN.md`。
+
 - `cargo check --offline --workspace`：已通过（Rust 1.96，jobs=2）。
 - `scripts/check.sh`：已加入 systemd-run 用户总线不可用时的自动回退；当前容器中脚本完整通过（check、fmt、clippy、test）。
 - `packaging/make-deb.sh`：新增 Debian 打包脚本，release 构建后输出 `dist/sodam_<version>_<arch>.deb` 及 SHA-256 文件。

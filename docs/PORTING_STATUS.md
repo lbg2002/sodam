@@ -72,4 +72,4 @@ REA 证据摘要保存在工作区外的 `rea-evidence/2026-11-07-sodam-installe
 - 解包 `SodaMusic.exe` 导入表：`ev_f37c394b47990c29aede35989f4166cd7a6cb5c8d45a75b8e6f6a4552b4ab21a`
 - `app.asar` 静态摘要：`ev_3e1c4febcb212a5a40d142610e500d903876e8b67bb884a7f549df7b59b7c48d`
 
-`app.asar` 静态分析记录了 8 个未解包 native addon 的 ASAR integrity contradiction，因此按 REA 的 `record-and-continue` 策略标为 observed-untrusted；没有执行 JavaScript。`main.asar` 全量语义分析超过 450 秒客户端工具期限，后续应按精确 JS 文件分片分析。
+`app.asar` 静态分析记录了 8 个未解包 native addon 的 ASAR integrity contradiction，因此按 REA 的 `record-and-continue` 策略标为 observed-untrusted；没有执行 JavaScript。`main.asar` 全量语义分析超过 450 秒客户端工具期限；随后对播放器、preload、renderer 三个精确 JS 分片完成读取，但该压缩 bundle 在当前 REA JS 解析器下产生 3 个 parse failure，未生成可靠语义 findings。

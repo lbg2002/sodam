@@ -132,6 +132,7 @@ icon_set!(
     "volume-x",
     "list-end",
     "music",
+    "music-playing",
     "moon",
     "cloud-off",
     "picture-in-picture",

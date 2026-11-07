@@ -2,6 +2,8 @@
 
 use super::scenes::retry_button;
 use super::*;
+use gpui::{Animation, AnimationExt};
+use std::time::Duration;
 /// 歌词播放页：左封面，右滚动歌词；展开队列时自动切为「缩小封面 + 封面下方精简歌词 + 右侧队列」。
 pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) -> AnyElement {
     if root.switching_queue.is_some() {
@@ -48,16 +50,53 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                                 return div().h(px(lyric_row_height)).into_any_element();
                             };
                             let is_active = active == Some(index);
+                            let distance = active
+                                .map(|active_index| active_index.abs_diff(index))
+                                .unwrap_or(3);
                             let color = if is_active {
                                 theme::accent()
-                            } else {
+                            } else if distance <= 2 {
                                 theme::text_muted()
+                            } else {
+                                theme::text_faint()
+                            };
+                            let marker = if is_active {
+                                div()
+                                    .id(("lyric-marker", index))
+                                    .flex_none()
+                                    .w(px(18.0))
+                                    .h(px(18.0))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(theme::accent())
+                                    .child(
+                                        svg()
+                                            .path(icons::path("music-playing"))
+                                            .size(px(theme::ICON_SM)),
+                                    )
+                                    .with_animation(
+                                        ("lyric-marker-pulse", index),
+                                        Animation::new(Duration::from_millis(1400))
+                                            .repeat_synced()
+                                            .with_max_fps(30.0),
+                                        |this, phase| {
+                                            this.layer_scale(
+                                                0.92 + (phase * std::f32::consts::TAU).sin().abs()
+                                                    * 0.12,
+                                            )
+                                        },
+                                    )
+                                    .into_any_element()
+                            } else {
+                                div().w(px(18.0)).h(px(18.0)).into_any_element()
                             };
                             div()
                                 .w_full()
                                 .flex()
                                 .flex_wrap()
                                 .items_center()
+                                .justify_center()
                                 .h(px(lyric_row_height))
                                 .text_size(px(if is_active {
                                     active_font_size
@@ -66,12 +105,20 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
                                 }))
                                 .line_height(px(lyric_line_height))
                                 .text_color(color)
+                                .opacity(if is_active {
+                                    1.0
+                                } else {
+                                    (1.0 - distance as f32 * 0.12).max(0.42)
+                                })
                                 .when(is_active, |this| {
                                     this.font_weight(gpui::FontWeight::BOLD)
                                         .px(px(theme::space::SM))
                                         .rounded(px(theme::radius::ROW))
                                         .bg(theme::accent_soft())
+                                        .border_1()
+                                        .border_color(theme::accent_soft())
                                 })
+                                .child(marker)
                                 .child(line.text.clone())
                                 .into_any_element()
                         })

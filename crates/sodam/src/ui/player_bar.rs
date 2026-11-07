@@ -1030,7 +1030,18 @@ fn queue_section_row(title: &str) -> gpui::AnyElement {
 
 /// 全局右侧播放队列抽屉。所有页面（包括歌词页）统一使用同一尺寸与对齐方式。
 pub fn queue_drawer(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
-    queue_drawer_inner(root, cx, false)
+    div()
+        .h_full()
+        .child(queue_drawer_inner(root, cx, false))
+        .with_animation(
+            "queue-drawer-enter",
+            Animation::new(Duration::from_millis(260))
+                .with_easing(|phase| 1.0 - (1.0 - phase.clamp(0.0, 1.0)).powi(3)),
+            |this, phase| {
+                this.opacity(phase.clamp(0.0, 1.0))
+                    .layer_translate(gpui::point(px((1.0 - phase) * 18.0), px(0.0)))
+            },
+        )
 }
 
 fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> impl IntoElement {

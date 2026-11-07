@@ -118,7 +118,7 @@ impl Root {
         if ahead == 0 {
             return;
         }
-        let max_inflight = prefetch_concurrency().max(1);
+        let max_inflight = prefetch_concurrency(self.settings.prefetch_concurrency);
         let generation = self.prefetch_generation;
         // 多看一些候选项：如果最近几首处于失败冷却，也继续把更后面的歌缓存起来，
         // 避免一个坏条目让整个预加载窗口停住。
@@ -679,7 +679,7 @@ impl Root {
     }
 
     pub fn set_prefetch_count(&mut self, count: usize, cx: &mut Context<Self>) {
-        self.settings.prefetch_count = count.min(8);
+        self.settings.prefetch_count = count.min(MAX_PREFETCH_COUNT);
         self.status = match self.settings.save() {
             Ok(()) => {
                 if self.settings.prefetch_count == 0 {
@@ -696,6 +696,19 @@ impl Root {
         if self.settings.prefetch_count > 0 {
             self.spawn_prefetch(cx);
         }
+        cx.notify();
+    }
+
+    pub fn set_prefetch_concurrency(&mut self, count: usize, cx: &mut Context<Self>) {
+        self.settings.prefetch_concurrency = count.clamp(1, MAX_PREFETCH_CONCURRENCY);
+        self.status = match self.settings.save() {
+            Ok(()) => self.localized(
+                "缓存并行数：{} 个任务",
+                &[self.settings.prefetch_concurrency.to_string()],
+            ),
+            Err(err) => self.localized("缓存并行数保存失败：{err}", &[err.to_string()]),
+        };
+        self.spawn_prefetch(cx);
         cx.notify();
     }
 
@@ -3359,7 +3372,9 @@ fn system_open(target: &str) -> std::io::Result<std::process::Child> {
 
 /// 预取失败冷却：失败的曲目 60s 内不再重试（巡检会把永久失败的歌无限重试，
 /// 持续打签名服务和网络）。
-const PREFETCH_RETRY_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(60);
+const PREFETCH_RETRY_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(15);
+const MAX_PREFETCH_COUNT: usize = 24;
+const MAX_PREFETCH_CONCURRENCY: usize = 6;
 
 /// 预取数量：设置页为默认值；环境变量 `SODAM_PREFETCH_COUNT` 可临时覆盖。
 /// 设置值 0 表示关闭，环境变量允许显式写 0。
@@ -3367,8 +3382,8 @@ fn prefetch_ahead_count(configured: usize) -> usize {
     std::env::var("SODAM_PREFETCH_COUNT")
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
-        .map(|count| count.min(8))
-        .unwrap_or(configured.min(8))
+        .map(|count| count.min(MAX_PREFETCH_COUNT))
+        .unwrap_or(configured.min(MAX_PREFETCH_COUNT))
 }
 
 fn prefetch_target_count(
@@ -3382,11 +3397,11 @@ fn prefetch_target_count(
         return fixed;
     }
 
-    let minimum = fixed.clamp(3, 8);
+    let minimum = fixed.clamp(3, MAX_PREFETCH_COUNT);
     let target_seconds = i64::from(target_minutes.clamp(5, 30)) * 60;
     let mut seconds = 0i64;
     let mut count = 0usize;
-    for track in queue.peek_ahead(8) {
+    for track in queue.peek_ahead(MAX_PREFETCH_COUNT) {
         count += 1;
         seconds += if track.duration_seconds > 0 {
             track.duration_seconds
@@ -3397,14 +3412,16 @@ fn prefetch_target_count(
             break;
         }
     }
-    count.max(minimum.min(queue.len().saturating_sub(1))).min(8)
+    count
+        .max(minimum.min(queue.len().saturating_sub(1)))
+        .min(MAX_PREFETCH_COUNT)
 }
 
-/// 预取并发上限：环境变量 `SODAM_PREFETCH_CONCURRENCY`（默认 2）。
-fn prefetch_concurrency() -> usize {
+/// 预取并发上限：设置页持久化，环境变量可临时覆盖。
+fn prefetch_concurrency(configured: usize) -> usize {
     std::env::var("SODAM_PREFETCH_CONCURRENCY")
         .ok()
         .and_then(|value| value.trim().parse::<usize>().ok())
         .filter(|count| *count > 0)
-        .unwrap_or(2)
+        .unwrap_or(configured.clamp(1, MAX_PREFETCH_CONCURRENCY))
 }

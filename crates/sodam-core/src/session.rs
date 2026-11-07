@@ -146,7 +146,7 @@ fn describe_quality(info: &libresoda::soda::types::DownloadInfo) -> String {
         tier.to_string()
     };
     if info.is_preview {
-        label.push_str(" · 试听");
+        label.push_str(" · 试听（整曲流未就绪）");
     }
     label
 }

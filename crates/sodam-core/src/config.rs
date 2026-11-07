@@ -33,6 +33,8 @@ pub struct Settings {
     pub lyrics_offset_ms: i64,
     /// 智能预加载前方曲目数；0 = 关闭。固定模式使用。
     pub prefetch_count: usize,
+    /// 预加载并行下载数；过高会增加网络波动和签名服务压力。
+    pub prefetch_concurrency: usize,
     /// 是否启用自适应预加载。
     pub prefetch_adaptive: bool,
     /// 自适应预加载目标时长（分钟）。
@@ -115,6 +117,7 @@ impl Default for Settings {
             lyrics_line_height: 32,
             lyrics_offset_ms: 0,
             prefetch_count: 3,
+            prefetch_concurrency: 2,
             prefetch_adaptive: true,
             prefetch_minutes: 12,
             offline_mode: false,

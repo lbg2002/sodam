@@ -736,6 +736,16 @@ fn commit_prefetch_count(root: &mut Root, cx: &mut Context<Root>) {
     root.set_prefetch_count(value, cx);
 }
 
+fn preview_prefetch_concurrency(root: &mut Root, value: f32, cx: &mut Context<Root>) {
+    root.settings.prefetch_concurrency = value.round().clamp(1.0, 6.0) as usize;
+    cx.notify();
+}
+
+fn commit_prefetch_concurrency(root: &mut Root, cx: &mut Context<Root>) {
+    let value = root.settings.prefetch_concurrency;
+    root.set_prefetch_concurrency(value, cx);
+}
+
 fn preview_cache_limit(root: &mut Root, value: f32, cx: &mut Context<Root>) {
     root.settings.cache_limit_gb = value.round() as u64;
     cx.notify();
@@ -1425,7 +1435,7 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             text(root, "0 表示关闭预加载。", "0 disables prefetching."),
             root.settings.prefetch_count as f32,
             0.0,
-            8.0,
+            24.0,
             1.0,
             root.settings.prefetch_count.to_string(),
             preview_prefetch_count,
@@ -1433,6 +1443,23 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             cx,
         ));
     }
+    prefetch_controls.push(slider_row(
+        "prefetch-concurrency-slider",
+        text(root, "缓存并行数", "Cache concurrency"),
+        text(
+            root,
+            "同时下载的歌曲数量。网络不稳定时可调低，设置会长期保存。",
+            "Number of simultaneous downloads. Lower it on unstable networks; the value is saved.",
+        ),
+        root.settings.prefetch_concurrency as f32,
+        1.0,
+        6.0,
+        1.0,
+        root.settings.prefetch_concurrency.to_string(),
+        preview_prefetch_concurrency,
+        commit_prefetch_concurrency,
+        cx,
+    ));
 
     let body = div()
         .flex()
@@ -1942,6 +1969,22 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     } else {
         root.settings.signer_url.trim().to_string()
     };
+    let device_ready = !root.settings.device_id.trim().is_empty()
+        && !root.settings.iid.trim().is_empty()
+        && !root.settings.fp.trim().is_empty();
+    let signing_status = if device_ready {
+        text(
+            root,
+            "设备签名已配置；若仍显示试听，说明该曲目服务端没有返回 VIP 整曲流。",
+            "Device signing is configured; a preview then means the service did not return a VIP full-track stream for this song.",
+        )
+    } else {
+        text(
+            root,
+            "设备签名缺失；VIP 歌曲可能只能试听。请更新后重新登录。",
+            "Device signing is missing; VIP songs may be preview-only. Update the app and sign in again.",
+        )
+    };
 
     let account_action = if logged_in {
         action_button(
@@ -2050,6 +2093,16 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .text_size(theme::Text::Small.size())
                         .text_color(theme::text())
                         .child(signer),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(if device_ready {
+                            theme::text_muted()
+                        } else {
+                            theme::accent()
+                        })
+                        .child(signing_status),
                 )
                 .into_any_element()],
         ))

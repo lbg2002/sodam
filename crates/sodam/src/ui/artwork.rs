@@ -115,7 +115,7 @@ pub fn icon_button(
         .size(px(theme::size::CONTROL_SM))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
-        .hover(|style| style.bg(theme::surface_hover()))
+        .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.04))
         .child(
             svg()
                 .path(icons::path(icon))

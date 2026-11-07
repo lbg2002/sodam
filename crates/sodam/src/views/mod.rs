@@ -1201,7 +1201,7 @@ fn playlist_grid(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .p(px(theme::space::SM))
                 .rounded(px(theme::radius::CARD))
                 .cursor_pointer()
-                .hover(|style| style.bg(theme::surface_hover()))
+                .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.018))
                 .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
                     root.track_menu = None;
                     root.open_playlist(id.clone(), None, cx);
@@ -1537,7 +1537,9 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
     let logged_in = !settings.cookie.trim().is_empty();
 
     let body = match root.nav {
-        Nav::Home => loading_state(root.tr("正在准备推荐队列…")),
+        // 首页直接承载推荐内容。此前这里只显示加载状态，即使推荐队列已经
+        // 就绪也不会进入内容页，导致用户看到一张“永远加载中”的首页。
+        Nav::Home => scenes::scenes_view(root, cx),
         Nav::Scenes => scenes::scenes_view(root, cx),
         Nav::Search => search::search_page(root, window, cx),
         Nav::Liked => div()

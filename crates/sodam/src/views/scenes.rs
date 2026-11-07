@@ -105,7 +105,7 @@ pub(crate) fn scenes_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                             theme::border()
                         })
                         .cursor_pointer()
-                        .hover(|style| style.bg(theme::surface_hover()))
+                        .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.015))
                         .on_click({
                             let entity = entity.clone();
                             move |_event: &ClickEvent, _window, cx: &mut gpui::App| {
@@ -196,7 +196,7 @@ pub(crate) fn scenes_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                             .border_1()
                             .border_color(theme::border())
                             .cursor_pointer()
-                            .hover(|style| style.bg(theme::surface_hover()))
+                            .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.02))
                             .on_click({
                                 let entity = entity.clone();
                                 let card = card.clone();

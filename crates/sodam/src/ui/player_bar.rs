@@ -5,9 +5,10 @@
 
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, px, svg, uniform_list, ClickEvent, Context, IntoElement, MouseButton,
-    MouseDownEvent, MouseMoveEvent,
+    canvas, div, px, svg, uniform_list, Animation, AnimationExt, ClickEvent, Context, IntoElement,
+    MouseButton, MouseDownEvent, MouseMoveEvent,
 };
+use std::time::Duration;
 
 use crate::app::Root;
 use crate::ui::artwork::{cover, icon_button};
@@ -601,8 +602,8 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 root.prev_track(cx);
                             },
                         ))
-                        .child(
-                            div()
+                        .child({
+                            let button = div()
                                 .id("play-toggle")
                                 .flex()
                                 .items_center()
@@ -610,7 +611,9 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                 .size(px(40.0))
                                 .rounded_full()
                                 .bg(theme::accent())
+                                .shadow_md()
                                 .cursor_pointer()
+                                .hover(|style| style.layer_scale(1.07))
                                 .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
                                     root.toggle_play(cx);
                                     cx.notify();
@@ -631,8 +634,25 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                         .size(px(theme::ICON_LG))
                                         .text_color(theme::accent_foreground())
                                         .into_any_element()
-                                }),
-                        )
+                                });
+                            if snapshot.playing && !loading {
+                                button
+                                    .with_animation(
+                                        "play-pulse",
+                                        Animation::new(Duration::from_millis(1800))
+                                            .repeat_synced()
+                                            .with_max_fps(30.0),
+                                        |this, phase| {
+                                            this.layer_scale(
+                                                1.0 + (phase * std::f32::consts::TAU).sin() * 0.012,
+                                            )
+                                        },
+                                    )
+                                    .into_any_element()
+                            } else {
+                                button.into_any_element()
+                            }
+                        })
                         .child(transport_button(
                             "next",
                             "skip-forward",

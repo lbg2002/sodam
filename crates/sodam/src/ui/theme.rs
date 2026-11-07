@@ -306,6 +306,13 @@ pub fn text_faint() -> Rgba {
 
 /// 强调色：无封面时是 sonora neutral；有封面时由封面色相生成。
 pub fn accent() -> Rgba {
+    let Some(_) = ambient_color() else {
+        return if is_dark() {
+            hex(0xFF5A5F)
+        } else {
+            hex(0xD9363E)
+        };
+    };
     tinted_accent(if is_dark() { 0.72 } else { 0.42 })
 }
 
@@ -349,7 +356,7 @@ pub fn ambient_background() -> Background {
         } else {
             hex(0xFFFFFF)
         },
-        0.48,
+        0.56,
     );
     linear_gradient(
         135.0,

@@ -50,7 +50,7 @@ fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> A
         .cursor_pointer()
         .when(selected, |this| this.bg(theme::surface_selected()))
         .when(!selected, |this| {
-            this.hover(|style| style.bg(theme::surface_hover()))
+            this.hover(|style| style.bg(theme::surface_hover()).layer_scale(1.012))
         })
         .text_color(foreground)
         .text_size(theme::Text::Body.size())
@@ -223,6 +223,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .justify_center()
                         .size(px(28.0))
                         .rounded(px(theme::radius::ROW))
+                        .bg(theme::accent_soft())
                         .overflow_hidden()
                         .child(img("icons/sodam-logo.svg").size(px(28.0))),
                 )

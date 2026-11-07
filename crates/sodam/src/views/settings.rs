@@ -1428,21 +1428,24 @@ fn storage_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             commit_prefetch_minutes,
             cx,
         ));
-    } else {
-        prefetch_controls.push(slider_row(
-            "prefetch-count-slider",
-            text(root, "固定预加载首数", "Fixed prefetch count"),
-            text(root, "0 表示关闭预加载。", "0 disables prefetching."),
-            root.settings.prefetch_count as f32,
-            0.0,
-            24.0,
-            1.0,
-            root.settings.prefetch_count.to_string(),
-            preview_prefetch_count,
-            commit_prefetch_count,
-            cx,
-        ));
     }
+    prefetch_controls.push(slider_row(
+        "prefetch-count-slider",
+        text(root, "缓存歌曲数量", "Cached song count"),
+        text(
+            root,
+            "自适应模式下作为最低缓存数量；固定模式下为缓存数量。0 表示关闭。",
+            "Minimum count in adaptive mode; exact count in fixed mode. 0 disables prefetching.",
+        ),
+        root.settings.prefetch_count as f32,
+        0.0,
+        24.0,
+        1.0,
+        root.settings.prefetch_count.to_string(),
+        preview_prefetch_count,
+        commit_prefetch_count,
+        cx,
+    ));
     prefetch_controls.push(slider_row(
         "prefetch-concurrency-slider",
         text(root, "缓存并行数", "Cache concurrency"),

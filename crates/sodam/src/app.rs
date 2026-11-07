@@ -121,6 +121,7 @@ pub enum SettingsSection {
     Desktop,
     Advanced,
     Account,
+    About,
 }
 
 impl Root {
@@ -416,7 +417,10 @@ pub struct Root {
 
 impl Root {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let settings = Settings::load().merged_with_env();
+        let mut settings = Settings::load().merged_with_env();
+        if settings.ensure_device_identity() {
+            let _ = settings.save();
+        }
         // 首次运行就把配置落盘：用户可以直接编辑 ~/.config/sodam/config.json
         // 换签名服务 / 钉死设备指纹（默认值已内置，见 sodam_core::config）
         if !Settings::config_path().exists() {

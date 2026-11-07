@@ -153,6 +153,32 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// 为没有导入过设备身份的旧配置生成一个稳定的本地身份。
+    ///
+    /// VIP App 取流需要 device_id/iid/fp；旧版本只保存了 Cookie，导致
+    /// 账号能登录但取流只能拿到试听。生成后由应用保存到配置，后续请求保持一致。
+    pub fn ensure_device_identity(&mut self) -> bool {
+        if !self.device_id.trim().is_empty()
+            && !self.iid.trim().is_empty()
+            && !self.fp.trim().is_empty()
+        {
+            return false;
+        }
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::process::id().hash(&mut hasher);
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+            .hash(&mut hasher);
+        let seed = hasher.finish();
+        self.device_id = format!("{:016}", seed % 10_000_000_000_000_000);
+        self.iid = format!("{:015}", (seed / 10) % 1_000_000_000_000_000);
+        self.fp = self.device_id.clone();
+        true
+    }
+
     pub fn config_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))

@@ -169,6 +169,13 @@ fn shell(root: &Root, body: AnyElement, cx: &mut Context<Root>) -> AnyElement {
             text(root, "账户", "Account"),
             "user-round",
             cx,
+        ))
+        .child(nav_item(
+            root,
+            SettingsSection::About,
+            text(root, "关于 SodaM", "About SodaM"),
+            "info",
+            cx,
         ));
 
     div()
@@ -1922,6 +1929,10 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             "Sign in to use online search, playlists, and full playback features.",
         )
     };
+    let account_avatar = root
+        .account
+        .as_ref()
+        .and_then(|info| root.cover_of(&info.avatar_url));
     let signer = if root.settings.signer_url.trim().is_empty() {
         text(root, "未配置", "Not configured")
     } else {
@@ -1962,12 +1973,51 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             ),
         ))
         .child(card(
-            account_title,
-            account_detail,
+            account_title.clone(),
+            account_detail.clone(),
             vec![div()
                 .flex()
                 .px(px(theme::space::SM))
                 .child(account_action)
+                .into_any_element()],
+        ))
+        .child(card(
+            text(root, "账号资料", "Profile"),
+            text(
+                root,
+                "当前登录账号与会员状态。",
+                "Signed-in account and membership status.",
+            ),
+            vec![div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::MD))
+                .px(px(theme::space::SM))
+                .child(crate::ui::artwork::cover(
+                    account_avatar,
+                    64.0,
+                    theme::radius::PILL,
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::space::XS))
+                        .child(
+                            div()
+                                .text_size(theme::Text::Large.size())
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme::text())
+                                .child(account_title.clone()),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .child(account_detail.clone()),
+                        ),
+                )
                 .into_any_element()],
         ))
         .child(card(
@@ -2003,6 +2053,51 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     shell(root, body, cx)
 }
 
+fn about_view(root: &Root, _cx: &mut Context<Root>) -> AnyElement {
+    let version = env!("CARGO_PKG_VERSION");
+    let body = div()
+        .flex()
+        .flex_col()
+        .gap(px(theme::space::LG))
+        .child(page_header(
+            text(root, "关于 SodaM", "About SodaM"),
+            text(
+                root,
+                "版本、许可证与项目来源。",
+                "Version, license, and project information.",
+            ),
+        ))
+        .child(card(
+            "SodaM".to_string(),
+            text(
+                root,
+                "Linux 原生汽水音乐客户端",
+                "Native Soda Music client for Linux",
+            ),
+            vec![div()
+                .flex()
+                .flex_col()
+                .gap(px(theme::space::SM))
+                .px(px(theme::space::SM))
+                .py(px(theme::space::SM))
+                .child(format!("{} {}", text(root, "版本", "Version"), version))
+                .child(text(
+                    root,
+                    "Rust + GPUI + libresoda",
+                    "Rust + GPUI + libresoda",
+                ))
+                .child(text(
+                    root,
+                    "许可证：AGPL-3.0-or-later",
+                    "License: AGPL-3.0-or-later",
+                ))
+                .child("https://github.com/sodahub-org/sodam".to_string())
+                .into_any_element()],
+        ))
+        .into_any_element();
+    shell(root, body, _cx)
+}
+
 pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     match root.settings_section {
         SettingsSection::General => general_view(root, cx),
@@ -2013,5 +2108,6 @@ pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         SettingsSection::Desktop => desktop_view(root, cx),
         SettingsSection::Advanced => advanced_view(root, cx),
         SettingsSection::Account => account_view(root, cx),
+        SettingsSection::About => about_view(root, cx),
     }
 }

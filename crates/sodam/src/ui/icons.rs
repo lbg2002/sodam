@@ -133,6 +133,7 @@ icon_set!(
     "list-end",
     "music",
     "music-playing",
+    "info",
     "moon",
     "cloud-off",
     "picture-in-picture",

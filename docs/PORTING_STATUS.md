@@ -81,3 +81,15 @@ REA 证据摘要保存在工作区外的 `rea-evidence/2026-11-07-sodam-installe
 REA 还对 `main.node`、`entry.node` 和 `ttnet.node` 做了 PE export 摘要：三者均为 PE32+ amd64 Node addon，各有 2 个导出；这进一步支持“关键主进程/网络能力在原生 addon 中”的架构判断，但未观察到导出函数运行时是否被调用。
 
 新增 `scripts/extract-windows-artifact.sh`，可在 Linux 上重复提取 NSIS 的 `app.7z`、列出客户端文件并生成 SHA-256 manifest；脚本保留安装器 checksum warning，不把它误当成 payload 提取失败。
+
+## Windows 模块到 SodaM 的迁移映射
+
+| Windows Electron 模块/证据 | SodaM Linux 对应实现 | 状态 |
+|---|---|---|
+| `entry.node` / `main.node` 原生主进程入口 | `crates/sodam/src/main.rs` + GPUI 应用入口 | 已实现 |
+| `main.asar` renderer UI 与状态服务 | GPUI views、`Root`、`app_actions.rs` | 页面/交互已覆盖，视觉与动态行为待实机对照 |
+| `ttnet.node` / Cronet 网络栈 | `libresoda` + `sodam-core::session` | Linux 网络路径已实现，Windows 请求细节静态未完全还原 |
+| `desktopLyrics.asar` / taskbar widget | `ui/desktop_lyrics.rs` + GNOME 顶栏扩展 | 已实现，需真实桌面验证 |
+| Electron queue/player services | `sodam-core::queue` + rodio 专属线程 | 已实现 |
+| Native LMDB/cache addons | `sodam-core::audio` 文件缓存、sidecar 校验、LRU | 已实现，存储格式不同 |
+| ASAR offline/update/feedback bundles | SodaM 离线模式、下载管理、设置/状态提示 | 核心能力已覆盖，官方弹窗细节未完全复刻 |

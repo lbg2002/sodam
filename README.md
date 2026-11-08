@@ -60,6 +60,16 @@ SodaM 面向 Linux / macOS / Windows 桌面，重点做四件事：**接近官�
 | macOS（Apple Silicon） | 已实测，提供 Homebrew Cask 与 `.app` 下载 |
 | Windows（x64） | 已实测，提供安装包 |
 
+## 最新界面预览
+
+0.1.22 加入了更完整的沉浸式播放页与右侧播放队列布局：
+
+| 沉浸式播放页 | 播放队列与缓存状态 |
+| --- | --- |
+| <a href="docs/img/immersive-playback.png"><img src="docs/img/immersive-playback.png" width="880" alt="SodaM 沉浸式播放页"></a> | <a href="docs/img/queue-panel.png"><img src="docs/img/queue-panel.png" width="880" alt="SodaM 播放队列"></a> |
+
+下载导出文件名使用“歌曲名 - 作者”格式，不再在文件名中显示内部数字曲目 ID。
+
 ## 界面预览
 
 | 推荐流 | 听歌模式 |
@@ -85,7 +95,7 @@ SodaM 面向 Linux / macOS / Windows 桌面，重点做四件事：**接近官�
 ### 播放与队列
 
 - 本地播放引擎：播放 / 暂停、上一首 / 下一首、拖动进度、音量控制
-- 智能预加载：支持固定曲目数与自适应模式；自适应模式同时满足最低曲目数和目标播放分钟数，最长预取 8 首
+- 智能预加载：支持固定曲目数与自适应模式；自适应模式同时满足最低曲目数和目标播放分钟数，最长预取 24 首
 - 离线 / 缓存优先：离线模式严格只播放当前音质档位的本地缓存，停止新的音频预取，并优先复用已缓存歌词/封面
 - 播放队列支持拖拽重排“接下来”曲目，当前正在播放项保持不变
 - 睡眠定时：支持播完当前歌曲、15 / 30 / 60 / 90 分钟后暂停
@@ -274,7 +284,7 @@ scripts/run.sh     # 启动 GUI，带 MemoryMax 护栏
 
 ## Arch Linux 下载安装
 
-SodaM 的 GitHub Release 提供 Arch Linux `pacman` 安装包，当前版本为 [`v0.1.7`](https://github.com/sodahub-org/sodam/releases/tag/v0.1.7)。
+SodaM 的 GitHub Release 提供 Arch Linux `pacman` 安装包，当前版本为 [`v0.1.22`](https://github.com/sodahub-org/sodam/releases/tag/v0.1.22)。
 
 ### 1. 确认系统架构
 
@@ -292,7 +302,7 @@ mkdir -p /tmp/sodam-install
 cd /tmp/sodam-install
 
 arch=$(uname -m)
-version=0.1.7
+version=0.1.22
 base_url=https://github.com/sodahub-org/sodam/releases/download/v${version}
 
 curl -fLO ${base_url}/SHA256SUMS
@@ -303,7 +313,7 @@ grep "sodam-${version}-1-${arch}\.pkg\.tar\.zst$" SHA256SUMS | sha256sum -c -
 校验输出必须包含 `OK`：
 
 ```text
-sodam-0.1.7-1-x86_64.pkg.tar.zst: OK
+sodam-0.1.22-1-x86_64.pkg.tar.zst: OK
 ```
 
 ### 3. 安装
@@ -329,7 +339,7 @@ sodam
 ## macOS 下载安装（Apple Silicon）
 
 macOS 版已在 Apple Silicon（M 系列）真机实测。当前版本为
-[`v0.1.7`](https://github.com/sodahub-org/sodam/releases/tag/v0.1.7)，两种安装方式任选。
+[`v0.1.22`](https://github.com/sodahub-org/sodam/releases/tag/v0.1.22)，两种安装方式任选。
 
 ### 方式一：Homebrew（推荐，预编译 `.app`）
 
@@ -357,7 +367,7 @@ Homebrew 按架构要求拦下。安装后如仍被 Gatekeeper 拦截，用下�
 mkdir -p /tmp/sodam-install
 cd /tmp/sodam-install
 
-version=0.1.7
+version=0.1.22
 base_url=https://github.com/sodahub-org/sodam/releases/download/v${version}
 
 curl -fLO ${base_url}/SHA256SUMS
@@ -368,7 +378,7 @@ grep "sodam-${version}-macos-aarch64\.zip$" SHA256SUMS | shasum -a 256 -c -
 校验输出必须包含 `OK`：
 
 ```text
-sodam-0.1.7-macos-aarch64.zip: OK
+sodam-0.1.22-macos-aarch64.zip: OK
 ```
 
 #### 2. 安装
@@ -405,14 +415,14 @@ open -a SodaM
 
 Windows 版已在 Windows 10/11 x64 真机实测，GitHub Release 提供 Inno Setup 安装包
 （按用户安装，无需管理员权限），当前版本为
-[`v0.1.7`](https://github.com/sodahub-org/sodam/releases/tag/v0.1.7)。
+[`v0.1.22`](https://github.com/sodahub-org/sodam/releases/tag/v0.1.22)。
 
 ### 1. 下载并校验
 
 ```powershell
 mkdir C:\sodam-install; cd C:\sodam-install
 
-$version = "0.1.7"
+$version = "0.1.22"
 $base = "https://github.com/sodahub-org/sodam/releases/download/v$version"
 
 Invoke-WebRequest "$base/SHA256SUMS" -OutFile SHA256SUMS

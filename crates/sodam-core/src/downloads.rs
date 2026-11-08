@@ -185,16 +185,17 @@ pub fn export_cached_track(
     } else {
         format
     };
+    // 面向用户的下载文件名使用「歌曲名 - 作者」，不暴露内部曲目 ID。
+    // 下载索引仍然使用 track_id，因此同名文件的替换与删除逻辑不受影响。
     let stem = safe_filename(&format!(
-        "{}{}{} [{}]",
-        track.artist,
+        "{}{}{}",
+        track.title,
         if track.artist.trim().is_empty() {
             ""
         } else {
             " - "
         },
-        track.title,
-        track.id
+        track.artist
     ));
     let output = dir.join(format!("{stem}.{extension}"));
     let part = dir.join(format!(".{stem}.{}.tmp.{extension}", std::process::id()));

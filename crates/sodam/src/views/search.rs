@@ -1,80 +1,146 @@
 //! 官方风格搜索结果页，以及音乐人 / 专辑详情页。
 
 use super::*;
-/// 搜索框：点击获取焦点，回车触发搜索，Esc 清空。
+/// 搜索框：点击获取焦点，回车触发搜索，Esc 清空。突出但不占用过多空间。
 fn search_box(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl IntoElement {
     let focused = root.search_focus.is_focused(window);
     let input_focus = root.search_focus.clone();
     let input_entity = cx.entity();
-    let text = if root.search_input.is_empty() {
-        root.tr("搜索歌曲 / 歌手（点这里后输入，回车搜索）")
+    let has_text = !root.search_input.is_empty();
+    let text = if !has_text {
+        root.tr("搜索歌曲 / 歌手 / 专辑 / 歌单（回车搜索）")
             .to_string()
     } else {
         format!("{}{}", root.search_input, if focused { "▌" } else { "" })
     };
-    let color = if root.search_input.is_empty() {
+    let color = if !has_text {
         theme::text_muted()
     } else {
         theme::text()
     };
 
     div()
-        .id("search-input")
-        .relative()
-        .track_focus(&root.search_focus)
         .flex()
         .flex_row()
         .items_center()
-        .h(px(38.0))
-        .px_3()
-        .rounded_md()
-        .bg(theme::surface())
-        .border_1()
-        .border_color(if focused {
-            theme::accent()
-        } else {
-            theme::border()
-        })
-        .text_color(color)
-        .cursor_text()
-        .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(|root, _event, window, cx| {
-                window.focus(&root.search_focus, cx);
-            }),
-        )
-        .on_key_down(cx.listener(|root, event: &KeyDownEvent, _window, cx| {
-            let key = event.keystroke.key.as_str();
-            match key {
-                "enter" => root.run_search(cx),
-                "backspace" => {
-                    let _ = root.search_input.pop();
-                    cx.notify();
-                }
-                "escape" => {
-                    root.search_input.clear();
-                    cx.notify();
-                }
-                // 可打印字符（含 Fcitx 上屏）交给 EntityInputHandler；
-                // 这里手动追加会和 IME 通道重复插入。
-                _ => {}
-            }
-        }))
+        .gap(px(theme::space::SM))
+        .w_full()
+        .max_w(px(680.0))
         .child(
-            canvas(
-                |_bounds, _window, _cx| {},
-                move |bounds, _state, window, cx| {
-                    window.handle_input(
-                        &input_focus,
-                        gpui::ElementInputHandler::new(bounds, input_entity.clone()),
-                        cx,
-                    );
-                },
-            )
-            .absolute()
-            .size_full(),
+            div()
+                .id("search-input")
+                .relative()
+                .track_focus(&root.search_focus)
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::SM))
+                .flex_1()
+                .min_w(px(160.0))
+                .h(px(38.0))
+                .px(px(theme::space::MD))
+                .rounded(px(theme::radius::PILL))
+                .bg(theme::surface_elevated())
+                .border_1()
+                .border_color(if focused {
+                    theme::accent()
+                } else {
+                    theme::border()
+                })
+                .text_color(color)
+                .cursor_text()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|root, _event, window, cx| {
+                        window.focus(&root.search_focus, cx);
+                    }),
+                )
+                .on_key_down(cx.listener(|root, event: &KeyDownEvent, _window, cx| {
+                    let key = event.keystroke.key.as_str();
+                    match key {
+                        "enter" => root.run_search(cx),
+                        "backspace" => {
+                            let _ = root.search_input.pop();
+                            cx.notify();
+                        }
+                        "escape" => {
+                            root.search_input.clear();
+                            cx.notify();
+                        }
+                        _ => {}
+                    }
+                }))
+                .child(
+                    canvas(
+                        |_bounds, _window, _cx| {},
+                        move |bounds, _state, window, cx| {
+                            window.handle_input(
+                                &input_focus,
+                                gpui::ElementInputHandler::new(bounds, input_entity.clone()),
+                                cx,
+                            );
+                        },
+                    )
+                    .absolute()
+                    .size_full(),
+                )
+                .child(
+                    svg()
+                        .path(icons::path("search"))
+                        .size(px(theme::ICON_SM))
+                        .text_color(if focused {
+                            theme::accent()
+                        } else {
+                            theme::text_muted()
+                        }),
+                )
+                .child(div().flex_1().min_w(px(0.0)).truncate().child(text))
+                .when(has_text, |this| {
+                    this.child(
+                        div()
+                            .id("search-input-clear")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .size(px(22.0))
+                            .rounded(px(theme::radius::PILL))
+                            .cursor_pointer()
+                            .hover(|style| style.bg(theme::surface_hover()))
+                            .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+                                cx.stop_propagation();
+                            })
+                            .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.search_input.clear();
+                                cx.notify();
+                            }))
+                            .child(
+                                svg()
+                                    .path(icons::path("x"))
+                                    .size(px(12.0))
+                                    .text_color(theme::text_muted()),
+                            ),
+                    )
+                }),
         )
-        .child(text)
+        .child(
+            div()
+                .id("search-submit-btn")
+                .flex()
+                .items_center()
+                .justify_center()
+                .h(px(36.0))
+                .px(px(theme::space::LG))
+                .rounded(px(theme::radius::PILL))
+                .bg(theme::accent())
+                .text_size(theme::Text::Small.size())
+                .text_color(theme::accent_foreground())
+                .cursor_pointer()
+                .hover(|style| style.layer_scale(1.03))
+                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.run_search(cx);
+                }))
+                .child(root.tr("搜索")),
+        )
 }
 
 /// 数字缩写：官方搜索里的“2442.2万人关注”。
@@ -186,6 +252,8 @@ fn search_tabs(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 fn artist_row(root: &Root, artist: &ArtistItem, cx: &mut Context<Root>) -> AnyElement {
     let avatar_path = root.cover_of(&artist.avatar);
     let item = artist.clone();
+    let row_h = (root.content_density.row_height() + 14.0).max(56.0);
+    let art_sz = (row_h - 18.0).clamp(38.0, 60.0);
     div()
         .id(gpui::ElementId::Name(
             format!("artist-{}", artist.id).into(),
@@ -194,7 +262,7 @@ fn artist_row(root: &Root, artist: &ArtistItem, cx: &mut Context<Root>) -> AnyEl
         .flex_row()
         .items_center()
         .gap(px(theme::space::MD))
-        .h(px(72.0))
+        .h(px(row_h))
         .px(px(theme::space::MD))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
@@ -202,7 +270,7 @@ fn artist_row(root: &Root, artist: &ArtistItem, cx: &mut Context<Root>) -> AnyEl
         .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
             root.open_artist_page(item.clone(), cx);
         }))
-        .child(cover(avatar_path, 52.0, 999.0))
+        .child(cover(avatar_path, art_sz, 999.0))
         .child(
             div()
                 .flex_1()
@@ -239,6 +307,8 @@ fn artist_row(root: &Root, artist: &ArtistItem, cx: &mut Context<Root>) -> AnyEl
 fn album_row(root: &Root, album: &AlbumItem, cx: &mut Context<Root>) -> AnyElement {
     let cover_path = root.cover_of(&album.cover);
     let item = album.clone();
+    let row_h = (root.content_density.row_height() + 14.0).max(56.0);
+    let art_sz = (row_h - 18.0).clamp(38.0, 60.0);
     let mut subtitle = if root.language.resolved().is_zh() {
         root.localized("{} 首", &[album.track_count.to_string()])
     } else {
@@ -257,7 +327,7 @@ fn album_row(root: &Root, album: &AlbumItem, cx: &mut Context<Root>) -> AnyEleme
         .flex_row()
         .items_center()
         .gap(px(theme::space::MD))
-        .h(px(72.0))
+        .h(px(row_h))
         .px(px(theme::space::MD))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
@@ -265,7 +335,7 @@ fn album_row(root: &Root, album: &AlbumItem, cx: &mut Context<Root>) -> AnyEleme
         .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
             root.open_album_page(item.clone(), cx);
         }))
-        .child(cover(cover_path, 52.0, theme::radius::ART))
+        .child(cover(cover_path, art_sz, theme::radius::ART))
         .child(
             div()
                 .flex_1()
@@ -300,6 +370,8 @@ fn search_playlist_row(
 ) -> AnyElement {
     let cover_path = root.cover_of(&playlist.cover);
     let item = playlist.clone();
+    let row_h = (root.content_density.row_height() + 14.0).max(56.0);
+    let art_sz = (row_h - 18.0).clamp(38.0, 60.0);
     let mut subtitle = if root.language.resolved().is_zh() {
         root.localized("{} 首", &[playlist.track_count.to_string()])
     } else {
@@ -316,7 +388,7 @@ fn search_playlist_row(
         .flex_row()
         .items_center()
         .gap(px(theme::space::MD))
-        .h(px(72.0))
+        .h(px(row_h))
         .px(px(theme::space::MD))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
@@ -324,7 +396,7 @@ fn search_playlist_row(
         .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
             root.open_search_playlist(item.clone(), cx);
         }))
-        .child(cover(cover_path, 52.0, theme::radius::ART))
+        .child(cover(cover_path, art_sz, theme::radius::ART))
         .child(
             div()
                 .flex_1()
@@ -764,9 +836,66 @@ pub(crate) fn search_page(root: &Root, window: &Window, cx: &mut Context<Root>) 
                     .children(rows),
             )
         })
-        .child(search_tabs(root, cx))
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .flex_wrap()
+                .items_center()
+                .justify_between()
+                .gap(px(theme::space::SM))
+                .child(search_tabs(root, cx))
+                .child(super::density_switcher(root, cx)),
+        )
         .child(if root.searching {
             loading_state(root.tr("正在搜索…"))
+        } else if let Some(err) = root.search_error.clone() {
+            div()
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .gap(px(theme::space::MD))
+                .py(px(theme::space::XXL))
+                .px(px(theme::space::LG))
+                .rounded(px(theme::radius::CARD))
+                .bg(theme::surface())
+                .border_1()
+                .border_color(theme::border())
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::danger())
+                        .child(root.tr("搜索请求失败")),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(err),
+                )
+                .child(
+                    div()
+                        .id("search-error-retry")
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::XS))
+                        .h(px(theme::size::CONTROL_SM))
+                        .px(px(theme::space::MD))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::accent())
+                        .cursor_pointer()
+                        .hover(|style| style.opacity(0.92))
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::accent_foreground())
+                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.run_search(cx);
+                        }))
+                        .child(root.tr("重试")),
+                )
+                .into_any_element()
         } else {
             search_results_view(root, cx)
         })

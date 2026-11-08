@@ -93,7 +93,21 @@ pub struct Settings {
     pub desktop_lyrics_y: f32,
     pub desktop_lyrics_w: f32,
     pub desktop_lyrics_h: f32,
-    /// 界面主题：`dark` / `light`；空 = 第一次启动跟随系统偏好。
+    /// 窗口显示模式：`normal` / `half` / `fullscreen` / `compact`。
+    pub window_mode: String,
+    /// 播放页子视图模式：`split` / `lyrics` / `queue`。
+    pub playback_view_mode: String,
+    /// 内容列表/卡片密度：`card` / `list` / `compact`。
+    pub content_density: String,
+    /// 歌词字体族：`sans`（Noto Sans CJK） / `serif`（宋韵衬线） / `mono`。
+    pub lyrics_font_family: String,
+    /// 主播放页歌词对齐：`left` / `center` / `right`。
+    pub lyrics_align: String,
+    /// 底部播放栏内联歌词预览开关。
+    pub bottom_lyrics_enabled: bool,
+    /// 降低动画强度（低性能设备或偏好安静体验时启用）。
+    pub reduced_motion: bool,
+    /// 界面主题：`daimo`（黛墨夜色） / `qingci`（宋韵青瓷） / `danqing`（丹青山水） / `zhusha`（朱砂金） / `zhuying`（竹影清风） / `dark` / `light`；空 = 跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
     pub language: String,
@@ -154,6 +168,13 @@ impl Default for Settings {
             desktop_lyrics_y: 0.0,
             desktop_lyrics_w: 760.0,
             desktop_lyrics_h: 150.0,
+            window_mode: "normal".to_string(),
+            playback_view_mode: "split".to_string(),
+            content_density: "list".to_string(),
+            lyrics_font_family: "sans".to_string(),
+            lyrics_align: "center".to_string(),
+            bottom_lyrics_enabled: false,
+            reduced_motion: false,
             theme: String::new(),
             language: String::new(),
         }

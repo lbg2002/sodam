@@ -2,12 +2,33 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, point, px, size, App, Bounds, Context, Entity, IntoElement, Render, TitlebarOptions,
-    Window, WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions,
+    div, point, px, size, svg, App, Bounds, ClickEvent, Context, Entity, IntoElement, MouseButton,
+    MouseDownEvent, Render, TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds,
+    WindowControlArea, WindowKind, WindowOptions,
 };
 
 use crate::app::Root;
-use crate::ui::theme;
+use crate::ui::{icons, theme};
+
+/// 切换独立桌面歌词窗口：若已打开则关闭，未打开则创建并展示。
+pub fn toggle(root: Entity<Root>, cx: &mut App) {
+    if let Some(handle) = cx
+        .windows()
+        .iter()
+        .find_map(|window| window.downcast::<DesktopLyrics>())
+    {
+        let _ = handle.update(cx, |_view, window, _cx| {
+            window.remove_window();
+        });
+        root.update(cx, |root, cx| {
+            root.desktop_lyrics_open = false;
+            root.status = root.tr("已关闭桌面歌词").to_string();
+            cx.notify();
+        });
+        return;
+    }
+    open(root, cx);
+}
 
 pub fn open(root: Entity<Root>, cx: &mut App) {
     if let Some(handle) = cx
@@ -16,6 +37,10 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         .find_map(|window| window.downcast::<DesktopLyrics>())
     {
         let _ = handle.update(cx, |_view, window, _cx| window.activate_window());
+        root.update(cx, |root, cx| {
+            root.desktop_lyrics_open = true;
+            cx.notify();
+        });
         cx.activate(true);
         return;
     }
@@ -50,9 +75,19 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         app_id: Some("SodaM".into()),
         ..Default::default()
     };
-    let _ = cx.open_window(options, move |_window, cx| {
-        cx.new(|cx| DesktopLyrics::new(root, cx))
-    });
+    let root_for_open = root.clone();
+    if cx
+        .open_window(options, move |_window, cx| {
+            cx.new(|cx| DesktopLyrics::new(root_for_open, cx))
+        })
+        .is_ok()
+    {
+        root.update(cx, |root, cx| {
+            root.desktop_lyrics_open = true;
+            root.status = root.tr("已打开桌面歌词").to_string();
+            cx.notify();
+        });
+    }
 }
 
 pub struct DesktopLyrics {
@@ -137,14 +172,20 @@ impl Render for DesktopLyrics {
         let mut background = theme::bg();
         background.a =
             (root.settings.desktop_lyrics_opacity.clamp(30, 100) as f32 / 100.0).clamp(0.3, 1.0);
-        let align = root.settings.desktop_lyrics_align.as_str();
+        let align = root.settings.desktop_lyrics_align.as_str().to_string();
+        let single_line = root.settings.desktop_lyrics_single_line;
+        let locked = root.settings.desktop_lyrics_locked;
+        let click_through = root.settings.desktop_lyrics_click_through;
         let active_color = if root.settings.desktop_lyrics_color == "text" {
             theme::text()
         } else {
             theme::accent()
         };
+        let root_for_close = self.root.clone();
 
         div()
+            .id("desktop-lyrics-stage")
+            .relative()
             .size_full()
             .flex()
             .flex_col()
@@ -152,7 +193,59 @@ impl Render for DesktopLyrics {
             .justify_center()
             .gap(px(theme::space::SM))
             .px(px(theme::space::XL))
+            .rounded(px(theme::radius::CARD))
             .bg(background)
+            .when(!locked && !click_through, |this| {
+                this.window_control_area(WindowControlArea::Drag).when(
+                    cfg!(target_os = "linux"),
+                    |drag| {
+                        drag.on_mouse_down(
+                            MouseButton::Left,
+                            |_event: &MouseDownEvent, window, _cx| {
+                                window.start_window_move();
+                            },
+                        )
+                    },
+                )
+            })
+            .when(!click_through, |this| {
+                this.child(
+                    div()
+                        .id("desktop-lyrics-close")
+                        .absolute()
+                        .top(px(6.0))
+                        .right(px(8.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .size(px(24.0))
+                        .rounded(px(theme::radius::PILL))
+                        .bg(theme::surface_elevated())
+                        .cursor_pointer()
+                        .hover(|style| {
+                            style
+                                .bg(theme::accent())
+                                .text_color(theme::accent_foreground())
+                        })
+                        .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+                            cx.stop_propagation();
+                        })
+                        .on_click(move |_event: &ClickEvent, window, cx| {
+                            root_for_close.update(cx, |root, cx| {
+                                root.desktop_lyrics_open = false;
+                                root.status = root.tr("已关闭桌面歌词").to_string();
+                                cx.notify();
+                            });
+                            window.remove_window();
+                        })
+                        .child(
+                            svg()
+                                .path(icons::path("x"))
+                                .size(px(12.0))
+                                .text_color(theme::text_muted()),
+                        ),
+                )
+            })
             .child(
                 div()
                     .w_full()
@@ -164,21 +257,18 @@ impl Render for DesktopLyrics {
                     .text_color(active_color)
                     .child(current),
             )
-            .when(
-                !root.settings.desktop_lyrics_single_line && !next.is_empty(),
-                |this| {
-                    this.child(
-                        div()
-                            .w_full()
-                            .when(align == "left", |this| this.text_left())
-                            .when(align == "center", |this| this.text_center())
-                            .when(align == "right", |this| this.text_right())
-                            .truncate()
-                            .text_size(px((base - 8.0).clamp(16.0, 36.0)))
-                            .text_color(theme::text_muted())
-                            .child(next),
-                    )
-                },
-            )
+            .when(!single_line && !next.is_empty(), |this| {
+                this.child(
+                    div()
+                        .w_full()
+                        .when(align == "left", |this| this.text_left())
+                        .when(align == "center", |this| this.text_center())
+                        .when(align == "right", |this| this.text_right())
+                        .truncate()
+                        .text_size(px((base - 8.0).clamp(16.0, 36.0)))
+                        .text_color(theme::text_muted())
+                        .child(next),
+                )
+            })
     }
 }

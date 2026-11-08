@@ -71,8 +71,8 @@ pub fn cover_loading(path: Option<PathBuf>, size: f32, radius: f32) -> AnyElemen
 
 /// 渲染内置听歌模式图标。
 pub fn scene_image(sub_queue_type: &str, size: f32) -> AnyElement {
-    // 服务端原图是黑色/透明；Dark 使用反色后的白色版本。
-    let light = crate::ui::theme::current_theme() == crate::ui::theme::ThemeKind::Light;
+    // 服务端原图是黑色/透明；深色主题使用反色后的白色版本。
+    let light = !crate::ui::theme::current_theme().is_dark();
     // 熟悉/新鲜的本地基础图是白色版；浅色使用生成的黑色版。
     let local_suffix = if light { "-dark" } else { "" };
     if matches!(sub_queue_type, "familiar" | "fresh") {

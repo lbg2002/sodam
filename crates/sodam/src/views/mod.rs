@@ -11,7 +11,6 @@ use crate::ui::artwork::{cover, scene_image};
 use crate::ui::icons;
 use crate::ui::spinner::loading_state;
 use crate::ui::theme;
-use crate::ui::theme::ThemeKind;
 
 pub use login::login_modal;
 pub mod downloads;
@@ -501,6 +500,55 @@ fn action_pill(
         .into_any_element()
 }
 
+/// 视图密度切换条（大卡片 / 标准列表 / 紧凑列表）。
+pub(crate) fn density_switcher(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let active = root.content_density;
+    div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .gap(px(2.0))
+        .p(px(2.0))
+        .rounded(px(theme::radius::PILL))
+        .bg(theme::surface_elevated())
+        .border_1()
+        .border_color(theme::border())
+        .children(
+            theme::ContentDensity::ALL
+                .iter()
+                .copied()
+                .map(|density| {
+                    let is_active = density == active;
+                    div()
+                        .id(gpui::ElementId::Name(
+                            format!("density-pill-{}", density.key()).into(),
+                        ))
+                        .px(px(theme::space::SM))
+                        .py(px(2.0))
+                        .rounded(px(theme::radius::PILL))
+                        .cursor_pointer()
+                        .bg(if is_active {
+                            theme::accent()
+                        } else {
+                            theme::transparent()
+                        })
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(if is_active {
+                            theme::accent_foreground()
+                        } else {
+                            theme::text_muted()
+                        })
+                        .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.set_content_density(density, cx);
+                        }))
+                        .child(root.tr(density.name_zh()))
+                        .into_any_element()
+                })
+                .collect::<Vec<_>>(),
+        )
+        .into_any_element()
+}
+
 /// 曲目列表（虚拟滚动）。
 #[allow(clippy::too_many_arguments)]
 fn track_list(
@@ -731,7 +779,14 @@ pub(crate) fn scrolling_detail_page(
     );
     let cached_ids = root.cached_ids.clone();
     let prefetch_inflight_ids = std::sync::Arc::new(root.prefetch_inflight.clone());
-    let cols = columns_for(root.list_width.lock().map(|width| *width).unwrap_or(1200.0));
+    let measured_w = root.list_width.lock().map(|width| *width).unwrap_or(1200.0);
+    let cols = columns_for(measured_w);
+    let narrow_detail = measured_w < 680.0;
+    let header_cover_size = if narrow_detail {
+        120.0
+    } else {
+        root.content_density.card_size()
+    };
     let width_slot = root.list_width.clone();
     let liked_ids = root.liked_ids.clone();
     let covers = root.covers.clone();
@@ -743,20 +798,26 @@ pub(crate) fn scrolling_detail_page(
             return div()
                 .flex()
                 .flex_row()
+                .flex_wrap()
                 .items_start()
-                .gap(px(theme::space::XL))
+                .gap(px(if narrow_detail {
+                    theme::space::MD
+                } else {
+                    theme::space::XL
+                }))
                 .p(px(theme::space::SM))
                 .child(cover(
                     cover_path.clone(),
-                    theme::size::CARD_COVER,
+                    header_cover_size,
                     theme::radius::CARD,
                 ))
                 .child(
                     div()
                         .flex()
                         .flex_col()
+                        .flex_1()
                         .gap(px(theme::space::MD))
-                        .min_w(px(0.0))
+                        .min_w(px(200.0))
                         .pt(px(theme::space::SM))
                         .child(
                             div()
@@ -766,7 +827,7 @@ pub(crate) fn scrolling_detail_page(
                         )
                         .child(
                             div()
-                                .text_size(px(34.0))
+                                .text_size(px(if narrow_detail { 24.0 } else { 32.0 }))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme::text())
                                 .truncate()
@@ -1175,7 +1236,7 @@ fn empty_state(icon: &'static str, text: &str) -> AnyElement {
         .into_any_element()
 }
 
-/// 歌单卡片网格（我的歌单 / 收藏）。
+/// 歌单卡片网格（我的歌单 / 收藏），支持大卡片、标准列表与紧凑列表三种密度。
 fn playlist_grid(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     if root.playlists.is_empty() {
         // 加载中显示圆圈；加载完才说「还没有歌单」
@@ -1185,55 +1246,128 @@ fn playlist_grid(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             empty_state("list-music", root.tr("还没有歌单"))
         };
     }
-    let cards: Vec<AnyElement> = root
-        .playlists
-        .iter()
-        .map(|playlist| {
-            let cover_path = root.cover_of(&playlist.cover);
-            let id = playlist.id.clone();
-            div()
-                .id(gpui::ElementId::Name(
-                    format!("playlist-{}", playlist.id).into(),
-                ))
-                .flex()
-                .flex_col()
-                .gap(px(theme::space::SM))
-                .p(px(theme::space::SM))
-                .rounded(px(theme::radius::CARD))
-                .cursor_pointer()
-                .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.018))
-                .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                    root.track_menu = None;
-                    root.open_playlist(id.clone(), None, cx);
-                }))
-                .child(cover(
-                    cover_path,
-                    theme::size::CARD_COVER,
-                    theme::radius::CARD,
-                ))
-                .child(
-                    div()
-                        .w(px(theme::size::CARD_COVER))
-                        .truncate()
-                        .text_size(theme::Text::Body.size())
-                        .text_color(theme::text())
-                        .child(playlist.title.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(theme::Text::Small.size())
-                        .text_color(theme::text_muted())
-                        .child(root.localized("{} 首", &[playlist.track_count.to_string()])),
-                )
-                .into_any_element()
-        })
-        .collect();
+    let density = root.content_density;
+    let body = if density == theme::ContentDensity::Compact {
+        let rows: Vec<AnyElement> = root
+            .playlists
+            .iter()
+            .map(|playlist| {
+                let cover_path = root.cover_of(&playlist.cover);
+                let id = playlist.id.clone();
+                let mut meta = root.localized("{} 首", &[playlist.track_count.to_string()]);
+                if !playlist.creator.is_empty() {
+                    meta.push_str(&format!(" · {}", playlist.creator));
+                }
+                div()
+                    .id(gpui::ElementId::Name(
+                        format!("playlist-compact-{}", playlist.id).into(),
+                    ))
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(theme::space::MD))
+                    .h(px(52.0))
+                    .px(px(theme::space::MD))
+                    .rounded(px(theme::radius::ROW))
+                    .bg(theme::surface())
+                    .border_1()
+                    .border_color(theme::border())
+                    .cursor_pointer()
+                    .hover(|style| style.bg(theme::surface_hover()))
+                    .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                        root.track_menu = None;
+                        root.open_playlist(id.clone(), None, cx);
+                    }))
+                    .child(cover(cover_path, 38.0, theme::radius::ART))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .truncate()
+                            .text_size(theme::Text::Body.size())
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .text_color(theme::text())
+                            .child(playlist.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_size(theme::Text::Small.size())
+                            .text_color(theme::text_muted())
+                            .child(meta),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(theme::space::XS))
+            .children(rows)
+            .into_any_element()
+    } else {
+        let card_size = density.card_size();
+        let cards: Vec<AnyElement> = root
+            .playlists
+            .iter()
+            .map(|playlist| {
+                let cover_path = root.cover_of(&playlist.cover);
+                let id = playlist.id.clone();
+                div()
+                    .id(gpui::ElementId::Name(
+                        format!("playlist-{}", playlist.id).into(),
+                    ))
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::SM))
+                    .p(px(theme::space::SM))
+                    .rounded(px(theme::radius::CARD))
+                    .cursor_pointer()
+                    .hover(|style| {
+                        let s = style.bg(theme::surface_hover());
+                        if theme::motion_enabled() {
+                            s.layer_scale(1.018)
+                        } else {
+                            s
+                        }
+                    })
+                    .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                        root.track_menu = None;
+                        root.open_playlist(id.clone(), None, cx);
+                    }))
+                    .child(cover(cover_path, card_size, theme::radius::CARD))
+                    .child(
+                        div()
+                            .w(px(card_size))
+                            .truncate()
+                            .text_size(theme::Text::Body.size())
+                            .text_color(theme::text())
+                            .child(playlist.title.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::Text::Small.size())
+                            .text_color(theme::text_muted())
+                            .child(root.localized("{} 首", &[playlist.track_count.to_string()])),
+                    )
+                    .into_any_element()
+            })
+            .collect();
+        div()
+            .flex()
+            .flex_row()
+            .flex_wrap()
+            .gap(px(theme::space::LG))
+            .children(cards)
+            .into_any_element()
+    };
+
     div()
         .flex()
-        .flex_row()
-        .flex_wrap()
-        .gap(px(theme::space::LG))
-        .children(cards)
+        .flex_col()
+        .gap(px(theme::space::MD))
+        .child(div().flex().justify_end().child(density_switcher(root, cx)))
+        .child(body)
         .into_any_element()
 }
 

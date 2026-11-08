@@ -2,28 +2,68 @@
 
 use super::*;
 
-/// 首页推荐：采用 QQ 音乐 Linux 版中“封面主视觉 + 播放全部 + 推荐卡片”的信息结构，
-/// 但使用 SodaM 自己的组件和数据模型，不复制对方的资源或实现。
+/// 首页推荐：涵盖推荐横幅、每日推荐、个性化内容（听歌模式）、推荐歌单与最近播放，
+/// 适配普通窗口、半屏窗口与全屏窗口。
 pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     let cards = root.scene_cards.clone();
-    if cards.is_empty() {
+    let scenes = root.scenes.clone();
+    let recent = root.recent.clone();
+    let daily_tracks: Vec<sodam_core::models::TrackItem> =
+        root.queue.tracks().iter().take(6).cloned().collect();
+
+    if cards.is_empty() && scenes.is_empty() && daily_tracks.is_empty() {
         return div()
             .size_full()
             .flex()
+            .flex_col()
             .items_center()
             .justify_center()
-            .child(loading_state(root.tr("正在准备推荐内容…")))
+            .gap(px(theme::space::MD))
+            .child(if root.loading_scenes || root.loading_recommendation {
+                loading_state(root.tr("正在准备推荐内容…")).into_any_element()
+            } else {
+                empty_state("music", root.tr("暂无推荐内容，可点击下方按钮加载")).into_any_element()
+            })
+            .child(
+                div()
+                    .id("home-empty-reload")
+                    .px(px(theme::space::LG))
+                    .py(px(theme::space::SM))
+                    .rounded(px(theme::radius::PILL))
+                    .bg(theme::accent())
+                    .text_color(theme::accent_foreground())
+                    .cursor_pointer()
+                    .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.load_scenes(cx);
+                        root.start_recommendation(false, cx);
+                    }))
+                    .child(root.tr("加载今日推荐")),
+            )
             .into_any_element();
     }
 
-    let featured = cards[0].clone();
-    let featured_cover = root.cover_of(&featured.playlist.cover);
-    let featured_title = featured.playlist.title.clone();
-    let featured_count = featured.playlist.track_count.to_string();
-    let featured_card = featured.clone();
+    let featured = cards.first().cloned();
+    let featured_cover = featured
+        .as_ref()
+        .and_then(|c| root.cover_of(&c.playlist.cover))
+        .or_else(|| daily_tracks.first().and_then(|t| root.cover_of(&t.cover)));
+    let featured_title = featured
+        .as_ref()
+        .map(|c| c.playlist.title.clone())
+        .or_else(|| daily_tracks.first().map(|t| t.title.clone()))
+        .unwrap_or_else(|| root.tr("今日私人推荐").to_string());
+    let featured_count = featured
+        .as_ref()
+        .map(|c| c.playlist.track_count.to_string())
+        .unwrap_or_else(|| root.queue.len().max(12).to_string());
+
+    let card_cover_size = (root.content_density.card_size() - 14.0).clamp(116.0, 162.0);
+    let card_box_w = card_cover_size + 16.0;
+
+    // 1. 推荐歌单卡片
     let card_items = cards
         .iter()
-        .take(8)
+        .take(10)
         .map(|card| {
             let cover_path = root.cover_of(&card.playlist.cover);
             let title = card.playlist.title.clone();
@@ -36,20 +76,24 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .flex()
                 .flex_col()
                 .gap(px(theme::space::SM))
-                .w(px(154.0))
+                .w(px(card_box_w))
                 .p(px(theme::space::SM))
                 .rounded(px(theme::radius::CARD))
+                .bg(theme::surface_elevated())
+                .border_1()
+                .border_color(theme::border())
                 .cursor_pointer()
                 .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.018))
                 .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
                     root.start_scene_card(click_card.clone(), cx);
                 }))
-                .child(cover(cover_path, 138.0, theme::radius::CARD))
+                .child(cover(cover_path, card_cover_size, theme::radius::CARD))
                 .child(
                     div()
                         .w_full()
                         .truncate()
                         .text_size(theme::Text::Body.size())
+                        .font_weight(gpui::FontWeight::MEDIUM)
                         .text_color(theme::text())
                         .child(title),
                 )
@@ -63,6 +107,156 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         })
         .collect::<Vec<_>>();
 
+    // 2. 每日推荐单曲卡片
+    let daily_items = daily_tracks
+        .iter()
+        .enumerate()
+        .map(|(idx, track)| {
+            let cover_path = root.cover_of(&track.cover);
+            let title = track.title.clone();
+            let artist = track.artist.clone();
+            let album = track.album.clone();
+            div()
+                .id(("home-daily-track", idx))
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::MD))
+                .w(px(270.0))
+                .p(px(theme::space::SM))
+                .rounded(px(theme::radius::CARD))
+                .bg(theme::surface_elevated())
+                .border_1()
+                .border_color(theme::border())
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.012))
+                .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.jump_in_queue(idx, cx);
+                    root.open_playback(cx);
+                }))
+                .child(cover(cover_path, 48.0, theme::radius::ART))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .min_w(px(0.0))
+                        .flex_1()
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(theme::Text::Body.size())
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(theme::text())
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .child(if album.is_empty() {
+                                    artist
+                                } else {
+                                    format!("{artist} · {album}")
+                                }),
+                        ),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
+    // 3. 个性化内容（听歌模式胶囊）
+    let personalized_items = scenes
+        .iter()
+        .take(8)
+        .enumerate()
+        .map(|(idx, scene)| {
+            let label = root.scene_display_text(&scene.sub_queue_type, &scene.text);
+            let click_scene = scene.clone();
+            let sub_type = scene.sub_queue_type.clone();
+            div()
+                .id(("home-scene-pill", idx))
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::SM))
+                .px(px(theme::space::MD))
+                .py(px(theme::space::SM))
+                .rounded(px(theme::radius::CARD))
+                .bg(theme::surface_elevated())
+                .border_1()
+                .border_color(theme::border())
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.02))
+                .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.start_scene_queue(click_scene.clone(), cx);
+                }))
+                .child(crate::ui::artwork::scene_image(&sub_type, 24.0))
+                .child(
+                    div()
+                        .text_size(theme::Text::Body.size())
+                        .font_weight(gpui::FontWeight::MEDIUM)
+                        .text_color(theme::text())
+                        .child(label),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
+    // 4. 最近播放卡片
+    let recent_arc = recent.clone();
+    let recent_items = recent
+        .iter()
+        .take(6)
+        .enumerate()
+        .map(|(idx, track)| {
+            let cover_path = root.cover_of(&track.cover);
+            let title = track.title.clone();
+            let artist = track.artist.clone();
+            let play_list = recent_arc.clone();
+            div()
+                .id(("home-recent-track", idx))
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::MD))
+                .w(px(250.0))
+                .p(px(theme::space::SM))
+                .rounded(px(theme::radius::ROW))
+                .bg(theme::surface_elevated())
+                .border_1()
+                .border_color(theme::border())
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()))
+                .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.play_from_arc(play_list.clone(), idx, cx);
+                }))
+                .child(cover(cover_path, 40.0, theme::radius::ART))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .min_w(px(0.0))
+                        .flex_1()
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(theme::Text::Body.size())
+                                .text_color(theme::text())
+                                .child(title),
+                        )
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(theme::Text::Tiny.size())
+                                .text_color(theme::text_muted())
+                                .child(artist),
+                        ),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+
     div()
         .id("home-scroll")
         .flex()
@@ -71,35 +265,54 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .min_h(px(0.0))
         .overflow_y_scroll()
         .gap(px(theme::space::XXL))
+        // 顶部推荐横幅 (Hero Banner)
         .child(
             div()
                 .flex()
                 .flex_row()
+                .flex_wrap()
                 .items_center()
-                .gap(px(theme::space::XXL))
-                .p(px(theme::space::XXL))
+                .gap(px(theme::space::XL))
+                .p(px(theme::space::XL))
                 .rounded(px(theme::radius::CARD))
                 .bg(theme::surface_elevated())
                 .border_1()
                 .border_color(theme::border())
-                .child(cover(featured_cover, 216.0, theme::radius::CARD))
+                .child(cover(featured_cover, 176.0, theme::radius::CARD))
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(theme::space::MD))
+                        .gap(px(theme::space::SM))
                         .flex_1()
-                        .min_w(px(0.0))
+                        .min_w(px(220.0))
                         .child(
                             div()
-                                .text_size(px(28.0))
-                                .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(theme::text())
-                                .child(root.tr("为你推荐")),
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap(px(theme::space::SM))
+                                .child(
+                                    div()
+                                        .px(px(theme::space::SM))
+                                        .py(px(2.0))
+                                        .rounded(px(theme::radius::PILL))
+                                        .bg(theme::accent_soft())
+                                        .text_size(theme::Text::Tiny.size())
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(theme::accent())
+                                        .child(root.tr("今日雅荐")),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(theme::Text::Small.size())
+                                        .text_color(theme::text_muted())
+                                        .child(root.tr(theme::current_theme().name_zh())),
+                                ),
                         )
                         .child(
                             div()
-                                .text_size(theme::Text::Title.size())
+                                .text_size(px(26.0))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme::text())
                                 .truncate()
@@ -118,43 +331,219 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         )
                         .child(
                             div()
-                                .id("home-play-all")
                                 .flex()
+                                .flex_row()
+                                .flex_wrap()
                                 .items_center()
-                                .justify_center()
-                                .gap(px(theme::space::SM))
-                                .w(px(132.0))
-                                .h(px(theme::size::CONTROL))
-                                .rounded(px(theme::radius::PILL))
-                                .bg(theme::accent())
-                                .text_color(theme::accent_foreground())
-                                .cursor_pointer()
-                                .hover(|style| style.layer_scale(1.04))
-                                .on_click(cx.listener(
-                                    move |root, _event: &ClickEvent, _window, cx| {
-                                        root.start_scene_card(featured_card.clone(), cx);
-                                    },
-                                ))
-                                .child(svg().path(icons::path("play")).size(px(theme::ICON_SM)))
-                                .child(root.tr("播放全部")),
+                                .gap(px(theme::space::MD))
+                                .pt(px(theme::space::XS))
+                                .child(
+                                    div()
+                                        .id("home-play-stream")
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .gap(px(theme::space::SM))
+                                        .px(px(theme::space::LG))
+                                        .h(px(theme::size::CONTROL))
+                                        .rounded(px(theme::radius::PILL))
+                                        .bg(theme::accent())
+                                        .text_color(theme::accent_foreground())
+                                        .cursor_pointer()
+                                        .hover(|style| style.layer_scale(1.03))
+                                        .on_click(cx.listener(
+                                            |root, _event: &ClickEvent, _window, cx| {
+                                                root.activate_recommendation(cx);
+                                            },
+                                        ))
+                                        .child(
+                                            svg()
+                                                .path(icons::path("play"))
+                                                .size(px(theme::ICON_SM)),
+                                        )
+                                        .child(root.tr("畅听推荐流")),
+                                )
+                                .when_some(featured, |row, featured_card| {
+                                    row.child(
+                                        div()
+                                            .id("home-play-all")
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .gap(px(theme::space::SM))
+                                            .px(px(theme::space::LG))
+                                            .h(px(theme::size::CONTROL))
+                                            .rounded(px(theme::radius::PILL))
+                                            .bg(theme::surface_hover())
+                                            .text_color(theme::text())
+                                            .cursor_pointer()
+                                            .hover(|style| style.layer_scale(1.03))
+                                            .on_click(cx.listener(
+                                                move |root, _event: &ClickEvent, _window, cx| {
+                                                    root.start_scene_card(
+                                                        featured_card.clone(),
+                                                        cx,
+                                                    );
+                                                },
+                                            ))
+                                            .child(root.tr("播放精选歌单")),
+                                    )
+                                }),
                         ),
                 ),
         )
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(theme::space::LG))
-                .child(section_title(root.tr("今日推荐")))
-                .child(
-                    div()
-                        .flex()
-                        .flex_row()
-                        .flex_wrap()
-                        .gap(px(theme::space::LG))
-                        .children(card_items),
-                ),
-        )
+        // 个性化内容（听歌模式）
+        .when(!personalized_items.is_empty(), |this| {
+            this.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::MD))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(section_title(root.tr("个性化听歌模式")))
+                            .child(
+                                div()
+                                    .id("home-more-scenes")
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::accent())
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        |root, _event: &ClickEvent, _window, cx| {
+                                            root.set_nav(Nav::Scenes, cx);
+                                        },
+                                    ))
+                                    .child(root.tr("全部模式 →")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(theme::space::MD))
+                            .children(personalized_items),
+                    ),
+            )
+        })
+        // 每日推荐
+        .when(!daily_items.is_empty(), |this| {
+            this.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::MD))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(section_title(root.tr("每日推荐")))
+                            .child(
+                                div()
+                                    .id("home-refresh-daily")
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::accent())
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        |root, _event: &ClickEvent, _window, cx| {
+                                            root.start_recommendation(true, cx);
+                                        },
+                                    ))
+                                    .child(root.tr("刷新日推")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(theme::space::MD))
+                            .children(daily_items),
+                    ),
+            )
+        })
+        // 推荐歌单
+        .when(!card_items.is_empty(), |this| {
+            this.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::MD))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(section_title(root.tr("推荐歌单")))
+                            .child(
+                                div()
+                                    .id("home-load-more-cards")
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::accent())
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        |root, _event: &ClickEvent, _window, cx| {
+                                            root.load_scenes(cx);
+                                        },
+                                    ))
+                                    .child(root.tr("加载更多")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(theme::space::LG))
+                            .children(card_items),
+                    ),
+            )
+        })
+        // 最近播放
+        .when(!recent_items.is_empty(), |this| {
+            this.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::space::MD))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .justify_between()
+                            .child(section_title(root.tr("最近播放")))
+                            .child(
+                                div()
+                                    .id("home-open-recent")
+                                    .text_size(theme::Text::Small.size())
+                                    .text_color(theme::accent())
+                                    .cursor_pointer()
+                                    .on_click(cx.listener(
+                                        |root, _event: &ClickEvent, _window, cx| {
+                                            root.set_nav(Nav::Recent, cx);
+                                        },
+                                    ))
+                                    .child(root.tr("查看全部 →")),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_wrap()
+                            .gap(px(theme::space::MD))
+                            .children(recent_items),
+                    ),
+            )
+        })
         .into_any_element()
 }
 

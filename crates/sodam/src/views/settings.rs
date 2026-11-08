@@ -804,45 +804,190 @@ fn commit_compact_width(root: &mut Root, cx: &mut Context<Root>) {
 
 fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     let theme_value = if root.theme_follows_system {
-        text(root, "跟随系统", "Follow system")
-    } else if root.theme == ThemeKind::Light {
-        text(root, "浅色", "Light")
-    } else {
-        text(root, "深色", "Dark")
-    };
-    let theme_options = [
-        (None, text(root, "跟随系统", "Follow system")),
-        (Some(ThemeKind::Dark), text(root, "深色", "Dark")),
-        (Some(ThemeKind::Light), text(root, "浅色", "Light")),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (value, label))| {
-        let selected = match value {
-            None => root.theme_follows_system,
-            Some(value) => !root.theme_follows_system && root.theme == value,
-        };
-        option_row(
-            format!("theme-option-{index}"),
-            label,
-            selected,
-            cx.listener(move |root, _event: &ClickEvent, window, cx| {
-                match value {
-                    Some(value) => root.set_ui_theme(value, cx),
-                    None => {
-                        root.theme_follows_system = true;
-                        root.settings.theme.clear();
-                        root.theme = theme::theme_from_appearance(window.appearance());
-                        theme::set_theme(root.theme);
-                        let _ = root.settings.save();
-                        cx.notify();
-                    }
-                }
-                OPEN_SELECT.store(0, Ordering::Relaxed);
-            }),
+        format!(
+            "{} · {}",
+            text(root, "跟随系统", "Follow system"),
+            root.tr(root.theme.name_zh())
         )
-    })
-    .collect::<Vec<_>>();
+    } else {
+        format!(
+            "{} ({})",
+            root.tr(root.theme.name_zh()),
+            root.tr(root.theme.subtitle_zh())
+        )
+    };
+    let mut theme_items: Vec<(Option<theme::ThemeKind>, String)> =
+        vec![(None, text(root, "跟随系统", "Follow system"))];
+    for kind in theme::ThemeKind::ALL {
+        theme_items.push((
+            Some(kind),
+            format!(
+                "{} · {}",
+                root.tr(kind.name_zh()),
+                root.tr(kind.subtitle_zh())
+            ),
+        ));
+    }
+    let theme_options = theme_items
+        .into_iter()
+        .enumerate()
+        .map(|(index, (value, label))| {
+            let selected = match value {
+                None => root.theme_follows_system,
+                Some(value) => !root.theme_follows_system && root.theme == value,
+            };
+            option_row(
+                format!("theme-option-{index}"),
+                label,
+                selected,
+                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    match value {
+                        Some(value) => root.set_ui_theme(value, cx),
+                        None => root.set_theme_system(cx),
+                    }
+                    OPEN_SELECT.store(0, Ordering::Relaxed);
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let theme_cards = div()
+        .flex()
+        .flex_row()
+        .flex_wrap()
+        .gap(px(theme::space::SM))
+        .px(px(theme::space::SM))
+        .py(px(theme::space::XS))
+        .children(
+            theme::ThemeKind::ALL
+                .iter()
+                .copied()
+                .map(|kind| {
+                    let selected = !root.theme_follows_system && root.theme == kind;
+                    let pal = kind.palette();
+                    div()
+                        .id(gpui::ElementId::Name(
+                            format!("theme-card-{}", kind.key()).into(),
+                        ))
+                        .flex()
+                        .flex_col()
+                        .gap(px(4.0))
+                        .w(px(164.0))
+                        .p(px(theme::space::SM))
+                        .rounded(px(theme::radius::ROW))
+                        .bg(theme::surface_elevated())
+                        .border_1()
+                        .border_color(if selected {
+                            theme::accent()
+                        } else {
+                            theme::border()
+                        })
+                        .cursor_pointer()
+                        .hover(|style| style.bg(theme::surface_hover()))
+                        .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            root.set_ui_theme(kind, cx);
+                        }))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .justify_between()
+                                .child(
+                                    div()
+                                        .text_size(theme::Text::Small.size())
+                                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                                        .text_color(if selected {
+                                            theme::accent()
+                                        } else {
+                                            theme::text()
+                                        })
+                                        .child(root.tr(kind.name_zh())),
+                                )
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_row()
+                                        .items_center()
+                                        .gap(px(4.0))
+                                        .child(div().size(px(10.0)).rounded_full().bg(pal.bg))
+                                        .child(div().size(px(10.0)).rounded_full().bg(pal.accent)),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(theme::Text::Tiny.size())
+                                .text_color(theme::text_muted())
+                                .child(root.tr(kind.subtitle_zh())),
+                        )
+                        .into_any_element()
+                })
+                .collect::<Vec<_>>(),
+        )
+        .into_any_element();
+
+    let mode_value = format!(
+        "{} ({})",
+        root.tr(root.window_mode.name_zh()),
+        root.tr(root.window_mode.subtitle_zh())
+    );
+    let mode_options = theme::WindowMode::ALL
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, mode)| {
+            option_row(
+                format!("window-mode-option-{index}"),
+                format!(
+                    "{} · {}",
+                    root.tr(mode.name_zh()),
+                    root.tr(mode.subtitle_zh())
+                ),
+                root.window_mode == mode,
+                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.set_window_mode(mode, cx);
+                    OPEN_SELECT.store(0, Ordering::Relaxed);
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let playback_view_value = root.tr(root.playback_view_mode.name_zh()).to_string();
+    let playback_view_options = theme::PlaybackViewMode::ALL
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, view_mode)| {
+            option_row(
+                format!("playback-view-option-{index}"),
+                root.tr(view_mode.name_zh()).to_string(),
+                root.playback_view_mode == view_mode,
+                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.set_playback_view_mode(view_mode, cx);
+                    OPEN_SELECT.store(0, Ordering::Relaxed);
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let density_value = root.tr(root.content_density.name_zh()).to_string();
+    let density_options = theme::ContentDensity::ALL
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, density)| {
+            option_row(
+                format!("density-option-{index}"),
+                root.tr(density.name_zh()).to_string(),
+                root.content_density == density,
+                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.set_content_density(density, cx);
+                    OPEN_SELECT.store(0, Ordering::Relaxed);
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
 
     let language_value = if root.language_follows_system {
         text(root, "跟随系统", "Follow system")
@@ -897,11 +1042,15 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             ),
         ))
         .child(card(
-            text(root, "界面", "Interface"),
             text(
                 root,
-                "主题和语言使用离散下拉选择。",
-                "Theme and language use compact selectors.",
+                "中式美学主题与布局",
+                "Chinese Aesthetic Themes & Layout",
+            ),
+            text(
+                root,
+                "内置五套中式美学主题与四种沉浸显示模式。",
+                "5 Chinese aesthetic themes and 4 immersive window modes.",
             ),
             vec![
                 select_row(
@@ -910,11 +1059,51 @@ fn general_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     text(root, "主题", "Theme"),
                     text(
                         root,
-                        "可跟随系统，也可以固定深色或浅色。",
-                        "Follow the system or pin a theme.",
+                        "可跟随系统，也可切换黛墨夜色、宋韵青瓷、丹青山水、朱砂金、竹影清风。",
+                        "Follow the system or choose one of the five Chinese themes.",
                     ),
                     theme_value,
                     theme_options,
+                    cx,
+                ),
+                theme_cards,
+                select_row(
+                    "window-mode-select",
+                    11,
+                    text(root, "窗口与沉浸模式", "Window & immersive mode"),
+                    text(
+                        root,
+                        "支持普通窗口、半屏播放、全屏沉浸和紧凑小窗。",
+                        "Switch between Normal, Half-screen, Fullscreen, and Compact modes.",
+                    ),
+                    mode_value,
+                    mode_options,
+                    cx,
+                ),
+                select_row(
+                    "playback-view-select",
+                    15,
+                    text(root, "播放页默认布局", "Playback page layout"),
+                    text(
+                        root,
+                        "设置播放页显示双栏（封面+歌词）、纯享歌词或内嵌队列。",
+                        "Choose split view, lyrics only, or inline queue on the playback page.",
+                    ),
+                    playback_view_value,
+                    playback_view_options,
+                    cx,
+                ),
+                select_row(
+                    "density-select",
+                    12,
+                    text(root, "内容视图密度", "Content density"),
+                    text(
+                        root,
+                        "控制歌单、专辑与列表的展示密度。",
+                        "Controls card and list density across pages.",
+                    ),
+                    density_value,
+                    density_options,
                     cx,
                 ),
                 select_row(
@@ -1154,6 +1343,44 @@ fn playback_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 }
 
 fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let font_family = theme::LyricsFontFamily::from_key(&root.settings.lyrics_font_family);
+    let font_family_value = root.tr(font_family.name_zh()).to_string();
+    let font_family_options = theme::LyricsFontFamily::ALL
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, item)| {
+            option_row(
+                format!("lyrics-font-family-{index}"),
+                root.tr(item.name_zh()).to_string(),
+                font_family == item,
+                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.set_lyrics_font_family(item, cx);
+                    OPEN_SELECT.store(0, Ordering::Relaxed);
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let align = theme::LyricsAlign::from_key(&root.settings.lyrics_align);
+    let align_value = root.tr(align.name_zh()).to_string();
+    let align_options = theme::LyricsAlign::ALL
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, item)| {
+            option_row(
+                format!("lyrics-align-{index}"),
+                root.tr(item.name_zh()).to_string(),
+                align == item,
+                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                    root.set_lyrics_align(item, cx);
+                    OPEN_SELECT.store(0, Ordering::Relaxed);
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+
     let body = div()
         .flex()
         .flex_col()
@@ -1170,10 +1397,36 @@ fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             text(root, "排版", "Typography"),
             text(
                 root,
-                "字号和行距都支持连续拖动调节。",
-                "Font size and line spacing are adjustable with sliders.",
+                "支持字体家族、字号、行距和对齐方式自定义。",
+                "Customize font family, size, line spacing, and alignment.",
             ),
             vec![
+                select_row(
+                    "lyrics-font-family-select",
+                    13,
+                    text(root, "歌词字体", "Lyrics font family"),
+                    text(
+                        root,
+                        "支持思源黑体、宋韵衬线或等宽字体。",
+                        "Choose sans-serif, Song-style serif, or monospace.",
+                    ),
+                    font_family_value,
+                    font_family_options,
+                    cx,
+                ),
+                select_row(
+                    "lyrics-align-select",
+                    14,
+                    text(root, "歌词对齐方式", "Lyrics alignment"),
+                    text(
+                        root,
+                        "控制播放页与全屏沉浸歌词的水平对齐。",
+                        "Horizontal alignment in playback and fullscreen lyrics.",
+                    ),
+                    align_value,
+                    align_options,
+                    cx,
+                ),
                 slider_row(
                     "lyrics-font-slider",
                     text(root, "歌词字号", "Lyrics font size"),
@@ -1207,6 +1460,19 @@ fn lyrics_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     preview_lyrics_line,
                     commit_lyrics_line,
                     cx,
+                ),
+                toggle_row(
+                    "bottom-lyrics-toggle",
+                    text(root, "底部播放栏内联歌词", "Bottom player inline lyrics"),
+                    text(
+                        root,
+                        "在普通与半屏窗口的底部播放器上方展示实时单行歌词。",
+                        "Show a single live lyric line above the bottom player bar.",
+                    ),
+                    root.settings.bottom_lyrics_enabled,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.set_bottom_lyrics_enabled(!root.settings.bottom_lyrics_enabled, cx);
+                    }),
                 ),
             ],
         ))
@@ -1904,65 +2170,81 @@ fn desktop_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 }
 
 fn advanced_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
-    let body = div()
-        .flex()
-        .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "性能", "Performance"),
-            text(
-                root,
-                "这里只保留界面性能与启动策略，不再混放音频和缓存选项。",
-                "Only startup and interface-performance tuning live here.",
-            ),
-        ))
-        .child(card(
-            text(root, "启动", "Startup"),
-            text(
-                root,
-                "减少首次打开时不必要的后台工作。",
-                "Reduce unnecessary background work on first launch.",
-            ),
-            vec![toggle_row(
-                "lazy-startup",
-                text(root, "延迟加载非首屏内容", "Lazy-load non-primary content"),
+    let body =
+        div()
+            .flex()
+            .flex_col()
+            .gap(px(theme::space::LG))
+            .child(page_header(
+                text(root, "性能", "Performance"),
                 text(
                     root,
-                    "优先让主界面可用，再逐步加载次要内容。",
-                    "Make the main UI usable first, then load secondary content.",
+                    "这里只保留界面性能与启动策略，不再混放音频和缓存选项。",
+                    "Only startup and interface-performance tuning live here.",
                 ),
-                root.settings.lazy_startup,
-                cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.e3_set_lazy_startup(!root.settings.lazy_startup, cx);
-                }),
-            )],
-        ))
-        .child(card(
-            text(root, "响应式布局", "Responsive layout"),
-            text(
-                root,
-                "控制底部播放栏何时进入紧凑模式。",
-                "Controls when the bottom player switches to compact mode.",
-            ),
-            vec![slider_row(
-                "compact-width-slider",
-                text(root, "播放栏折叠阈值", "Player compact threshold"),
+            ))
+            .child(card(
+                text(root, "启动与动效", "Startup & motion"),
                 text(
                     root,
-                    "窗口低于该宽度时隐藏次要按钮。",
-                    "Hide secondary controls below this width.",
+                    "减少首次打开时不必要的后台工作，或为低性能设备降低过渡动效。",
+                    "Reduce background startup work or lower animation intensity.",
                 ),
-                root.settings.player_bar_compact_width as f32,
-                720.0,
-                1200.0,
-                10.0,
-                format!("{} px", root.settings.player_bar_compact_width),
-                preview_compact_width,
-                commit_compact_width,
-                cx,
-            )],
-        ))
-        .into_any_element();
+                vec![
+                toggle_row(
+                    "lazy-startup",
+                    text(root, "延迟加载非首屏内容", "Lazy-load non-primary content"),
+                    text(
+                        root,
+                        "优先让主界面可用，再逐步加载次要内容。",
+                        "Make the main UI usable first, then load secondary content.",
+                    ),
+                    root.settings.lazy_startup,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.e3_set_lazy_startup(!root.settings.lazy_startup, cx);
+                    }),
+                ),
+                toggle_row(
+                    "reduced-motion",
+                    text(root, "减弱动效（低性能模式）", "Reduced motion (low-power mode)"),
+                    text(
+                        root,
+                        "关闭页面淡入位移、卡片缩放与光晕过渡，保障低性能设备流畅播放。",
+                        "Disable fade/translate and card scale animations on low-power devices.",
+                    ),
+                    root.settings.reduced_motion,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.set_reduced_motion(!root.settings.reduced_motion, cx);
+                    }),
+                ),
+            ],
+            ))
+            .child(card(
+                text(root, "响应式布局", "Responsive layout"),
+                text(
+                    root,
+                    "控制底部播放栏何时进入紧凑模式。",
+                    "Controls when the bottom player switches to compact mode.",
+                ),
+                vec![slider_row(
+                    "compact-width-slider",
+                    text(root, "播放栏折叠阈值", "Player compact threshold"),
+                    text(
+                        root,
+                        "窗口低于该宽度时隐藏次要按钮。",
+                        "Hide secondary controls below this width.",
+                    ),
+                    root.settings.player_bar_compact_width as f32,
+                    720.0,
+                    1200.0,
+                    10.0,
+                    format!("{} px", root.settings.player_bar_compact_width),
+                    preview_compact_width,
+                    commit_compact_width,
+                    cx,
+                )],
+            ))
+            .into_any_element();
     shell(root, body, cx)
 }
 

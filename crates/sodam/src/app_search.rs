@@ -26,6 +26,7 @@ impl Root {
         let scope = self.search_tab;
         let settings = self.settings.clone();
         self.searching = true;
+        self.search_error = None;
         self.search_keyword = keyword.clone();
         self.status = self.localized("正在搜索「{}」…", std::slice::from_ref(&keyword));
         cx.notify();
@@ -95,7 +96,9 @@ impl Root {
                         root.ensure_covers(&covers, cx);
                     }
                     Err(err) => {
-                        root.status = root.localized("搜索失败：{err}", &[err.to_string()]);
+                        let msg = err.to_string();
+                        root.status = root.localized("搜索失败：{err}", std::slice::from_ref(&msg));
+                        root.search_error = Some(msg);
                         root.results = Arc::new(Vec::new());
                         root.search_results = SearchResults {
                             keyword,

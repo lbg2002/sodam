@@ -1,4 +1,4 @@
-//! 应用自绘标题栏：拖拽区 + 最小化/最大化/关闭按钮。
+//! 应用自绘标题栏：拖拽区 + 主题/沉浸模式快捷切换 + 最小化/最大化/关闭按钮。
 //!
 //! Windows 通过 `window_control_area` 交给系统完成命中测试；Linux/Wayland
 //! 不能依赖这套 Windows 命中机制，因此在控件上显式调用 GPUI 的窗口操作 API。
@@ -6,14 +6,15 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, hsla, px, svg, AnyElement, ClickEvent, Div, Hsla, MouseButton, MouseDownEvent, ResizeEdge,
-    WindowControlArea,
+    div, hsla, px, svg, AnyElement, ClickEvent, Context, Div, Hsla, MouseButton, MouseDownEvent,
+    ResizeEdge, WindowControlArea,
 };
 
+use crate::app::Root;
 use crate::ui::{icons, theme};
 
 /// 标题栏条高度（逻辑像素）。
-const STRIP_HEIGHT: f32 = 32.0;
+const STRIP_HEIGHT: f32 = 34.0;
 /// 单个标题栏按钮宽度。
 const BUTTON_WIDTH: f32 = 44.0;
 /// 控制图标边长。
@@ -86,8 +87,8 @@ pub fn resize_handles() -> Vec<AnyElement> {
     ]
 }
 
-/// 渲染标题栏条：左侧空白为拖拽区，右侧是三个窗口控制按钮。
-pub fn render() -> Div {
+/// 渲染主窗口标题栏条：包含拖拽区与最小化/最大化/关闭窗口控制按钮。
+pub fn render_root(_root: &Root, _viewport_w: f32, _cx: &mut Context<Root>) -> Div {
     div()
         .flex()
         .flex_row()

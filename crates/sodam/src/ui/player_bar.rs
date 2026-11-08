@@ -302,6 +302,64 @@ fn localized_quality(raw: String, language: crate::ui::i18n::Language) -> String
         .replace(" · 试听", " · Preview")
 }
 
+/// 底部内联歌词条（当用户在其他页面浏览时，可在底部播放栏上方同步查看当前歌词）。
+pub fn bottom_lyrics_strip(root: &Root, cx: &mut Context<Root>) -> gpui::AnyElement {
+    let active_idx = root.synced_lyrics_active();
+    let current_line = active_idx
+        .and_then(|idx| root.lyrics.get(idx))
+        .map(|l| l.text.clone())
+        .filter(|t| !t.trim().is_empty())
+        .unwrap_or_else(|| {
+            root.queue
+                .current()
+                .map(|t| format!("{} — {}", t.title, t.artist))
+                .unwrap_or_else(|| root.tr("暂无同步歌词").to_string())
+        });
+    let next_line = active_idx
+        .and_then(|idx| root.lyrics.get(idx.saturating_add(1)))
+        .map(|l| l.text.clone())
+        .unwrap_or_default();
+    let font_family =
+        theme::LyricsFontFamily::from_key(&root.settings.lyrics_font_family).font_name();
+
+    div()
+        .id("bottom-lyrics-strip")
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_center()
+        .gap(px(theme::space::LG))
+        .w_full()
+        .h(px(30.0))
+        .px(px(theme::space::LG))
+        .bg(theme::ink_glow())
+        .border_t_1()
+        .border_color(theme::border())
+        .font_family(font_family)
+        .cursor_pointer()
+        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+            root.open_playback(cx);
+        }))
+        .child(
+            div()
+                .truncate()
+                .text_size(theme::Text::Body.size())
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(theme::accent())
+                .child(current_line),
+        )
+        .when(!next_line.is_empty(), |this| {
+            this.child(
+                div()
+                    .truncate()
+                    .text_size(theme::Text::Small.size())
+                    .text_color(theme::text_muted())
+                    .child(next_line),
+            )
+        })
+        .into_any_element()
+}
+
 /// 渲染播放条。
 pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
     let language = root.language;
@@ -354,7 +412,30 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .map(|width| *width)
         .unwrap_or(1200.0);
     let compact = measured_width < root.settings.player_bar_compact_width as f32;
+    let very_narrow = measured_width < 680.0;
     let player_width_slot = root.player_bar_width.clone();
+    let left_w = if very_narrow {
+        160.0
+    } else if compact {
+        220.0
+    } else {
+        280.0
+    };
+    let left_min_w = if very_narrow { 120.0 } else { 180.0 };
+    let right_w = if very_narrow {
+        112.0
+    } else if compact {
+        176.0
+    } else {
+        410.0
+    };
+    let right_min_w = if very_narrow {
+        96.0
+    } else if compact {
+        148.0
+    } else {
+        310.0
+    };
 
     div()
         .relative()
@@ -362,11 +443,19 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .flex_row()
         .items_center()
         .justify_between()
-        .gap(px(theme::space::LG))
+        .gap(px(if very_narrow {
+            theme::space::SM
+        } else {
+            theme::space::LG
+        }))
         .h(px(theme::PLAYER_H))
         .w_full()
         .flex_none()
-        .px(px(theme::space::LG))
+        .px(px(if very_narrow {
+            theme::space::MD
+        } else {
+            theme::space::LG
+        }))
         .bg(theme::bg())
         .border_t_1()
         .border_color(theme::border())
@@ -398,8 +487,8 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .flex_row()
                 .items_center()
                 .gap(px(theme::space::MD))
-                .w(px(280.0))
-                .min_w(px(200.0))
+                .w(px(left_w))
+                .min_w(px(left_min_w))
                 .flex_shrink(1.0)
                 .child(
                     div()
@@ -407,8 +496,18 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .flex_none()
                         .cursor_pointer()
                         .hover(|style| style.opacity(0.82))
-                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+                            cx.stop_propagation();
+                        })
+                        .on_click(cx.listener(|root, _event: &ClickEvent, window, cx| {
                             root.open_playback(cx);
+                            let next_mode = if root.window_mode == theme::WindowMode::Fullscreen {
+                                theme::WindowMode::Normal
+                            } else {
+                                theme::WindowMode::Fullscreen
+                            };
+                            root.set_window_mode(next_mode, cx);
+                            root.root_focus.focus(window, cx);
                         }))
                         .child(cover(
                             cover_path,
@@ -635,7 +734,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                         .text_color(theme::accent_foreground())
                                         .into_any_element()
                                 });
-                            if snapshot.playing && !loading {
+                            if snapshot.playing && !loading && theme::motion_enabled() {
                                 button
                                     .with_animation(
                                         "play-pulse",
@@ -669,7 +768,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .flex_row()
                         .items_center()
                         .gap(px(theme::space::SM))
-                        .w(px(420.0))
+                        .w(px(if very_narrow { 220.0 } else { 420.0 }))
                         .max_w_full()
                         .child(
                             div()
@@ -694,8 +793,8 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .items_center()
                 .justify_end()
                 .gap(px(theme::space::XS))
-                .w(px(if compact { 176.0 } else { 390.0 }))
-                .min_w(px(if compact { 150.0 } else { 300.0 }))
+                .w(px(right_w))
+                .min_w(px(right_min_w))
                 .flex_shrink(1.0)
                 .when(!compact, |this| {
                     this.child(
@@ -720,11 +819,37 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                             "desktop-lyrics",
                             "captions",
                             theme::ICON,
-                            theme::text_muted(),
+                            if root.desktop_lyrics_open {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
                         )
                         .on_click(cx.listener(
                             |root, _event: &ClickEvent, _window, cx| {
                                 root.open_desktop_lyrics(cx);
+                            },
+                        )),
+                    )
+                    .child(
+                        icon_button(
+                            "immersive-mode-btn",
+                            "square",
+                            theme::ICON,
+                            if root.window_mode == theme::WindowMode::Fullscreen {
+                                theme::accent()
+                            } else {
+                                theme::text_muted()
+                            },
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                let next = if root.window_mode == theme::WindowMode::Fullscreen {
+                                    theme::WindowMode::Normal
+                                } else {
+                                    theme::WindowMode::Fullscreen
+                                };
+                                root.set_window_mode(next, cx);
                             },
                         )),
                     )
@@ -826,6 +951,30 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .border_1()
                         .border_color(theme::border())
                         .shadow_lg()
+                        .child(overflow_menu_row(
+                            "more-theme-cycle",
+                            "palette",
+                            root.localized(
+                                "切换主题（{}）",
+                                &[root.tr(theme::current_theme().name_zh()).to_string()],
+                            ),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.cycle_theme(cx);
+                                root.player_more_open = false;
+                            }),
+                        ))
+                        .child(overflow_menu_row(
+                            "more-window-mode",
+                            "square",
+                            root.localized(
+                                "切换模式（{}）",
+                                &[root.tr(root.window_mode.label_zh()).to_string()],
+                            ),
+                            cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.cycle_window_mode(cx);
+                                root.player_more_open = false;
+                            }),
+                        ))
                         .child(overflow_menu_row(
                             "more-offline",
                             "cloud-off",
@@ -1029,11 +1178,10 @@ fn queue_section_row(title: &str) -> gpui::AnyElement {
 }
 
 /// 全局右侧播放队列抽屉。所有页面（包括歌词页）统一使用同一尺寸与对齐方式。
-pub fn queue_drawer(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
-    div()
-        .h_full()
-        .child(queue_drawer_inner(root, cx, false))
-        .with_animation(
+pub fn queue_drawer(root: &Root, cx: &mut Context<Root>) -> gpui::AnyElement {
+    let base = div().h_full().child(queue_drawer_inner(root, cx, false));
+    if theme::motion_enabled() {
+        base.with_animation(
             "queue-drawer-enter",
             Animation::new(Duration::from_millis(260))
                 .with_easing(|phase| 1.0 - (1.0 - phase.clamp(0.0, 1.0)).powi(3)),
@@ -1042,6 +1190,10 @@ pub fn queue_drawer(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                     .layer_translate(gpui::point(px((1.0 - phase) * 18.0), px(0.0)))
             },
         )
+        .into_any_element()
+    } else {
+        base.into_any_element()
+    }
 }
 
 fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> impl IntoElement {

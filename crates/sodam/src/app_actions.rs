@@ -254,6 +254,18 @@ impl Root {
                     cx.notify();
                 }
 
+                // 全屏沉浸模式下鼠标静止超过 4.5s 自动收起浮动控制栏
+                if root.window_mode == theme::WindowMode::Fullscreen
+                    && root.fullscreen_controls_visible
+                    && !root.queue_open
+                    && snap.playing
+                    && root.fullscreen_last_interaction.elapsed()
+                        >= std::time::Duration::from_millis(4500)
+                {
+                    root.fullscreen_controls_visible = false;
+                    cx.notify();
+                }
+
                 // 加载完成：引擎已切到 pending 曲目 → 清 loading 态
                 if let Some(pending) = &root.pending_track {
                     if snap.track_id == pending.id {
@@ -446,9 +458,7 @@ impl Root {
             self.load_lyrics(track, false, cx);
         }
         let root = cx.entity();
-        cx.defer(move |cx| crate::ui::desktop_lyrics::open(root, cx));
-        self.status = self.tr("已打开桌面歌词").to_string();
-        cx.notify();
+        cx.defer(move |cx| crate::ui::desktop_lyrics::toggle(root, cx));
     }
 
     /// 队列变化后刷新快照（抽屉渲染只读它，不再每帧 to_vec）。
@@ -1230,21 +1240,129 @@ impl Root {
     pub fn set_ui_theme(&mut self, theme: ThemeKind, cx: &mut Context<Self>) {
         self.theme = theme;
         self.theme_follows_system = false;
+        self.theme_transition_seq = self.theme_transition_seq.wrapping_add(1);
         self.settings.theme = theme.key().to_string();
         let save_result = self.settings.save();
         theme::set_theme(theme);
+        let name = self.tr(theme.name_zh()).to_string();
         self.status = match save_result {
-            Ok(()) => format!(
-                "主题已切换为{}",
-                if theme == ThemeKind::Light {
-                    "浅色"
-                } else {
-                    "深色"
-                }
-            ),
+            Ok(()) => self.localized("主题已切换为：{}", &[name]),
             Err(err) => self.localized("主题已切换，但保存失败：{err}", &[err.to_string()]),
         };
+        let msg = self.status.clone();
+        self.toast(msg, cx);
+    }
+
+    /// 恢复主题跟随系统深浅色。
+    pub fn set_theme_system(&mut self, cx: &mut Context<Self>) {
+        self.theme_follows_system = true;
+        self.theme_transition_seq = self.theme_transition_seq.wrapping_add(1);
+        self.theme = theme::theme_from_appearance(cx.window_appearance());
+        self.settings.theme = "system".to_string();
+        let _ = self.settings.save();
+        theme::set_theme(self.theme);
+        let msg = self.tr("主题已设为跟随系统").to_string();
+        self.toast(msg, cx);
+    }
+
+    /// 依次循环切换五套中式美学主题。
+    pub fn cycle_theme(&mut self, cx: &mut Context<Self>) {
+        let next = self.theme.next();
+        self.set_ui_theme(next, cx);
+    }
+
+    /// 切换沉浸窗口模式并持久化。
+    pub fn set_window_mode(&mut self, mode: theme::WindowMode, cx: &mut Context<Self>) {
+        if self.window_mode == mode {
+            return;
+        }
+        self.window_mode = mode;
+        self.fullscreen_controls_visible = true;
+        self.fullscreen_last_interaction = std::time::Instant::now();
+        self.nav_transition_seq = self.nav_transition_seq.wrapping_add(1);
+        self.settings.window_mode = mode.key().to_string();
+        let _ = self.settings.save();
+        let label = self.tr(mode.label_zh()).to_string();
+        let msg = self.localized("显示模式：{}", &[label]);
+        self.toast(msg, cx);
+    }
+
+    /// 循环切换窗口显示模式（普通 -> 半屏 -> 全屏沉浸 -> 紧凑小窗）。
+    pub fn cycle_window_mode(&mut self, cx: &mut Context<Self>) {
+        let next = self.window_mode.next();
+        if next == theme::WindowMode::Fullscreen && self.nav != Nav::Lyrics {
+            self.set_nav(Nav::Lyrics, cx);
+        }
+        self.set_window_mode(next, cx);
+    }
+
+    /// 切换播放页内部视图（双栏 / 歌词 / 队列）。
+    pub fn set_playback_view_mode(
+        &mut self,
+        mode: theme::PlaybackViewMode,
+        cx: &mut Context<Self>,
+    ) {
+        self.playback_view_mode = mode;
+        self.settings.playback_view_mode = mode.key().to_string();
+        let _ = self.settings.save();
         cx.notify();
+    }
+
+    /// 切换内容列表/卡片密度（大卡片 / 标准列表 / 紧凑列表）。
+    pub fn set_content_density(&mut self, density: theme::ContentDensity, cx: &mut Context<Self>) {
+        self.content_density = density;
+        self.settings.content_density = density.key().to_string();
+        let _ = self.settings.save();
+        let label = self.tr(density.label_zh()).to_string();
+        let msg = self.localized("视图密度：{}", &[label]);
+        self.toast(msg, cx);
+    }
+
+    /// 设置歌词字体族。
+    pub fn set_lyrics_font_family(
+        &mut self,
+        family: theme::LyricsFontFamily,
+        cx: &mut Context<Self>,
+    ) {
+        self.settings.lyrics_font_family = family.key().to_string();
+        let _ = self.settings.save();
+        let label = self.tr(family.label_zh()).to_string();
+        let msg = self.localized("歌词字体：{}", &[label]);
+        self.toast(msg, cx);
+    }
+
+    /// 设置歌词对齐方式。
+    pub fn set_lyrics_align(&mut self, align: theme::LyricsAlign, cx: &mut Context<Self>) {
+        self.settings.lyrics_align = align.key().to_string();
+        let _ = self.settings.save();
+        let label = self.tr(align.label_zh()).to_string();
+        let msg = self.localized("歌词对齐：{}", &[label]);
+        self.toast(msg, cx);
+    }
+
+    /// 开启/关闭底部播放栏内联歌词条。
+    pub fn set_bottom_lyrics_enabled(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.bottom_lyrics_enabled = enabled;
+        let _ = self.settings.save();
+        let msg = if enabled {
+            self.tr("底部歌词条已开启").to_string()
+        } else {
+            self.tr("底部歌词条已关闭").to_string()
+        };
+        self.toast(msg, cx);
+    }
+
+    /// 开启/关闭动效降级（低性能设备减弱动画）。
+    pub fn set_reduced_motion(&mut self, reduced: bool, cx: &mut Context<Self>) {
+        self.settings.reduced_motion = reduced;
+        theme::set_reduced_motion(reduced);
+        let _ = self.settings.save();
+        let msg = if reduced {
+            self.tr("已开启减弱动效（低负载模式）").to_string()
+        } else {
+            self.tr("已恢复完整动效").to_string()
+        };
+        self.toast(msg, cx);
     }
 
     /// 打开歌词播放页，并按需加载当前（或正在装载）歌曲的歌词。
@@ -2366,6 +2484,7 @@ impl Root {
             self.nav_history.remove(0);
         }
         self.nav = nav;
+        self.nav_transition_seq = self.nav_transition_seq.wrapping_add(1);
         crate::experience3::clear_selection();
         if matches!(nav, Nav::Settings) {
             self.refresh_cache_stats(cx);
@@ -2412,6 +2531,7 @@ impl Root {
         };
         let nav = self.nav_history.pop().unwrap_or(fallback);
         self.nav = nav;
+        self.nav_transition_seq = self.nav_transition_seq.wrapping_add(1);
         crate::experience3::clear_selection();
         self.on_nav_changed(cx);
         cx.notify();
@@ -2423,9 +2543,7 @@ impl Root {
     pub fn on_nav_changed(&mut self, cx: &mut Context<Self>) {
         if !self.settings.cookie.trim().is_empty() {
             match self.nav {
-                Nav::Home => self.start_recommendation(true, cx),
-                // 听歌模式只负责首屏懒加载；“加载更多”必须由用户显式点击。
-                Nav::Scenes if self.scene_cards.is_empty() && !self.loading_scenes => {
+                Nav::Home | Nav::Scenes if self.scene_cards.is_empty() && !self.loading_scenes => {
                     self.load_scenes(cx)
                 }
                 Nav::Library => self.load_playlists(cx),

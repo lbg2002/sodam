@@ -6,7 +6,9 @@ mod actions;
 mod search_actions;
 
 use gpui::prelude::*;
-use gpui::{div, px, Context, EntityInputHandler, FocusHandle, Render, UTF16Selection, Window};
+use gpui::{
+    div, px, AnimationExt, Context, EntityInputHandler, FocusHandle, Render, UTF16Selection, Window,
+};
 use sodam_core::{
     library::{RecommendationSource, SceneCard, SearchScope},
     login::{LoginStatus, QrMatrix},
@@ -217,6 +219,18 @@ pub struct Root {
     pub lyrics_return_nav: Option<Nav>,
     pub theme: ThemeKind,
     pub theme_follows_system: bool,
+    pub window_mode: theme::WindowMode,
+    pub playback_view_mode: theme::PlaybackViewMode,
+    pub content_density: theme::ContentDensity,
+    pub fullscreen_controls_visible: bool,
+    pub fullscreen_last_interaction: std::time::Instant,
+    pub(crate) fullscreen_drag_origin: Option<gpui::Point<gpui::Pixels>>,
+    pub(crate) fullscreen_dragged: bool,
+    pub desktop_lyrics_open: bool,
+    pub root_focus: FocusHandle,
+    pub nav_transition_seq: usize,
+    pub theme_transition_seq: usize,
+    pub search_error: Option<String>,
     pub language: Language,
     pub language_follows_system: bool,
     pub settings: Settings,
@@ -430,6 +444,10 @@ impl Root {
         let theme = ThemeKind::from_key(&settings.theme)
             .unwrap_or_else(|| theme::theme_from_appearance(cx.window_appearance()));
         theme::set_theme(theme);
+        theme::set_reduced_motion(settings.reduced_motion);
+        let window_mode = theme::WindowMode::from_key(&settings.window_mode);
+        let playback_view_mode = theme::PlaybackViewMode::from_key(&settings.playback_view_mode);
+        let content_density = theme::ContentDensity::from_key(&settings.content_density);
         let (language, language_follows_system) = match Language::from_key(&settings.language) {
             Some(Language::System) | None => (Language::system_locale(), true),
             Some(language) => (language, false),
@@ -486,6 +504,18 @@ impl Root {
             lyrics_return_nav: if logged_in { Some(Nav::Home) } else { None },
             theme,
             theme_follows_system,
+            window_mode,
+            playback_view_mode,
+            content_density,
+            fullscreen_controls_visible: true,
+            fullscreen_last_interaction: std::time::Instant::now(),
+            fullscreen_drag_origin: None,
+            fullscreen_dragged: false,
+            desktop_lyrics_open: false,
+            root_focus: cx.focus_handle(),
+            nav_transition_seq: 0,
+            theme_transition_seq: 0,
+            search_error: None,
             language,
             language_follows_system,
             settings,
@@ -1149,7 +1179,8 @@ impl Render for Root {
         }
         theme::set_theme(self.theme);
         theme::set_ui_font_size(self.settings.ui_font_size);
-        if self.nav == Nav::Scenes {
+        theme::set_reduced_motion(self.settings.reduced_motion);
+        if self.nav == Nav::Scenes || self.nav == Nav::Home {
             self.sync_scenes_list();
         }
         let ambient_url = self.queue.current().map(|track| track.cover.clone());
@@ -1165,7 +1196,7 @@ impl Render for Root {
             );
         }
         theme::set_ambient_rgb(ambient_color);
-        if self.nav == Nav::Lyrics {
+        if self.nav == Nav::Lyrics || self.window_mode == theme::WindowMode::Fullscreen {
             let active = self.synced_lyrics_active();
             self.lyrics_active = active;
             if let Some(index) = active {
@@ -1173,38 +1204,155 @@ impl Render for Root {
                     .scroll_to_item_strict(index, gpui::ScrollStrategy::Center);
             }
         }
+
+        let viewport = window.viewport_size();
+        let viewport_w = f32::from(viewport.width);
+        let viewport_h = f32::from(viewport.height);
+
+        // 根据窗口实际尺寸区分响应式层级
+        let is_compact_mode = self.window_mode == theme::WindowMode::Compact
+            || (viewport_w < 480.0 && viewport_h < 280.0);
+        let is_fullscreen_mode =
+            !is_compact_mode && self.window_mode == theme::WindowMode::Fullscreen;
+        let is_narrow_window = viewport_w < theme::breakpoints::NARROW_W;
+        let use_compact_sidebar = !is_narrow_window
+            && (self.window_mode == theme::WindowMode::HalfScreen
+                || viewport_w < theme::breakpoints::COMPACT_W);
+
+        let toast_left = if is_fullscreen_mode || is_compact_mode || is_narrow_window {
+            theme::space::XL
+        } else if use_compact_sidebar {
+            theme::SIDEBAR_COMPACT_W + theme::space::XL
+        } else {
+            theme::SIDEBAR_W + theme::space::XL
+        };
+
+        let bg = if is_fullscreen_mode || self.nav == Nav::Lyrics {
+            theme::immersive_background()
+        } else {
+            theme::ambient_background()
+        };
+
+        let main_stage: gpui::AnyElement = if is_compact_mode {
+            views::lyrics::compact_window_view(self, cx)
+        } else if is_fullscreen_mode {
+            views::lyrics::fullscreen_immersive_view(self, window, cx)
+        } else {
+            let page_content = views::render(self, window, cx);
+            let animated_page: gpui::AnyElement = if theme::motion_enabled() {
+                div()
+                    .size_full()
+                    .child(page_content)
+                    .with_animation(
+                        gpui::ElementId::Name(
+                            format!(
+                                "page-stage-{}-{}-{}",
+                                self.nav as usize,
+                                self.nav_transition_seq,
+                                self.theme_transition_seq
+                            )
+                            .into(),
+                        ),
+                        gpui::Animation::new(std::time::Duration::from_millis(190))
+                            .with_easing(gpui::ease_in_out),
+                        |this, delta| {
+                            this.opacity(0.35 + delta * 0.65)
+                                .mt(px((1.0 - delta) * 6.0))
+                        },
+                    )
+                    .into_any_element()
+            } else {
+                div().size_full().child(page_content).into_any_element()
+            };
+
+            div()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .min_h(px(0.0))
+                .when(is_narrow_window, |this| {
+                    this.child(ui::sidebar::render_top_nav(self, cx))
+                })
+                .child(
+                    div()
+                        .flex()
+                        .flex_row()
+                        .flex_1()
+                        .min_h(px(0.0))
+                        .when(!is_narrow_window && use_compact_sidebar, |this| {
+                            this.child(ui::sidebar::render_compact(self, cx))
+                        })
+                        .when(!is_narrow_window && !use_compact_sidebar, |this| {
+                            this.child(ui::sidebar::render(self, cx))
+                        })
+                        .child(div().flex_1().min_w(px(0.0)).h_full().child(animated_page))
+                        .when(self.queue_open, |this| {
+                            this.child(ui::player_bar::queue_drawer(self, cx))
+                        }),
+                )
+                .when(
+                    self.settings.bottom_lyrics_enabled && self.nav != Nav::Lyrics,
+                    |this| this.child(ui::player_bar::bottom_lyrics_strip(self, cx)),
+                )
+                .child(ui::player_bar::render(self, cx))
+                .into_any_element()
+        };
+
+        let text_input_focused = !is_fullscreen_mode
+            && ((self.nav == Nav::Search && self.search_focus.is_focused(window))
+                || (self.nav == Nav::Downloads && self.download_search_focus.is_focused(window)));
+        if !text_input_focused && !self.root_focus.is_focused(window) {
+            self.root_focus.focus(window, cx);
+        }
+
         let element = div()
+            .id("root-window")
+            .track_focus(&self.root_focus)
             .relative()
             .flex()
             .flex_col()
             .size_full()
+            .font_family(theme::ui_font_family())
+            .on_key_down(
+                cx.listener(|root, event: &gpui::KeyDownEvent, _window, cx| {
+                    let key = event.keystroke.key.as_str();
+                    if key.eq_ignore_ascii_case("escape")
+                        && root.window_mode != theme::WindowMode::Normal
+                    {
+                        root.set_window_mode(theme::WindowMode::Normal, cx);
+                    } else if key.eq_ignore_ascii_case("f11") {
+                        let next = if root.window_mode == theme::WindowMode::Fullscreen {
+                            theme::WindowMode::Normal
+                        } else {
+                            theme::WindowMode::Fullscreen
+                        };
+                        root.set_window_mode(next, cx);
+                    }
+                }),
+            )
+            .on_mouse_move(
+                cx.listener(|root, _event: &gpui::MouseMoveEvent, _window, cx| {
+                    if root.window_mode == theme::WindowMode::Fullscreen {
+                        root.fullscreen_last_interaction = std::time::Instant::now();
+                        if !root.fullscreen_controls_visible {
+                            root.fullscreen_controls_visible = true;
+                            cx.notify();
+                        }
+                    }
+                }),
+            )
             // macOS 隐藏系统标题栏，顶部留出红绿灯的高度；
-            // Windows 隐藏系统标题栏后由应用自绘拖拽区与控制按钮。
-            .when(cfg!(target_os = "macos"), |this| this.pt(px(28.0)))
+            // Windows/Linux 隐藏系统标题栏后由应用自绘拖拽区与控制按钮（全屏沉浸模式隐藏顶栏）。
+            .when(cfg!(target_os = "macos") && !is_fullscreen_mode, |this| {
+                this.pt(px(28.0))
+            })
             .when(
-                cfg!(any(target_os = "windows", target_os = "linux")),
-                |this| this.child(ui::titlebar::render()),
+                cfg!(any(target_os = "windows", target_os = "linux")) && !is_fullscreen_mode,
+                |this| this.child(ui::titlebar::render_root(self, viewport_w, cx)),
             )
-            .bg(theme::ambient_background())
+            .bg(bg)
             .text_color(ui::theme::text())
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .min_h(px(0.0))
-                    .child(ui::sidebar::render(self, cx))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w(px(0.0))
-                            .child(views::render(self, window, cx)),
-                    )
-                    .when(self.queue_open, |this| {
-                        this.child(ui::player_bar::queue_drawer(self, cx))
-                    }),
-            )
-            .child(ui::player_bar::render(self, cx))
+            .child(main_stage)
             .when(cfg!(target_os = "linux"), |this| {
                 this.children(ui::titlebar::resize_handles())
             })
@@ -1213,7 +1361,7 @@ impl Render for Root {
                     gpui::deferred(
                         div()
                             .absolute()
-                            .left(px(theme::SIDEBAR_W + theme::space::XL))
+                            .left(px(toast_left))
                             .right(px(theme::space::XL))
                             .bottom(px(theme::PLAYER_H + theme::space::LG))
                             .flex()

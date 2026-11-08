@@ -308,6 +308,9 @@ fn parse_word_tags(content: &str, line_start: f64, line_duration: Option<f64>) -
         cursor = close + 1;
     }
     push_text_before(&mut words, &content[cursor..], line_start, current);
+    if let Some(last) = words.last_mut() {
+        last.text = last.text.trim_end().to_string();
+    }
     words
 }
 
@@ -317,14 +320,35 @@ fn push_text_before(
     line_start: f64,
     current: Option<(f64, f64)>,
 ) {
-    if text.trim().is_empty() {
+    if text.is_empty() {
         return;
+    }
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        // 标签之间的纯空白（如英文单词间的空格）追加到前一个词末尾，避免逐字渲染时粘连。
+        if let Some(last) = words.last_mut() {
+            if !last.text.ends_with(' ') {
+                last.text.push(' ');
+            }
+        }
+        return;
+    }
+    if text.starts_with(char::is_whitespace) {
+        if let Some(last) = words.last_mut() {
+            if !last.text.ends_with(' ') {
+                last.text.push(' ');
+            }
+        }
+    }
+    let mut word_text = trimmed.to_string();
+    if text.ends_with(char::is_whitespace) {
+        word_text.push(' ');
     }
     let (start, end) = current.unwrap_or((line_start, line_start));
     words.push(LyricWord {
         start_seconds: start,
         end_seconds: end.max(start),
-        text: text.trim().to_string(),
+        text: word_text,
     });
 }
 
@@ -358,6 +382,16 @@ mod tests {
         assert_eq!(lines[1].words.len(), 3);
         assert_eq!(lines[1].words[0].text, "你");
         assert_eq!(lines[1].words[0].end_seconds, 14.68);
+    }
+
+    #[test]
+    fn parse_lrc_preserves_english_word_spaces() {
+        let raw = "[67000,3200]<67000,400>Romeo</67400,400> <67400,400>take </67800,400><67800,300>me</68100,300> <68100,600>somewhere</68700,600>";
+        let lines = parse_lrc(raw);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, "Romeo take me somewhere");
+        let joined: String = lines[0].words.iter().map(|w| w.text.as_str()).collect();
+        assert_eq!(joined, "Romeo take me somewhere");
     }
 
     #[test]

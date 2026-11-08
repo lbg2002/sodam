@@ -9,3 +9,6 @@
 /*.zip
 /*.sha256
 /*.pkg.tar.zst
+
+dist/*.deb
+dist/*.deb.sha256

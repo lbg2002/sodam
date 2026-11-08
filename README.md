@@ -263,12 +263,31 @@ Ubuntu / GNOME 用户需要把当前 release 构建安装到用户目录（同�
 | `SODAM_DOWNLOAD_QUALITY` | 下载音质：`follow` / `lossless` / `highest` / `medium` / `low` |
 | `SODAM_DOWNLOAD_FORMAT` | 下载格式：`source` / `mp3` / `flac` |
 | `SODAM_DOWNLOAD_DIR` | 临时覆盖下载目录；设置后优先于界面里的下载目录配置 |
-| `SODAM_PREFETCH_COUNT` | 临时覆盖智能预加载数量（0–8；0 = 关闭） |
+| `SODAM_PREFETCH_COUNT` | 临时覆盖智能预加载数量（0–24；0 = 关闭） |
 
 SodaM 默认内置一个公共签名服务，未部署 `libmssdk` 的用户也可以直接使用。
 可以在设置页或环境变量中替换为自己的签名服务。
 
 不要提交真实 Cookie、Token、签名头或设备指纹。
+
+## Debian / Ubuntu 下载安装
+
+GitHub Release 会通过 Actions 自动构建 Debian 包，提供 `amd64` 与 `arm64` 两种架构。
+
+```bash
+mkdir -p /tmp/sodam-install
+cd /tmp/sodam-install
+
+version=0.1.22
+base_url=https://github.com/lbg2002/sodam/releases/download/v${version}
+
+curl -fLO ${base_url}/SHA256SUMS
+curl -fLO ${base_url}/sodam_${version}_amd64.deb
+grep "sodam_${version}_amd64\\.deb$" SHA256SUMS | sha256sum -c -
+sudo apt install ./sodam_${version}_amd64.deb
+```
+
+ARM64 Ubuntu 用户将文件名中的 `amd64` 替换为 `arm64`。安装包会提供 `/usr/bin/sodam`、桌面入口和应用图标；后续版本可直接用新的 `.deb` 包升级。
 
 ## 开发
 

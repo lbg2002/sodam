@@ -31,8 +31,10 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-latest
+            deb_arch: amd64
           - arch: aarch64
             runner: ubuntu-24.04-arm
+            deb_arch: arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +59,13 @@ jobs:
           test -s "$package"
           test -s "$package.sha256"
           mkdir -p release
+          mv "$package" "$package.sha256" release/
+
+      - name: Create Debian package
+        run: |
+          package=$(packaging/make-deb.sh '${{ matrix.deb_arch }}')
+          test -s "$package"
+          test -s "$package.sha256"
           mv "$package" "$package.sha256" release/
 
       - name: Upload package artifact
@@ -171,7 +180,7 @@ jobs:
         run: |
           cd release
           rm -f SHA256SUMS
-          sha256sum *.pkg.tar.zst *.zip *.exe > SHA256SUMS
+          sha256sum *.pkg.tar.zst *.deb *.zip *.exe > SHA256SUMS
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
@@ -189,6 +198,10 @@ jobs:
             - `x86_64` pacman package
             - `aarch64` pacman package
 
+            Linux (Debian / Ubuntu):
+            - `amd64` `.deb` package
+            - `arm64` `.deb` package
+
             macOS (Apple Silicon, unsigned / ad-hoc signed):
             - `aarch64` `.app` zip，首次打开见 README「macOS 下载安装」
 
@@ -198,6 +211,7 @@ jobs:
             - `SHA256SUMS`
           files: |
             release/*.pkg.tar.zst
+            release/*.deb
             release/*.zip
             release/*.exe
             release/SHA256SUMS

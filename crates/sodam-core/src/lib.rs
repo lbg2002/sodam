@@ -17,6 +17,7 @@ pub mod playback_state;
 pub mod queue;
 pub mod search_history;
 pub mod session;
+mod signer;
 
 pub use audio::{PlaybackEngine, PlaybackSnapshot};
 pub use config::Settings;

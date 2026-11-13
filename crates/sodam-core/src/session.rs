@@ -2,7 +2,7 @@
 
 use crate::config::Settings;
 use anyhow::Context;
-use libresoda::soda::signature::HttpSignature;
+use crate::signer::{resolve_download_info, CompatHttpSignature};
 use libresoda::{AppCredentials, Soda};
 use std::io::Read;
 use std::sync::Arc;
@@ -199,7 +199,7 @@ impl Session {
 
         let url = settings.signer_url.trim();
         if !url.is_empty() {
-            let provider = HttpSignature::new(url).with_token(settings.signer_token.trim());
+            let provider = CompatHttpSignature::new(url, settings.signer_token.trim());
             pumpkin.set_signature_provider(Arc::new(provider));
         }
         if !settings.quality.trim().is_empty() {
@@ -369,9 +369,7 @@ impl Session {
         // 先写临时文件，校验完整后再改名 —— 下载中断永远留不下「看起来有效」的半截缓存。
         // 临时名带进程号+序号：预取与手动播放并发下同一首时互不踩踏。
         let part = dir.join(part_file_name(&track.id, &tag));
-        let info = self
-            .pumpkin
-            .get_download_info(&song)
+        let info = resolve_download_info(|| self.pumpkin.get_download_info(&song))
             .map_err(|err| anyhow::anyhow!("解析播放流失败：{err}"))?;
         if info.is_preview && std::env::var_os("SODAM_PLAYER_LOG").is_some() {
             eprintln!(

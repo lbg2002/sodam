@@ -9,11 +9,11 @@ use std::path::{Path, PathBuf};
 pub struct Settings {
     /// 签名服务地址（libmssdk 的 `/sign`，VIP 整曲必需）。
     pub signer_url: String,
-    /// 签名服务 token（`Authorization: Bearer`），服务端没开鉴权时留空。
+    /// 签名服务 token（`Authorization: Bearer`）；v0.2.0 非回环绑定必须配置。
     pub signer_token: String,
     /// 登录 Cookie（扫码登录成功后写入）。
     pub cookie: String,
-    /// 设备指纹：必须与签名器一致（签名器 `/config` 可查）。
+    /// 设备指纹：与签名器约定一致；libmssdk v0.2.0 起从服务端 identity.json 或本地 config 命令查看。
     pub device_id: String,
     pub iid: String,
     pub fp: String,

@@ -268,6 +268,16 @@ Ubuntu / GNOME 用户需要把当前 release 构建安装到用户目录（同�
 SodaM 默认内置一个公共签名服务，未部署 `libmssdk` 的用户也可以直接使用。
 可以在设置页或环境变量中替换为自己的签名服务。
 
+#### libmssdk v0.2.0 兼容说明
+
+- 客户端仍通过最终的 `POST /sign` 地址获取签名；旧版签名服务也继续支持。若使用 HTTPS 反代，请直接配置 HTTPS 地址（签名请求不跟随重定向）。
+- 429（限流）和 503（繁忙）按 `Retry-After` 响应头或 JSON 的 `retry_after_seconds` 退避，单次签名最多额外重试两次、累计等待最多 5 秒；服务要求更长等待时返回错误，不提前重试。401/403、500、502 等错误不会自动重试。
+- 签名失败导致取流回退到试听时，不写入试听缓存；正常获得的整曲、正常试听及离线缓存行为不变。
+- 自托管 v0.2.0 服务绑定非回环地址时，必须在服务端配置 `LIBMSSDK_TOKEN`，客户端设置对应的 `QISHUI_SIGNER_TOKEN`。公开部署建议使用 HTTPS 反代并更换令牌。
+- 旧 HTTP `/config`、`/probe`、`/track/stream` 已移除；设备身份从服务端 `data/identity.json` 或本机 `node src/index.mjs config` 查询。服务存活检查用 `/livez`、就绪检查用 `/readyz`（不是签名地址）。详见 [上游升级说明](https://github.com/sodahub-org/libmssdk/blob/v0.2.0/docs/UPGRADING.md)。
+
+本地兼容回归测试：`cargo test -p sodam-core signer::tests --locked`（使用本机模拟 HTTP 服务，不访问真实签名器）。
+
 不要提交真实 Cookie、Token、签名头或设备指纹。
 
 ## Debian / Ubuntu 下载安装

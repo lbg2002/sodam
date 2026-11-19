@@ -205,11 +205,10 @@ impl Session {
         if !settings.quality.trim().is_empty() {
             pumpkin.set_quality_preference(settings.quality.trim());
         }
-        // 登录必须走签名页（等价上游 Meting-API 的 signQishuiRequest）：本地直连护照接口
-        // 会一路 error_code=7，且确认后的登录态只能由签名页的浏览器会话承接。
-        // sodam 固定使用 libresoda 内置 Rust CDP 签名页：直控 Chromium，无 Node 依赖；
-        // 浏览器路径可用 QISHUI_CHROMIUM_PATH 指定。
-        pumpkin.enable_cdp_signer();
+        // libresoda 0.4 系列支持纯 HTTP 扫码，遇到二次验证才打开系统浏览器。
+        // 与音乐取流签名设备保持独立，不强制依赖 Chromium/CDP。
+        let _ = pumpkin.set_qr_device(settings.login_device());
+        pumpkin.enable_http_login();
 
         Self { pumpkin, settings }
     }

@@ -446,7 +446,8 @@ pub struct Root {
 impl Root {
     pub fn new(cx: &mut Context<Self>) -> Self {
         let mut settings = Settings::load().merged_with_env();
-        if settings.ensure_device_identity() {
+        let generated = settings.ensure_device_identity() | settings.ensure_login_device();
+        if generated {
             let _ = settings.save();
         }
         // 首次运行就把配置落盘：用户可以直接编辑 ~/.config/sodam/config.json

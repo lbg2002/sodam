@@ -3635,20 +3635,20 @@ dependencies = [
 [[package]]
 name = "libresoda"
 version = "0.1.0"
-source = "git+https://github.com/sodahub-org/libresoda.git?rev=44df096#44df096e8f148695815457ca48dfc401f5277d3e"
+source = "git+https://github.com/sodahub-org/libresoda.git?rev=c057371#c057371ddd83bd46cb175b65f2ec719b7431f96b"
 dependencies = [
  "aes",
  "base64 0.22.1",
- "chromiumoxide",
  "ctr",
  "dirs 6.0.0",
- "futures",
+ "libc",
+ "open",
  "serde",
  "serde_json",
- "tokio",
  "ureq",
+ "url",
+ "windows-sys 0.61.2",
 ]
-
 [[package]]
 name = "libxdo"
 version = "0.6.0"

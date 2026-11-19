@@ -511,3 +511,11 @@ sudo pacman -U ./sodam-<version>-<arch>.pkg.tar.zst
 
 SodaM 是独立项目，与字节跳动、抖音或汽水音乐无关。它只面向个人播放自己有权访问的
 内容；不得用于公共代理、批量抓取、绕过付费限制或分发凭据。
+
+## 更新、安装包与上游兼容
+
+- **设置 → 关于 SodaM → 检查更新**：仅查询 [lbg2002/sodam Releases](https://github.com/lbg2002/sodam/releases) 的最新正式版，不安装官方上游的包。
+- Ubuntu/Debian 的 .deb 安装用户可点击“下载并安装更新”，先验证 SHA256SUMS 和 Debian 包名、版本、架构，再通过 pkexec 请求系统授权运行 apt-get；安装后退出并重启软件。首次安装或非 deb 安装请手动选择安装包。
+- 自动构建：Pull Request 和 main 提交由 GitHub Actions 构建可下载的 Debian CI 测试包；推送与 Cargo 版本匹配的 vX.Y.Z 标签后自动发布带 SHA256SUMS 的正式 Release，无需自建更新服务器。
+- 签名：将旧公网 HTTP 默认服务自动迁移为 HTTPS，增加 libmssdk v0.2.0 的 429/503 退避重试和空签名/试听缓存保护；自定义签名服务不覆盖。远程服务仍可处理请求数据，HTTPS 仅保护传输链路。
+- 尚未移植的高风险上游变化见 [兼容性说明](docs/UPSTREAM_COMPAT.md)。新的 libresoda 搜索、多轨解密和 HTTP 登录仍需单独集成与真机回归。

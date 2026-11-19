@@ -139,7 +139,7 @@ fn deb_field(path: &Path, field: &str) -> Result<String> {
 
 fn require_deb_install() -> Result<()> {
     let output = Command::new("dpkg-query")
-        .args(["-W", "-f=\${Status}", "sodam"])
+        .args(["-W", "-f=${Status}", "sodam"])
         .output()
         .context("无法读取已安装软件包信息")?;
     if !output.status.success()

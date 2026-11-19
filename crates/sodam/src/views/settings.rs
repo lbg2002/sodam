@@ -2450,8 +2450,69 @@ fn account_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
     shell(root, body, cx)
 }
 
-fn about_view(root: &Root, _cx: &mut Context<Root>) -> AnyElement {
+fn about_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    use crate::app::UpdateState;
+
     let version = env!("CARGO_PKG_VERSION");
+    let can_install = matches!(&root.update_state, UpdateState::Available(_));
+    let in_progress = matches!(
+        &root.update_state,
+        UpdateState::Checking | UpdateState::Installing
+    );
+    let update_status = match &root.update_state {
+        UpdateState::Idle => text(
+            root,
+            "仅检查当前定制分叉的 GitHub Release。",
+            "Checks releases of this customized fork only.",
+        ),
+        UpdateState::Checking => text(root, "正在检查 GitHub 更新…", "Checking GitHub…"),
+        UpdateState::Available(release) => format!(
+            "{} {}",
+            text(root, "发现新版本：", "New version available:"),
+            release.tag
+        ),
+        UpdateState::Installing => text(
+            root,
+            "正在下载、校验并请求系统授权安装…",
+            "Downloading, verifying and requesting system installation…",
+        ),
+        UpdateState::UpToDate => text(root, "已是最新版本", "Already up to date"),
+        UpdateState::Installed => text(
+            root,
+            "安装成功，请退出并重新打开 SodaM。",
+            "Installed. Quit and restart SodaM.",
+        ),
+        UpdateState::Error(err) => format!(
+            "{} {err}",
+            text(root, "更新失败：", "Update failed:"),
+        ),
+    };
+    let mut update_children: Vec<AnyElement> = vec![div()
+        .px(px(theme::space::SM))
+        .py(px(theme::space::XS))
+        .text_size(theme::Text::Small.size())
+        .text_color(theme::text_muted())
+        .child(update_status)
+        .into_any_element()];
+    if !in_progress {
+        update_children.push(action_button(
+            "about-check-update",
+            if can_install {
+                text(root, "下载并安装更新", "Download & install")
+            } else {
+                text(root, "检查更新", "Check for updates")
+            },
+            can_install,
+            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                if can_install {
+                    root.install_available_update(cx);
+                } else {
+                    root.check_for_updates(cx);
+                }
+            }),
+        ));
+    }
+
     let body = div()
         .flex()
         .flex_col()
@@ -2488,11 +2549,20 @@ fn about_view(root: &Root, _cx: &mut Context<Root>) -> AnyElement {
                     "许可证：AGPL-3.0-or-later",
                     "License: AGPL-3.0-or-later",
                 ))
-                .child("https://github.com/sodahub-org/sodam".to_string())
+                .child("https://github.com/lbg2002/sodam".to_string())
                 .into_any_element()],
         ))
+        .child(card(
+            text(root, "软件更新", "Software updates"),
+            text(
+                root,
+                "从此定制分叉的 Releases 安全更新。",
+                "Safely update from this fork's Releases.",
+            ),
+            update_children,
+        ))
         .into_any_element();
-    shell(root, body, _cx)
+    shell(root, body, cx)
 }
 
 pub(crate) fn settings_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {

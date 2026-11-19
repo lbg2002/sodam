@@ -4,6 +4,8 @@
 mod actions;
 #[path = "app_search.rs"]
 mod search_actions;
+#[path = "app_updates.rs"]
+mod updates_actions;
 
 use gpui::prelude::*;
 use gpui::{
@@ -126,6 +128,17 @@ pub enum SettingsSection {
     About,
 }
 
+/// Status of user-requested GitHub updates; network work never runs in render.
+pub enum UpdateState {
+    Idle,
+    Checking,
+    Available(crate::updater::UpdateRelease),
+    Installing,
+    UpToDate,
+    Installed,
+    Error(String),
+}
+
 impl Root {
     /// 侧栏/页面标题用的导航名；听歌模式跟随当前队列来源动态变化。
     pub fn nav_display_label(&self, nav: Nav) -> String {
@@ -236,6 +249,7 @@ pub struct Root {
     pub settings: Settings,
     /// 设置页二级分类；切换分类只影响展示，不触发配置重载。
     pub settings_section: SettingsSection,
+    pub update_state: UpdateState,
     pub session: Option<Session>,
     pub queue: Queue,
     pub queue_origin: QueueOrigin,
@@ -520,6 +534,7 @@ impl Root {
             language_follows_system,
             settings,
             settings_section: SettingsSection::General,
+            update_state: UpdateState::Idle,
             session: Some(session),
             queue,
             queue_origin: QueueOrigin::None,

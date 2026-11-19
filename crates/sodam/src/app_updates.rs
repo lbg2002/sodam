@@ -1,6 +1,7 @@
 //! Update actions use background workers, never blocking GPUI render.
 
 use super::{Root, UpdateState};
+use gpui::prelude::*;
 use gpui::Context;
 
 impl Root {

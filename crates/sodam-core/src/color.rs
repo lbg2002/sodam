@@ -66,7 +66,7 @@ pub fn dominant_color(path: &Path) -> Option<Rgb> {
     let mut bins = [Bin::default(); BINS];
     let mut sampled = 0.0_f32;
 
-    for pixel in pixels.chunks_exact(4).step_by(stride) {
+    for pixel in pixels.as_chunks::<4>().0.iter().step_by(stride) {
         let [red, green, blue, alpha] = [pixel[0], pixel[1], pixel[2], pixel[3]];
         if alpha < MIN_ALPHA {
             continue;

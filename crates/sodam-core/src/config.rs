@@ -17,6 +17,9 @@ pub struct Settings {
     pub device_id: String,
     pub iid: String,
     pub fp: String,
+    /// 扫码登录设备身份，与音乐取流签名设备分离并跨登录持久化。
+    pub login_device_id: String,
+    pub login_install_id: String,
     /// 播放音质偏好：`best` / `lossless` / `highest` / `medium` / `low`。
     pub quality: String,
     /// 下载音质：`follow` / `lossless` / `highest` / `medium` / `low`。
@@ -128,6 +131,8 @@ impl Default for Settings {
             device_id: String::new(),
             iid: String::new(),
             fp: String::new(),
+            login_device_id: String::new(),
+            login_install_id: String::new(),
             quality: String::new(),
             download_quality: "follow".to_string(),
             download_format: "source".to_string(),
@@ -209,6 +214,29 @@ impl Settings {
         true
     }
 
+    /// 首次使用从 libresoda 旧身份迁移或生成，不在登出时清除。
+    pub fn ensure_login_device(&mut self) -> bool {
+        let old = libresoda::soda::qr_login::QrDevice {
+            device_id: self.login_device_id.clone(),
+            install_id: self.login_install_id.clone(),
+        };
+        if old.is_valid() {
+            return false;
+        }
+        let device = libresoda::soda::qr_login::load_persisted_device()
+            .unwrap_or_else(libresoda::soda::qr_login::QrDevice::generate);
+        self.login_device_id = device.device_id;
+        self.login_install_id = device.install_id;
+        true
+    }
+
+    pub fn login_device(&self) -> libresoda::soda::qr_login::QrDevice {
+        libresoda::soda::qr_login::QrDevice {
+            device_id: self.login_device_id.clone(),
+            install_id: self.login_install_id.clone(),
+        }
+    }
+
     pub fn config_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -268,6 +296,8 @@ impl Settings {
             ("QISHUI_SIGNER_TOKEN", &mut self.signer_token),
             ("SODA_DEVICE_ID", &mut self.device_id),
             ("SODA_IID", &mut self.iid),
+            ("SODA_LOGIN_DEVICE_ID", &mut self.login_device_id),
+            ("SODA_LOGIN_INSTALL_ID", &mut self.login_install_id),
             ("SODA_FP", &mut self.fp),
             ("SODAM_QUALITY", &mut self.quality),
             ("SODAM_DOWNLOAD_QUALITY", &mut self.download_quality),
@@ -364,6 +394,21 @@ mod tests {
         };
         custom.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path).signer_url, custom.signer_url);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn qr_identity_is_stable_across_save_and_load() {
+        let dir = std::env::temp_dir().join(format!("sodam-login-device-{}", std::process::id()));
+        let path = dir.join("config.json");
+        let mut settings = Settings::default();
+        assert!(settings.ensure_login_device());
+        assert!(settings.login_device().is_valid());
+        let first = settings.login_device();
+        assert!(!settings.ensure_login_device());
+        settings.save_to(&path).unwrap();
+        let loaded = Settings::load_from(&path);
+        assert_eq!(loaded.login_device(), first);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

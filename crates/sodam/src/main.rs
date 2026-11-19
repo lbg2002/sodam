@@ -87,7 +87,7 @@ fn start_tray_service(
             }
 
             tick += 1;
-            if tick % 5 == 0 {
+            if tick.is_multiple_of(5) {
                 cx.update(|cx| {
                     app.update(cx, |root, _cx| {
                         let snapshot = root.engine.snapshot();
@@ -269,7 +269,7 @@ fn start_mpris_service(bridge: mpris::MprisBridge, app: Entity<app::Root>, cx: &
             }
 
             tick = tick.wrapping_add(1);
-            if tick % 5 == 0 {
+            if tick.is_multiple_of(5) {
                 cx.update(|cx| {
                     app.update(cx, |root, _cx| {
                         let snapshot = root.engine.snapshot();

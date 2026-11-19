@@ -55,7 +55,8 @@ fn get_bytes(url: &str, maximum: u64, timeout: Duration) -> Result<Vec<u8>> {
         .call()
         .map_err(|_| anyhow!("GitHub 更新服务不可用"))?;
     let mut bytes = Vec::new();
-    reply.into_reader()
+    reply
+        .into_reader()
         .take(maximum + 1)
         .read_to_end(&mut bytes)
         .context("读取 GitHub 更新失败")?;
@@ -72,14 +73,14 @@ fn release_asset_url(tag: &str, name: &str) -> String {
 pub(crate) fn check_latest() -> Result<Option<UpdateRelease>> {
     let arch = deb_arch()?;
     let data = get_bytes(LATEST_API, MAX_INFO_SIZE, Duration::from_secs(20))?;
-    let release: serde_json::Value = serde_json::from_slice(&data)
-        .context("Release 信息不是合法 JSON")?;
+    let release: serde_json::Value =
+        serde_json::from_slice(&data).context("Release 信息不是合法 JSON")?;
     let tag = release["tag_name"]
         .as_str()
         .ok_or_else(|| anyhow!("没有可用的 Release 版本号"))?;
     let latest = version_number(tag).ok_or_else(|| anyhow!("不支持的 Release 版本号"))?;
-    let local = version_number(env!("CARGO_PKG_VERSION"))
-        .ok_or_else(|| anyhow!("当前软件版本号无效"))?;
+    let local =
+        version_number(env!("CARGO_PKG_VERSION")).ok_or_else(|| anyhow!("当前软件版本号无效"))?;
     if latest <= local {
         return Ok(None);
     }
@@ -114,7 +115,9 @@ fn expected_sha256(text: &str, filename: &str) -> Result<String> {
         let name = split.next()?;
         (name.trim_start_matches('*') == filename && split.next().is_none()).then_some(hash)
     });
-    let sha = lines.next().ok_or_else(|| anyhow!("SHA256SUMS 缺少安装包记录"))?;
+    let sha = lines
+        .next()
+        .ok_or_else(|| anyhow!("SHA256SUMS 缺少安装包记录"))?;
     if lines.next().is_some()
         || sha.len() != 64
         || !sha.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -152,7 +155,11 @@ fn require_deb_install() -> Result<()> {
 
 pub(crate) fn install(release: &UpdateRelease) -> Result<()> {
     require_deb_install()?;
-    let manifest = get_bytes(&release.checksum_url, MAX_INFO_SIZE, Duration::from_secs(30))?;
+    let manifest = get_bytes(
+        &release.checksum_url,
+        MAX_INFO_SIZE,
+        Duration::from_secs(30),
+    )?;
     let manifest = String::from_utf8(manifest).context("SHA256SUMS 文本无效")?;
     let expected = expected_sha256(&manifest, &release.filename)?;
     let temp = tempfile::Builder::new().prefix("sodam-update-").tempdir()?;

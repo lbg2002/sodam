@@ -1,8 +1,8 @@
 //! 会话层：把 [`Settings`] 变成可用的 libresoda 客户端。
 
 use crate::config::Settings;
-use anyhow::Context;
 use crate::signer::{resolve_download_info, CompatHttpSignature};
+use anyhow::Context;
 use libresoda::{AppCredentials, Soda};
 use std::io::Read;
 use std::sync::Arc;

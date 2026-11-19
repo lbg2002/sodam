@@ -339,7 +339,9 @@ mod tests {
     #[test]
     fn previous_default_signer_moves_to_https_preserving_other_settings() {
         let dir = std::env::temp_dir().join(format!(
-            "sodam-https-{}-{:?}", std::process::id(), std::thread::current().id()
+            "sodam-https-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
         ));
         let path = dir.join("config.json");
         let original = Settings {
@@ -356,7 +358,10 @@ mod tests {
         assert_eq!(migrated.cookie, original.cookie);
         assert_eq!(migrated.theme, original.theme);
         assert_eq!(Settings::load_from(&path).signer_url, DEFAULT_SIGNER_URL);
-        let custom = Settings { signer_url: "http://127.0.0.1:8899/sign".into(), ..migrated };
+        let custom = Settings {
+            signer_url: "http://127.0.0.1:8899/sign".into(),
+            ..migrated
+        };
         custom.save_to(&path).unwrap();
         assert_eq!(Settings::load_from(&path).signer_url, custom.signer_url);
         std::fs::remove_dir_all(dir).unwrap();

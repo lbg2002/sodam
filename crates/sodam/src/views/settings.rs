@@ -2482,10 +2482,7 @@ fn about_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             "安装成功，请退出并重新打开 SodaM。",
             "Installed. Quit and restart SodaM.",
         ),
-        UpdateState::Error(err) => format!(
-            "{} {err}",
-            text(root, "更新失败：", "Update failed:"),
-        ),
+        UpdateState::Error(err) => format!("{} {err}", text(root, "更新失败：", "Update failed:"),),
     };
     let mut update_children: Vec<AnyElement> = vec![div()
         .px(px(theme::space::SM))

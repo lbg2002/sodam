@@ -6,7 +6,10 @@ use gpui::Context;
 
 impl Root {
     pub(crate) fn check_for_updates(&mut self, cx: &mut Context<Self>) {
-        if matches!(self.update_state, UpdateState::Checking | UpdateState::Installing) {
+        if matches!(
+            self.update_state,
+            UpdateState::Checking | UpdateState::Installing
+        ) {
             return;
         }
         self.update_state = UpdateState::Checking;

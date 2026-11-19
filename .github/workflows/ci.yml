@@ -37,12 +37,6 @@ jobs:
         with:
           components: clippy,rustfmt
 
-      - name: Resolve experimental libresoda lock
-        if: runner.os == 'Linux'
-        run: |
-          cargo update -p libresoda
-          git diff -- Cargo.lock
-
       - name: Format
         run: cargo fmt --all -- --check
 

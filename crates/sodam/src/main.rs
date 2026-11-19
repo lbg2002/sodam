@@ -11,6 +11,7 @@ mod mpris;
 mod system_audio;
 // 托盘：Linux 走 ksni/SNI，macOS 走 NSStatusItem，见 tray.rs。
 mod tray;
+mod updater;
 mod ui;
 mod views;
 

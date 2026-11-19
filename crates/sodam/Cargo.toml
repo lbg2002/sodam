@@ -18,6 +18,9 @@ sys-locale.workspace = true
 gpui.workspace = true
 gpui_platform.workspace = true
 serde_json.workspace = true
+ureq.workspace = true
+sha2 = "0.10"
+tempfile = "3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 # StatusNotifier 托盘是 Linux 桌面协议，macOS 上没有 D-Bus session bus。

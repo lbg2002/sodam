@@ -6042,7 +6042,7 @@ dependencies = [
 
 [[package]]
 name = "sodam"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "anyhow",
  "dbus",
@@ -6053,14 +6053,17 @@ dependencies = [
  "ksni",
  "serde_json",
  "sodam-core",
+ "sha2",
  "sys-locale",
+ "tempfile",
+ "ureq",
  "tray-icon",
  "winresource",
 ]
 
 [[package]]
 name = "sodam-core"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "anyhow",
  "dirs 6.0.0",

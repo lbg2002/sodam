@@ -113,7 +113,8 @@ pub struct Settings {
     pub language: String,
 }
 
-pub const DEFAULT_SIGNER_URL: &str = "http://103.236.75.83:8899/sign";
+pub const DEFAULT_SIGNER_URL: &str = "https://signer.lingchuanbio.com/sign";
+const PREVIOUS_SIGNER_URL: &str = "http://103.236.75.83:8899/sign";
 pub const DEFAULT_SIGNER_TOKEN: &str = "b356ad402bc31ee9e5a99cfdbf41eaa39961a562251c3359";
 const LEGACY_SIGNER_URL: &str = "http://222.186.10.201:8921/sign";
 const LEGACY_SIGNER_TOKEN: &str = "05f8089b8c5f60c63f2a6dcfe1028d28ee2725a504f3e59b";
@@ -234,6 +235,10 @@ impl Settings {
             }
             migrated = true;
         }
+        if settings.signer_url.trim() == PREVIOUS_SIGNER_URL {
+            settings.signer_url = DEFAULT_SIGNER_URL.to_string();
+            migrated = true;
+        }
         if migrated {
             let _ = settings.save_to(path);
         }
@@ -329,6 +334,32 @@ mod tests {
         assert_eq!(loaded.lyrics_line_height, 32);
         assert_eq!(loaded.lyrics_offset_ms, 0);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn previous_default_signer_moves_to_https_preserving_other_settings() {
+        let dir = std::env::temp_dir().join(format!(
+            "sodam-https-{}-{:?}", std::process::id(), std::thread::current().id()
+        ));
+        let path = dir.join("config.json");
+        let original = Settings {
+            signer_url: PREVIOUS_SIGNER_URL.into(),
+            signer_token: "test-custom-token".into(),
+            cookie: "test-cookie".into(),
+            theme: "dark".into(),
+            ..Default::default()
+        };
+        original.save_to(&path).unwrap();
+        let migrated = Settings::load_from(&path);
+        assert_eq!(migrated.signer_url, DEFAULT_SIGNER_URL);
+        assert_eq!(migrated.signer_token, original.signer_token);
+        assert_eq!(migrated.cookie, original.cookie);
+        assert_eq!(migrated.theme, original.theme);
+        assert_eq!(Settings::load_from(&path).signer_url, DEFAULT_SIGNER_URL);
+        let custom = Settings { signer_url: "http://127.0.0.1:8899/sign".into(), ..migrated };
+        custom.save_to(&path).unwrap();
+        assert_eq!(Settings::load_from(&path).signer_url, custom.signer_url);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

@@ -6052,12 +6052,12 @@ dependencies = [
  "image",
  "ksni",
  "serde_json",
- "sodam-core",
  "sha2",
+ "sodam-core",
  "sys-locale",
  "tempfile",
- "ureq",
  "tray-icon",
+ "ureq",
  "winresource",
 ]
 

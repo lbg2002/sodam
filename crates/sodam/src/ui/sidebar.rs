@@ -41,8 +41,9 @@ fn handle_nav_click(root: &mut Root, nav: Nav, cx: &mut Context<Root>) {
                 | Nav::Lyrics
         )
     {
+        root.settings_section = crate::app::SettingsSection::Account;
         root.set_nav(Nav::Settings, cx);
-        root.set_status("请先在「设置 → 账户」扫码登录", &[]);
+        root.set_status("请先在「设置 → 账号与会员」扫码登录", &[]);
         return;
     }
     if nav == Nav::Lyrics {
@@ -54,7 +55,7 @@ fn handle_nav_click(root: &mut Root, nav: Nav, cx: &mut Context<Root>) {
 
 fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> AnyElement {
     let foreground = if selected {
-        theme::text()
+        theme::accent()
     } else {
         theme::text_muted()
     };
@@ -74,9 +75,7 @@ fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> A
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
         .when(selected, |this| {
-            this.bg(theme::surface_selected())
-                .border_l_2()
-                .border_color(theme::accent())
+            this.font_weight(gpui::FontWeight::SEMIBOLD)
         })
         .when(!selected, |this| {
             this.hover(|style| style.bg(theme::surface_hover()).layer_scale(1.012))
@@ -111,11 +110,6 @@ fn nav_icon_cell(nav: Nav, selected: bool, cx: &mut Context<Root>) -> AnyElement
         .size(px(40.0))
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
-        .when(selected, |this| {
-            this.bg(theme::surface_selected())
-                .border_1()
-                .border_color(theme::accent())
-        })
         .when(!selected, |this| {
             this.hover(|style| style.bg(theme::surface_hover()).layer_scale(1.04))
         })
@@ -184,37 +178,65 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .w(px(theme::SIDEBAR_W))
         .h_full()
         .flex_none()
-        .bg(theme::bg())
-        .border_r_1()
-        .border_color(theme::border())
         .p(px(theme::space::MD))
         .gap(px(theme::space::XS))
         .child(
-            // 品牌区：强调色圆角块 + 汽水音乐名称
+            // 品牌区：汽水音乐标志 + 收起侧栏按钮（透明融于一体背景）
             div()
                 .flex()
                 .flex_row()
                 .items_center()
-                .gap(px(theme::space::MD))
+                .justify_between()
+                .gap(px(theme::space::SM))
                 .px(px(theme::space::MD))
                 .py(px(theme::space::SM))
                 .child(
                     div()
                         .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::MD))
+                        .min_w(px(0.0))
+                        .child(
+                            div()
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .size(px(28.0))
+                                .rounded(px(theme::radius::ROW))
+                                .overflow_hidden()
+                                .child(img("icons/sodam-logo.svg").size(px(28.0))),
+                        )
+                        .child(
+                            div()
+                                .truncate()
+                                .text_size(theme::Text::Large.size())
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme::text())
+                                .child(root.tr("汽水音乐")),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("sidebar-collapse-btn")
+                        .flex_none()
+                        .flex()
                         .items_center()
                         .justify_center()
                         .size(px(28.0))
                         .rounded(px(theme::radius::ROW))
-                        .bg(theme::accent_soft())
-                        .overflow_hidden()
-                        .child(img("icons/sodam-logo.svg").size(px(28.0))),
-                )
-                .child(
-                    div()
-                        .text_size(theme::Text::Large.size())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme::text())
-                        .child(root.tr("汽水音乐")),
+                        .cursor_pointer()
+                        .hover(|style| style.bg(theme::surface_hover()))
+                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.toggle_sidebar_collapsed(cx);
+                        }))
+                        .child(
+                            svg()
+                                .path(icons::path("chevron-left"))
+                                .size(px(theme::ICON_SM))
+                                .text_color(theme::text_muted()),
+                        ),
                 ),
         )
         .children(main_items)
@@ -254,9 +276,6 @@ pub fn render_compact(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .w(px(theme::SIDEBAR_COMPACT_W))
         .h_full()
         .flex_none()
-        .bg(theme::bg())
-        .border_r_1()
-        .border_color(theme::border())
         .py(px(theme::space::MD))
         .gap(px(theme::space::XS))
         .child(
@@ -266,14 +285,37 @@ pub fn render_compact(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .items_center()
                 .justify_center()
                 .size(px(36.0))
-                .mb(px(theme::space::SM))
                 .rounded(px(theme::radius::ROW))
-                .bg(theme::accent_soft())
                 .cursor_pointer()
                 .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
                     root.set_nav(Nav::Lyrics, cx);
                 }))
                 .child(img("icons/sodam-logo.svg").size(px(26.0))),
+        )
+        .child(
+            div()
+                .id("sidebar-expand-btn")
+                .flex()
+                .items_center()
+                .justify_center()
+                .w(px(36.0))
+                .h(px(26.0))
+                .mb(px(theme::space::XS))
+                .rounded(px(theme::radius::ROW))
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()))
+                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    if root.window_mode == theme::WindowMode::HalfScreen {
+                        root.set_window_mode(theme::WindowMode::Normal, cx);
+                    }
+                    root.set_sidebar_collapsed(false, cx);
+                }))
+                .child(
+                    svg()
+                        .path(icons::path("chevron-right"))
+                        .size(px(theme::ICON_SM))
+                        .text_color(theme::text_muted()),
+                ),
         )
         .children(items)
         .child(div().flex_1())
@@ -345,8 +387,5 @@ pub fn render_top_nav(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .w_full()
         .px(px(theme::space::MD))
         .py(px(theme::space::SM))
-        .bg(theme::bg())
-        .border_b_1()
-        .border_color(theme::border())
         .children(items)
 }

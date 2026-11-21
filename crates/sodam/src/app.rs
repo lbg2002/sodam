@@ -117,14 +117,11 @@ pub enum Nav {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SettingsSection {
+    Account,
     General,
     Playback,
     Lyrics,
-    Downloads,
     Storage,
-    Desktop,
-    Advanced,
-    Account,
     About,
 }
 
@@ -272,6 +269,11 @@ pub struct Root {
     pub lyrics_error: Option<String>,
     pub lyrics_active: Option<usize>,
     pub lyrics_scroll: gpui::UniformListScrollHandle,
+    pub(crate) lyrics_last_scrolled_index: Option<usize>,
+    pub(crate) lyrics_last_scrolled_track: String,
+    pub(crate) lyrics_scroll_anim_seq: u64,
+    pub(crate) lyrics_manual_scroll_until: Option<std::time::Instant>,
+    pub(crate) lyrics_last_viewport: (f32, f32),
     /// 防止快速换歌时旧歌词请求回写。
     lyrics_request_seq: u64,
     pub search_input: String,
@@ -434,6 +436,7 @@ pub struct Root {
     pub original_covers: HashMap<String, PathBuf>,
     pub original_cover_attempted: Arc<Mutex<HashSet<String>>>,
     pub ambient_colors: HashMap<String, (u8, u8, u8)>,
+    pub(crate) displayed_ambient_rgb: Option<(f32, f32, f32)>,
     pub(crate) cover_pool: CoverPool,
     /// 各列表当前渲染的行数（点「显示更多」时递增）。
     /// 扫码登录状态与轮询中的 token。
@@ -460,6 +463,7 @@ impl Root {
             .unwrap_or_else(|| theme::theme_from_appearance(cx.window_appearance()));
         theme::set_theme(theme);
         theme::set_reduced_motion(settings.reduced_motion);
+        theme::set_dynamic_cover_color(settings.dynamic_cover_color);
         let window_mode = theme::WindowMode::from_key(&settings.window_mode);
         let playback_view_mode = theme::PlaybackViewMode::from_key(&settings.playback_view_mode);
         let content_density = theme::ContentDensity::from_key(&settings.content_density);
@@ -534,7 +538,11 @@ impl Root {
             language,
             language_follows_system,
             settings,
-            settings_section: SettingsSection::General,
+            settings_section: if logged_in {
+                SettingsSection::General
+            } else {
+                SettingsSection::Account
+            },
             update_state: UpdateState::Idle,
             session: Some(session),
             queue,
@@ -564,6 +572,11 @@ impl Root {
             lyrics_error: None,
             lyrics_active: None,
             lyrics_scroll: gpui::UniformListScrollHandle::new(),
+            lyrics_last_scrolled_index: None,
+            lyrics_last_scrolled_track: String::new(),
+            lyrics_scroll_anim_seq: 0,
+            lyrics_manual_scroll_until: None,
+            lyrics_last_viewport: (0.0, 0.0),
             lyrics_request_seq: 0,
             search_input: String::new(),
             search_focus: cx.focus_handle(),
@@ -671,6 +684,7 @@ impl Root {
             original_covers: HashMap::new(),
             original_cover_attempted: Arc::new(Mutex::new(HashSet::new())),
             ambient_colors: HashMap::new(),
+            displayed_ambient_rgb: None,
             cover_pool: CoverPool::new(),
             login: LoginState::Idle,
             account: None,
@@ -684,17 +698,22 @@ impl Root {
             if root.queue.is_empty() {
                 root.start_recommendation(false, cx);
             } else {
-                let covers: Vec<String> = root
-                    .queue
-                    .tracks()
-                    .iter()
-                    .take(if root.settings.lazy_startup {
-                        4
-                    } else {
-                        usize::MAX
-                    })
-                    .map(|track| track.cover.clone())
-                    .collect();
+                let mut covers = Vec::new();
+                if let Some(current) = root.queue.current() {
+                    if !current.cover.trim().is_empty() {
+                        covers.push(current.cover.clone());
+                    }
+                }
+                let extra_limit = if root.settings.lazy_startup {
+                    4
+                } else {
+                    usize::MAX
+                };
+                for track in root.queue.tracks().iter().take(extra_limit) {
+                    if !track.cover.trim().is_empty() && !covers.contains(&track.cover) {
+                        covers.push(track.cover.clone());
+                    }
+                }
                 root.ensure_covers(&covers, cx);
                 root.status = root.tr("已恢复上次播放队列").to_string();
                 root.open_lyrics(cx);
@@ -1196,43 +1215,59 @@ impl Render for Root {
         theme::set_theme(self.theme);
         theme::set_ui_font_size(self.settings.ui_font_size);
         theme::set_reduced_motion(self.settings.reduced_motion);
+        theme::set_dynamic_cover_color(self.settings.dynamic_cover_color);
         if self.nav == Nav::Scenes || self.nav == Nav::Home {
             self.sync_scenes_list();
         }
-        let ambient_url = self.queue.current().map(|track| track.cover.clone());
-        let ambient_color = ambient_url
+        let ambient_url = self
+            .pending_track
+            .as_ref()
+            .or_else(|| self.queue.current())
+            .map(|track| track.cover.clone());
+        let target_ambient = ambient_url
             .as_deref()
             .and_then(|url| self.ambient_colors.get(url).copied());
+        if self.displayed_ambient_rgb.is_none() {
+            if let Some((r, g, b)) = target_ambient {
+                self.displayed_ambient_rgb = Some((f32::from(r), f32::from(g), f32::from(b)));
+            }
+        }
+        let effective_ambient = if self.settings.dynamic_cover_color {
+            self.displayed_ambient_rgb
+                .map(|(r, g, b)| (r.round() as u8, g.round() as u8, b.round() as u8))
+                .or(target_ambient)
+        } else {
+            None
+        };
         if std::env::var("SODAM_THEME_LOG").is_ok() {
             eprintln!(
-                "[theme] current={:?} url={:?} color={:?}",
+                "[theme] current={:?} url={:?} target={:?} effective={:?}",
                 self.queue.current().map(|track| track.title.clone()),
                 ambient_url,
-                ambient_color
+                target_ambient,
+                effective_ambient
             );
         }
-        theme::set_ambient_rgb(ambient_color);
+        theme::set_ambient_rgb(effective_ambient);
         if self.nav == Nav::Lyrics || self.window_mode == theme::WindowMode::Fullscreen {
             let active = self.synced_lyrics_active();
             self.lyrics_active = active;
-            if let Some(index) = active {
-                self.lyrics_scroll
-                    .scroll_to_item_strict(index, gpui::ScrollStrategy::Center);
-            }
+            self.maybe_smooth_scroll_lyrics(cx);
         }
 
         let viewport = window.viewport_size();
         let viewport_w = f32::from(viewport.width);
         let viewport_h = f32::from(viewport.height);
 
-        // 根据窗口实际尺寸区分响应式层级
+        // 根据窗口实际尺寸与手动折叠开关区分响应式层级
         let is_compact_mode = self.window_mode == theme::WindowMode::Compact
             || (viewport_w < 480.0 && viewport_h < 280.0);
         let is_fullscreen_mode =
             !is_compact_mode && self.window_mode == theme::WindowMode::Fullscreen;
         let is_narrow_window = viewport_w < theme::breakpoints::NARROW_W;
         let use_compact_sidebar = !is_narrow_window
-            && (self.window_mode == theme::WindowMode::HalfScreen
+            && (self.settings.sidebar_collapsed
+                || self.window_mode == theme::WindowMode::HalfScreen
                 || viewport_w < theme::breakpoints::COMPACT_W);
 
         let toast_left = if is_fullscreen_mode || is_compact_mode || is_narrow_window {
@@ -1373,13 +1408,20 @@ impl Render for Root {
                 this.children(ui::titlebar::resize_handles())
             })
             .when_some(crate::experience3::toast_message(), |this, message| {
+                let toast_bottom = if is_fullscreen_mode && self.fullscreen_controls_visible {
+                    118.0 + theme::space::LG
+                } else if is_fullscreen_mode {
+                    theme::space::XL
+                } else {
+                    theme::PLAYER_H + theme::space::LG
+                };
                 this.child(
                     gpui::deferred(
                         div()
                             .absolute()
                             .left(px(toast_left))
                             .right(px(theme::space::XL))
-                            .bottom(px(theme::PLAYER_H + theme::space::LG))
+                            .bottom(px(toast_bottom))
                             .flex()
                             .justify_center()
                             .child(

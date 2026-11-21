@@ -170,16 +170,26 @@ fn volume_slider(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         )
 }
 
-/// 进度条：拖动过程中只更新预览（不 seek），**松手才真正跳转**。
-///
-/// 之前是「每移动一次就 try_seek 一次」，解码器被反复打断，
-/// 听起来像变速/鬼畜；sonora 的做法也是拖动预览、松手提交。
-fn progress_bar(
+struct ProgressBarStyle {
+    id: &'static str,
+    fill_color: gpui::Rgba,
+    track_height: f32,
+    thumb_size: f32,
+}
+
+fn progress_bar_with(
     root: &Root,
     progress: f32,
     loading: bool,
+    style: ProgressBarStyle,
     cx: &mut Context<Root>,
 ) -> impl IntoElement {
+    let ProgressBarStyle {
+        id,
+        fill_color,
+        track_height,
+        thumb_size,
+    } = style;
     let shown = root.progress_preview.unwrap_or(progress).clamp(0.0, 1.0);
     let bounds_slot = root.progress_track_bounds.clone();
     let fraction_at = move |x: f32| -> Option<f32> {
@@ -194,43 +204,47 @@ fn progress_bar(
     let fraction_for_down = fraction_at.clone();
     let fraction_for_move = fraction_at.clone();
     let slot_for_canvas = root.progress_track_bounds.clone();
+    let track_top = (18.0 - track_height) * 0.5;
+    let thumb_top = (18.0 - thumb_size) * 0.5;
 
     div()
         .relative()
         .flex()
         .items_center()
-        .h(px(14.0))
+        .h(px(18.0))
         .flex_1()
         .min_w(px(120.0))
         .when(loading, |this| this.opacity(0.4))
         .child(
             div()
                 .absolute()
-                .top(px(5.5))
+                .top(px(track_top))
                 .left(px(0.0))
                 .right(px(0.0))
-                .h(px(3.0))
-                .rounded(px(2.0))
-                .bg(theme::surface_hover()),
+                .h(px(track_height))
+                .rounded(px(track_height * 0.5))
+                .bg(theme::rgba_alpha(theme::border(), 0.72)),
         )
         .child(
             div()
                 .absolute()
-                .top(px(5.5))
+                .top(px(track_top))
                 .left(px(0.0))
-                .h(px(3.0))
-                .rounded(px(2.0))
-                .bg(theme::accent())
+                .h(px(track_height))
+                .rounded(px(track_height * 0.5))
+                .bg(fill_color)
                 .w(gpui::relative(shown)),
         )
         .child(
             div()
                 .absolute()
-                .top(px(5.5))
+                .top(px(thumb_top))
                 .left(gpui::relative(shown))
-                .size(px(3.0))
+                .ml(px(-thumb_size * 0.5))
+                .size(px(thumb_size))
                 .rounded_full()
-                .bg(theme::text()),
+                .bg(theme::text())
+                .shadow_sm(),
         )
         .child(
             canvas(
@@ -246,13 +260,14 @@ fn progress_bar(
         )
         .child(
             div()
-                .id("progress-track")
+                .id(id)
                 .absolute()
                 .size_full()
                 .when(!loading, |this| this.cursor_pointer())
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |root, event: &MouseDownEvent, _window, cx| {
+                        cx.stop_propagation();
                         if root.pending_track.is_some() {
                             return;
                         }
@@ -287,6 +302,27 @@ fn progress_bar(
                     }),
                 ),
         )
+}
+
+/// 进度条：拖动过程中只更新预览（不 seek），**松手才真正跳转**。
+fn progress_bar(
+    root: &Root,
+    progress: f32,
+    loading: bool,
+    cx: &mut Context<Root>,
+) -> impl IntoElement {
+    progress_bar_with(
+        root,
+        progress,
+        loading,
+        ProgressBarStyle {
+            id: "progress-track",
+            fill_color: theme::accent(),
+            track_height: 3.5,
+            thumb_size: 8.0,
+        },
+        cx,
+    )
 }
 
 /// 引擎里的音质标签由核心层生成；这里按当前语言显示。
@@ -332,9 +368,6 @@ pub fn bottom_lyrics_strip(root: &Root, cx: &mut Context<Root>) -> gpui::AnyElem
         .w_full()
         .h(px(30.0))
         .px(px(theme::space::LG))
-        .bg(theme::ink_glow())
-        .border_t_1()
-        .border_color(theme::border())
         .font_family(font_family)
         .cursor_pointer()
         .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
@@ -413,26 +446,33 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .unwrap_or(1200.0);
     let compact = measured_width < root.settings.player_bar_compact_width as f32;
     let very_narrow = measured_width < 680.0;
+    let medium_width = measured_width < 1160.0;
     let player_width_slot = root.player_bar_width.clone();
     let left_w = if very_narrow {
-        160.0
+        156.0
     } else if compact {
-        220.0
+        210.0
+    } else if medium_width {
+        232.0
     } else {
         280.0
     };
-    let left_min_w = if very_narrow { 120.0 } else { 180.0 };
+    let left_min_w = if very_narrow { 120.0 } else { 172.0 };
     let right_w = if very_narrow {
-        112.0
+        110.0
     } else if compact {
-        176.0
+        156.0
+    } else if medium_width {
+        320.0
     } else {
-        410.0
+        384.0
     };
     let right_min_w = if very_narrow {
-        96.0
+        92.0
     } else if compact {
-        148.0
+        132.0
+    } else if medium_width {
+        280.0
     } else {
         310.0
     };
@@ -456,9 +496,6 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         } else {
             theme::space::LG
         }))
-        .bg(theme::bg())
-        .border_t_1()
-        .border_color(theme::border())
         .child(
             canvas(
                 move |bounds, window, _cx| {
@@ -660,7 +697,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                                             .px(px(theme::space::SM))
                                             .py(px(1.0))
                                             .rounded(px(theme::radius::PILL))
-                                            .bg(theme::surface_elevated())
+                                            .bg(theme::accent_soft())
                                             .text_size(theme::Text::Tiny.size())
                                             .text_color(theme::accent())
                                             .child(quality.clone()),
@@ -768,7 +805,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .flex_row()
                         .items_center()
                         .gap(px(theme::space::SM))
-                        .w(px(if very_narrow { 220.0 } else { 420.0 }))
+                        .w(px(if very_narrow { 220.0 } else { 440.0 }))
                         .max_w_full()
                         .child(
                             div()
@@ -929,6 +966,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                     icon_button("queue", "list-end", theme::ICON, theme::text_muted()).on_click(
                         cx.listener(|root, _event: &ClickEvent, _window, cx| {
                             root.queue_open = !root.queue_open;
+                            root.lyrics_manual_scroll_until = None;
                             if root.queue_open {
                                 root.anchor_queue_scroll();
                             }
@@ -1085,6 +1123,555 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .with_priority(4),
             )
         })
+}
+
+/// 沉浸模式专属双层底部控制坞：
+/// - 上层紧贴歌词区下方：居中宽幅流光进度条 + 两端时间刻度
+/// - 下层贴合窗口底部：半透明毛玻璃感播放控制栏
+pub fn render_immersive_dock(
+    root: &Root,
+    viewport_w: f32,
+    cx: &mut Context<Root>,
+) -> gpui::AnyElement {
+    let language = root.language;
+    let snapshot = root.engine.snapshot();
+    let loading = root.pending_track.is_some();
+    let track = root
+        .pending_track
+        .clone()
+        .or_else(|| root.queue.current().cloned());
+    let title = track
+        .as_ref()
+        .map(|track| track.title.clone())
+        .unwrap_or_else(|| language.text("未在播放").to_string());
+    let artist = track
+        .as_ref()
+        .map(|track| track.artist.clone())
+        .unwrap_or_else(|| language.text("选择一首歌开始播放吧").to_string());
+    let quality = localized_quality(snapshot.quality.clone(), language);
+    let is_preview = crate::views::lyrics::is_preview_stream(&snapshot.quality);
+    let is_vip = track.as_ref().is_some_and(|track| track.vip);
+    let liked = track
+        .as_ref()
+        .is_some_and(|track| root.liked_ids.contains(&track.id));
+    let downloaded = track
+        .as_ref()
+        .is_some_and(|track| root.downloaded_ids.contains(&track.id));
+    let pending_download = track
+        .as_ref()
+        .is_some_and(|track| root.pending_downloads.contains_key(&track.id));
+    let download_inflight = track
+        .as_ref()
+        .is_some_and(|track| root.download_inflight.contains(&track.id));
+    let cover_path = track.as_ref().and_then(|track| root.cover_of(&track.cover));
+    let progress = snapshot.progress_fraction();
+    let volume = snapshot.volume;
+    let stage_accent = theme::stage_accent();
+
+    let compact_dock = viewport_w < 860.0;
+    let very_narrow = viewport_w < 640.0;
+    let progress_pad_x = (viewport_w * 0.06).clamp(20.0, 96.0);
+    let dock_pad_x = (viewport_w * 0.035).clamp(16.0, 48.0);
+
+    let play_mode = root.queue.mode;
+    let mode_icon = match play_mode {
+        sodam_core::queue::PlayMode::Shuffle => "shuffle",
+        sodam_core::queue::PlayMode::Sequential | sodam_core::queue::PlayMode::RepeatOne => {
+            "repeat"
+        }
+    };
+    let mode_color = if play_mode == sodam_core::queue::PlayMode::Sequential {
+        theme::text_muted()
+    } else {
+        stage_accent
+    };
+
+    let progress_layer = div()
+        .w_full()
+        .px(px(progress_pad_x))
+        .pt(px(4.0))
+        .pb(px(10.0))
+        .flex()
+        .justify_center()
+        .child(
+            div()
+                .w_full()
+                .max_w(px(1120.0))
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::MD))
+                .child(
+                    div()
+                        .w(px(44.0))
+                        .text_right()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(snapshot.position_label()),
+                )
+                .child(progress_bar_with(
+                    root,
+                    progress,
+                    loading,
+                    ProgressBarStyle {
+                        id: "immersive-progress-track",
+                        fill_color: stage_accent,
+                        track_height: 4.5,
+                        thumb_size: 11.0,
+                    },
+                    cx,
+                ))
+                .child(
+                    div()
+                        .w(px(44.0))
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(snapshot.duration_label()),
+                ),
+        );
+
+    let like_track = track.clone();
+    let download_track = track.clone();
+
+    let controls_layer = div()
+        .relative()
+        .w_full()
+        .h(px(62.0))
+        .px(px(dock_pad_x))
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::MD))
+        // 左：缩略图 + 曲名/歌手 + 喜欢/下载
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::MD))
+                .flex_1()
+                .min_w(px(0.0))
+                .child(
+                    div()
+                        .id("immersive-dock-cover")
+                        .flex_none()
+                        .cursor_pointer()
+                        .hover(|style| style.opacity(0.82))
+                        .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+                            cx.stop_propagation();
+                        })
+                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.set_window_mode(theme::WindowMode::Normal, cx);
+                        }))
+                        .child(cover(cover_path, 42.0, theme::radius::ART)),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .gap(px(2.0))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap(px(theme::space::XS))
+                                .min_w(px(0.0))
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(theme::Text::Body.size())
+                                        .font_weight(gpui::FontWeight::BOLD)
+                                        .text_color(theme::text())
+                                        .child(title),
+                                )
+                                .when(is_vip, |this| {
+                                    this.child(
+                                        div()
+                                            .flex_none()
+                                            .px(px(6.0))
+                                            .py(px(1.0))
+                                            .rounded(px(theme::radius::PILL))
+                                            .bg(theme::rgba_alpha(stage_accent, 0.16))
+                                            .text_size(theme::Text::Tiny.size())
+                                            .text_color(stage_accent)
+                                            .child("VIP"),
+                                    )
+                                })
+                                .when(is_preview, |this| {
+                                    this.child(crate::views::lyrics::preview_badge(root))
+                                }),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .gap(px(theme::space::SM))
+                                .min_w(px(0.0))
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(theme::Text::Tiny.size())
+                                        .text_color(theme::text_muted())
+                                        .child(artist),
+                                )
+                                .when(!quality.is_empty() && !very_narrow, |this| {
+                                    this.child(
+                                        div()
+                                            .flex_none()
+                                            .px(px(6.0))
+                                            .py(px(1.0))
+                                            .rounded(px(theme::radius::PILL))
+                                            .bg(theme::accent_soft())
+                                            .text_size(theme::Text::Tiny.size())
+                                            .text_color(stage_accent)
+                                            .child(quality),
+                                    )
+                                }),
+                        ),
+                )
+                .when(!compact_dock, |this| {
+                    this.child(
+                        div()
+                            .flex_none()
+                            .flex()
+                            .flex_row()
+                            .items_center()
+                            .gap(px(2.0))
+                            .child(
+                                icon_button(
+                                    "immersive-like",
+                                    if liked { "heart-filled" } else { "heart" },
+                                    theme::ICON_SM,
+                                    if liked {
+                                        stage_accent
+                                    } else {
+                                        theme::text_muted()
+                                    },
+                                )
+                                .on_click(cx.listener(
+                                    move |root, _event: &ClickEvent, _window, cx| {
+                                        if let Some(track) = like_track.clone() {
+                                            root.toggle_like(track, cx);
+                                        }
+                                    },
+                                )),
+                            )
+                            .child(
+                                icon_button(
+                                    "immersive-download",
+                                    if downloaded { "check" } else { "download" },
+                                    theme::ICON_SM,
+                                    if downloaded || pending_download {
+                                        stage_accent
+                                    } else if download_inflight {
+                                        theme::text_faint()
+                                    } else {
+                                        theme::text_muted()
+                                    },
+                                )
+                                .on_click(cx.listener(
+                                    move |root, _event: &ClickEvent, _window, cx| {
+                                        if let Some(track) = download_track.clone() {
+                                            root.toggle_download(track, cx);
+                                        }
+                                    },
+                                )),
+                            ),
+                    )
+                }),
+        )
+        // 中：播放模式 + 上一首 / 播放暂停 / 下一首
+        .child(
+            div()
+                .flex_none()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(if very_narrow {
+                    theme::space::SM
+                } else {
+                    theme::space::LG
+                }))
+                .when(!very_narrow, |this| {
+                    this.child(
+                        div()
+                            .id("immersive-play-mode")
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .gap(px(2.0))
+                            .px(px(theme::space::XS))
+                            .h(px(theme::size::CONTROL_SM))
+                            .rounded(px(theme::radius::PILL))
+                            .cursor_pointer()
+                            .hover(|style| style.bg(theme::surface_hover()))
+                            .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.queue.mode = root.queue.mode.next();
+                                cx.notify();
+                            }))
+                            .child(
+                                svg()
+                                    .path(icons::path(mode_icon))
+                                    .size(px(theme::ICON))
+                                    .text_color(mode_color),
+                            )
+                            .when(
+                                play_mode == sodam_core::queue::PlayMode::RepeatOne,
+                                |pill| {
+                                    pill.child(
+                                        div()
+                                            .text_size(px(10.0))
+                                            .font_weight(gpui::FontWeight::BOLD)
+                                            .text_color(stage_accent)
+                                            .child("1"),
+                                    )
+                                },
+                            ),
+                    )
+                })
+                .child(transport_button(
+                    "immersive-prev",
+                    "skip-back",
+                    theme::ICON_LG,
+                    cx,
+                    |root, cx| {
+                        root.prev_track(cx);
+                    },
+                ))
+                .child(
+                    div()
+                        .id("immersive-play-toggle")
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .size(px(42.0))
+                        .rounded_full()
+                        .bg(stage_accent)
+                        .shadow_md()
+                        .cursor_pointer()
+                        .hover(|style| style.layer_scale(1.06))
+                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.toggle_play(cx);
+                            cx.notify();
+                        }))
+                        .child(if loading {
+                            crate::ui::spinner::spinner(theme::ICON_LG, theme::accent_foreground())
+                                .into_any_element()
+                        } else {
+                            svg()
+                                .path(icons::path(if snapshot.playing { "pause" } else { "play" }))
+                                .size(px(theme::ICON_LG))
+                                .text_color(theme::accent_foreground())
+                                .into_any_element()
+                        }),
+                )
+                .child(transport_button(
+                    "immersive-next",
+                    "skip-forward",
+                    theme::ICON_LG,
+                    cx,
+                    |root, cx| {
+                        root.next_track(cx);
+                    },
+                ))
+                .when(!very_narrow, |this| this.child(div().w(px(28.0)))),
+        )
+        // 右：桌面歌词 + 睡眠定时 + 音量 + 退出沉浸 + 队列
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_end()
+                .gap(px(theme::space::XS))
+                .flex_1()
+                .min_w(px(0.0))
+                .when(!very_narrow, |this| {
+                    this.child(
+                        icon_button(
+                            "immersive-desktop-lyrics",
+                            "captions",
+                            theme::ICON,
+                            if root.desktop_lyrics_open {
+                                stage_accent
+                            } else {
+                                theme::text_muted()
+                            },
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.open_desktop_lyrics(cx);
+                            },
+                        )),
+                    )
+                    .child(
+                        icon_button(
+                            "immersive-sleep-timer",
+                            "moon",
+                            theme::ICON,
+                            if root.sleep_deadline.is_some() || root.sleep_after_current {
+                                stage_accent
+                            } else {
+                                theme::text_muted()
+                            },
+                        )
+                        .on_click(cx.listener(
+                            |root, _event: &ClickEvent, _window, cx| {
+                                root.sleep_menu_open = !root.sleep_menu_open;
+                                cx.notify();
+                            },
+                        )),
+                    )
+                })
+                .child(
+                    icon_button(
+                        "immersive-volume",
+                        if volume <= 0.01 {
+                            "volume-x"
+                        } else {
+                            "volume-2"
+                        },
+                        theme::ICON,
+                        theme::text_muted(),
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.toggle_mute();
+                            cx.notify();
+                        },
+                    )),
+                )
+                .when(!compact_dock, |this| this.child(volume_slider(root, cx)))
+                .child(
+                    icon_button(
+                        "immersive-exit-dock-btn",
+                        "chevron-left",
+                        theme::ICON,
+                        theme::text_muted(),
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.set_window_mode(theme::WindowMode::Normal, cx);
+                        },
+                    )),
+                )
+                .child(
+                    icon_button(
+                        "immersive-queue",
+                        "list-end",
+                        theme::ICON,
+                        if root.queue_open {
+                            stage_accent
+                        } else {
+                            theme::text_muted()
+                        },
+                    )
+                    .on_click(cx.listener(
+                        |root, _event: &ClickEvent, _window, cx| {
+                            root.queue_open = !root.queue_open;
+                            root.lyrics_manual_scroll_until = None;
+                            if root.queue_open {
+                                root.anchor_queue_scroll();
+                            }
+                            cx.notify();
+                        },
+                    )),
+                ),
+        );
+
+    div()
+        .id("immersive-bottom-dock")
+        .relative()
+        .w_full()
+        .flex()
+        .flex_col()
+        .on_mouse_down(MouseButton::Left, |_event, _window, cx| {
+            cx.stop_propagation();
+        })
+        .on_click(|_event, _window, cx| {
+            cx.stop_propagation();
+        })
+        .child(progress_layer)
+        .child(controls_layer)
+        .when(root.sleep_menu_open, |this| {
+            let options = [
+                (
+                    "fs-sleep-current",
+                    root.tr("播完当前歌曲").to_string(),
+                    0u32,
+                ),
+                ("fs-sleep-15", root.tr("15 分钟").to_string(), 15u32),
+                ("fs-sleep-30", root.tr("30 分钟").to_string(), 30u32),
+                ("fs-sleep-60", root.tr("60 分钟").to_string(), 60u32),
+                ("fs-sleep-90", root.tr("90 分钟").to_string(), 90u32),
+            ];
+            this.child(
+                gpui::deferred(
+                    div()
+                        .absolute()
+                        .right(px(88.0))
+                        .bottom(px(110.0))
+                        .w(px(220.0))
+                        .p(px(theme::space::XS))
+                        .rounded(px(theme::radius::CARD))
+                        .bg(theme::surface_elevated())
+                        .border_1()
+                        .border_color(theme::border())
+                        .shadow_lg()
+                        .child(
+                            div()
+                                .px(px(theme::space::SM))
+                                .py(px(theme::space::XS))
+                                .text_size(theme::Text::Tiny.size())
+                                .text_color(theme::text_faint())
+                                .child(root.sleep_timer_label()),
+                        )
+                        .children(options.into_iter().map(|(id, label, minutes)| {
+                            div()
+                                .id(id)
+                                .px(px(theme::space::SM))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text())
+                                .on_click(cx.listener(
+                                    move |root, _event: &ClickEvent, _window, cx| {
+                                        if minutes == 0 {
+                                            root.set_sleep_after_current(cx);
+                                        } else {
+                                            root.set_sleep_timer_minutes(minutes, cx);
+                                        }
+                                    },
+                                ))
+                                .child(label)
+                        }))
+                        .child(
+                            div()
+                                .id("fs-sleep-off")
+                                .px(px(theme::space::SM))
+                                .py(px(theme::space::SM))
+                                .rounded(px(theme::radius::ROW))
+                                .cursor_pointer()
+                                .hover(|style| style.bg(theme::surface_hover()))
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                    root.set_sleep_timer_minutes(0, cx);
+                                }))
+                                .child(root.tr("关闭睡眠定时")),
+                        ),
+                )
+                .with_priority(4),
+            )
+        })
+        .into_any_element()
 }
 
 // ---------------------------------------------------------------------------
@@ -1459,9 +2046,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
             this.w(px(QUEUE_DRAWER_W))
                 .ml_auto()
                 .flex_none()
-                .bg(theme::bg())
-                .border_l_1()
-                .border_color(theme::border())
+                .bg(theme::rgba_alpha(theme::bg(), 0.28))
         })
         .child(
             div()
@@ -1473,9 +2058,6 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                 .h(px(theme::TOOLBAR_H))
                 .flex_none()
                 .px(px(theme::space::LG))
-                .when(!embedded, |this| {
-                    this.border_b_1().border_color(theme::border())
-                })
                 .child(
                     div()
                         .text_size(theme::Text::Tiny.size())
@@ -1492,6 +2074,7 @@ fn queue_drawer_inner(root: &Root, cx: &mut Context<Root>, embedded: bool) -> im
                             icon_button("drawer-close", "x", theme::ICON_SM, theme::text_muted())
                                 .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
                                     root.queue_open = false;
+                                    root.lyrics_manual_scroll_until = None;
                                     cx.notify();
                                 })),
                         ),

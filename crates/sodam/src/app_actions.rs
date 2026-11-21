@@ -251,6 +251,46 @@ impl Root {
                 let lyric_changed = active != root.lyrics_active;
                 if lyric_changed {
                     root.lyrics_active = active;
+                    root.scroll_lyrics_to_active(cx);
+                    cx.notify();
+                }
+
+                // 封面主色随切歌平滑插值过渡，实现柔和不闪烁的流光晕染。
+                let ambient_target = root
+                    .pending_track
+                    .as_ref()
+                    .or_else(|| root.queue.current())
+                    .and_then(|track| root.ambient_colors.get(&track.cover).copied());
+                if root.settings.dynamic_cover_color {
+                    if let Some((tr, tg, tb)) = ambient_target {
+                        let (tr, tg, tb) = (f32::from(tr), f32::from(tg), f32::from(tb));
+                        match root.displayed_ambient_rgb {
+                            Some((cr, cg, cb)) if theme::motion_enabled() => {
+                                let diff =
+                                    (tr - cr).abs().max((tg - cg).abs()).max((tb - cb).abs());
+                                if diff > 1.2 {
+                                    root.displayed_ambient_rgb = Some((
+                                        cr + (tr - cr) * 0.30,
+                                        cg + (tg - cg) * 0.30,
+                                        cb + (tb - cb) * 0.30,
+                                    ));
+                                    cx.notify();
+                                } else if diff > 0.01 {
+                                    root.displayed_ambient_rgb = Some((tr, tg, tb));
+                                    cx.notify();
+                                }
+                            }
+                            _ => {
+                                root.displayed_ambient_rgb = Some((tr, tg, tb));
+                                cx.notify();
+                            }
+                        }
+                    } else if root.displayed_ambient_rgb.is_some() {
+                        root.displayed_ambient_rgb = None;
+                        cx.notify();
+                    }
+                } else if root.displayed_ambient_rgb.is_some() {
+                    root.displayed_ambient_rgb = None;
                     cx.notify();
                 }
 
@@ -1279,12 +1319,167 @@ impl Root {
         self.window_mode = mode;
         self.fullscreen_controls_visible = true;
         self.fullscreen_last_interaction = std::time::Instant::now();
+        self.lyrics_last_scrolled_index = None;
+        self.lyrics_manual_scroll_until = None;
+        self.lyrics_scroll.0.borrow_mut().last_item_size = None;
         self.nav_transition_seq = self.nav_transition_seq.wrapping_add(1);
         self.settings.window_mode = mode.key().to_string();
         let _ = self.settings.save();
         let label = self.tr(mode.label_zh()).to_string();
         let msg = self.localized("显示模式：{}", &[label]);
         self.toast(msg, cx);
+    }
+
+    /// 手动收起或展开左侧功能栏并持久化。
+    pub fn set_sidebar_collapsed(&mut self, collapsed: bool, cx: &mut Context<Self>) {
+        if self.settings.sidebar_collapsed == collapsed {
+            return;
+        }
+        self.settings.sidebar_collapsed = collapsed;
+        let _ = self.settings.save();
+        cx.notify();
+    }
+
+    pub fn toggle_sidebar_collapsed(&mut self, cx: &mut Context<Self>) {
+        let next = !self.settings.sidebar_collapsed;
+        self.set_sidebar_collapsed(next, cx);
+    }
+
+    /// 开启/关闭封面动态流光取色。
+    pub fn set_dynamic_cover_color(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        self.settings.dynamic_cover_color = enabled;
+        theme::set_dynamic_cover_color(enabled);
+        self.theme_transition_seq = self.theme_transition_seq.wrapping_add(1);
+        if !enabled {
+            self.displayed_ambient_rgb = None;
+        } else {
+            let target = self
+                .pending_track
+                .as_ref()
+                .or_else(|| self.queue.current())
+                .and_then(|track| self.ambient_colors.get(&track.cover).copied());
+            if let Some((r, g, b)) = target {
+                self.displayed_ambient_rgb = Some((f32::from(r), f32::from(g), f32::from(b)));
+            }
+        }
+        let _ = self.settings.save();
+        let msg = if enabled {
+            self.tr("封面动态流光染色已开启").to_string()
+        } else {
+            self.tr("封面动态流光染色已关闭").to_string()
+        };
+        self.toast(msg, cx);
+    }
+
+    pub(crate) fn maybe_smooth_scroll_lyrics(&mut self, cx: &mut Context<Self>) {
+        let curr_vp = self
+            .lyrics_scroll
+            .0
+            .borrow()
+            .last_item_size
+            .map(|s| (f32::from(s.item.width), f32::from(s.item.height)))
+            .unwrap_or((0.0, 0.0));
+        let vp_changed = curr_vp.1 > 1.0
+            && ((curr_vp.0 - self.lyrics_last_viewport.0).abs() > 8.0
+                || (curr_vp.1 - self.lyrics_last_viewport.1).abs() > 8.0);
+        if vp_changed {
+            self.lyrics_last_viewport = curr_vp;
+        }
+        if vp_changed
+            || self.lyrics_active != self.lyrics_last_scrolled_index
+            || self.lyrics_track_id != self.lyrics_last_scrolled_track
+        {
+            self.scroll_lyrics_to_active(cx);
+        }
+    }
+
+    /// 平滑滚动歌词到当前高亮行（尊重 4 秒用户手动滚轮浏览保护期）。
+    pub(crate) fn scroll_lyrics_to_active(&mut self, cx: &mut Context<Self>) {
+        if !(self.nav == Nav::Lyrics || self.window_mode == theme::WindowMode::Fullscreen) {
+            return;
+        }
+        let Some(active) = self.lyrics_active else {
+            return;
+        };
+        if self
+            .lyrics_manual_scroll_until
+            .is_some_and(|until| std::time::Instant::now() < until)
+        {
+            return;
+        }
+        let pad_rows = crate::views::lyrics::LYRICS_PAD_ROWS;
+        let total_rows = self.lyrics.len() + pad_rows * 2;
+        if total_rows == 0 {
+            return;
+        }
+        let target_row = active + pad_rows;
+        let last_size = self.lyrics_scroll.0.borrow().last_item_size;
+        let Some(last_size) = last_size else {
+            self.lyrics_scroll
+                .scroll_to_item(target_row, gpui::ScrollStrategy::Center);
+            self.lyrics_last_scrolled_index = Some(active);
+            self.lyrics_last_scrolled_track = self.lyrics_track_id.clone();
+            return;
+        };
+        let viewport_h = f32::from(last_size.item.height);
+        let contents_h = f32::from(last_size.contents.height);
+        if viewport_h <= 1.0 || contents_h <= viewport_h {
+            self.lyrics_last_scrolled_index = Some(active);
+            self.lyrics_last_scrolled_track = self.lyrics_track_id.clone();
+            return;
+        }
+        let item_h = contents_h / total_rows as f32;
+        let item_center = (target_row as f32 + 0.5) * item_h;
+        let max_scroll = (contents_h - viewport_h).max(0.0);
+        let target_y = -(item_center - viewport_h * 0.5).clamp(0.0, max_scroll);
+
+        self.lyrics_last_scrolled_index = Some(active);
+        self.lyrics_last_scrolled_track = self.lyrics_track_id.clone();
+
+        if !theme::motion_enabled() {
+            let base = self.lyrics_scroll.0.borrow().base_handle.clone();
+            base.set_offset(gpui::point(gpui::px(0.0), gpui::px(target_y)));
+            cx.notify();
+            return;
+        }
+
+        self.lyrics_scroll_anim_seq = self.lyrics_scroll_anim_seq.wrapping_add(1);
+        let anim_seq = self.lyrics_scroll_anim_seq;
+        cx.spawn(async move |this, cx| {
+            for _ in 0..24 {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(16))
+                    .await;
+                let mut should_continue = false;
+                let _ = this.update(cx, |root, cx| {
+                    if root.lyrics_scroll_anim_seq != anim_seq {
+                        return;
+                    }
+                    if root
+                        .lyrics_manual_scroll_until
+                        .is_some_and(|until| std::time::Instant::now() < until)
+                    {
+                        return;
+                    }
+                    let base = root.lyrics_scroll.0.borrow().base_handle.clone();
+                    let curr_y = f32::from(base.offset().y);
+                    let delta = target_y - curr_y;
+                    if delta.abs() <= 0.8 {
+                        base.set_offset(gpui::point(gpui::px(0.0), gpui::px(target_y)));
+                        cx.notify();
+                        return;
+                    }
+                    let next_y = curr_y + delta * 0.24;
+                    base.set_offset(gpui::point(gpui::px(0.0), gpui::px(next_y)));
+                    cx.notify();
+                    should_continue = true;
+                });
+                if !should_continue {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     /// 循环切换窗口显示模式（普通 -> 半屏 -> 全屏沉浸 -> 紧凑小窗）。
@@ -1401,17 +1596,28 @@ impl Root {
         let settings = self.settings.clone();
         let fetch_url = url.to_string();
         let work_url = fetch_url.clone();
-        let work = cx
-            .background_spawn(async move { Session::new(settings).original_cover_path(&work_url) });
+        let work = cx.background_spawn(async move {
+            let path = Session::new(settings).original_cover_path(&work_url);
+            let color = path.as_deref().and_then(sodam_core::color::dominant_color);
+            (path, color)
+        });
         cx.spawn(async move |this, cx| {
-            let path = work.await;
+            let (path, color) = work.await;
             let _ = this.update(cx, |root, cx| {
+                let mut updated = false;
+                if let Some(color) = color {
+                    root.ambient_colors.insert(fetch_url.clone(), color);
+                    updated = true;
+                }
                 if let Some(path) = path {
                     root.original_covers.insert(fetch_url.clone(), path.clone());
                     // 原图下载成功但缩略图失败时，列表 / 队列也能立刻拿到封面。
                     if !root.covers.contains_key(&fetch_url) {
                         Arc::make_mut(&mut root.covers).insert(fetch_url.clone(), path);
                     }
+                    updated = true;
+                }
+                if updated {
                     cx.notify();
                 }
             });
@@ -1460,6 +1666,9 @@ impl Root {
                     Ok(raw) => {
                         root.lyrics = Arc::new(raw);
                         root.lyrics_active = None;
+                        root.lyrics_last_scrolled_index = None;
+                        root.lyrics_manual_scroll_until = None;
+                        root.lyrics_scroll.0.borrow_mut().last_item_size = None;
                         root.status = if root.lyrics.is_empty() {
                             root.localized("「{}」没有可用歌词", std::slice::from_ref(&track.title))
                         } else {
@@ -2474,6 +2683,16 @@ impl Root {
         cx.notify();
     }
 
+    pub fn open_github_repo(&mut self, cx: &mut Context<Self>) {
+        self.status = match system_open("https://github.com/lbg2002/sodam") {
+            Ok(_) => self.tr("已在浏览器打开 GitHub 仓库").to_string(),
+            Err(err) => self.localized("打开 GitHub 仓库失败：{err}", &[err.to_string()]),
+        };
+        let msg = self.status.clone();
+        self.toast(msg, cx);
+        cx.notify();
+    }
+
     /// 统一页面切换：保留返回栈，详情页使用通用返回组件。
     pub(crate) fn set_nav(&mut self, nav: Nav, cx: &mut Context<Self>) {
         if self.nav == nav {
@@ -2486,6 +2705,11 @@ impl Root {
         self.nav = nav;
         self.nav_transition_seq = self.nav_transition_seq.wrapping_add(1);
         crate::experience3::clear_selection();
+        if matches!(nav, Nav::Lyrics) {
+            self.lyrics_last_scrolled_index = None;
+            self.lyrics_manual_scroll_until = None;
+            self.lyrics_scroll.0.borrow_mut().last_item_size = None;
+        }
         if matches!(nav, Nav::Settings) {
             self.refresh_cache_stats(cx);
         }

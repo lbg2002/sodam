@@ -62,7 +62,6 @@ pub struct Palette {
     pub surface: Rgba,
     pub surface_elevated: Rgba,
     pub surface_hover: Rgba,
-    pub surface_selected: Rgba,
     pub border: Rgba,
     pub text: Rgba,
     pub text_muted: Rgba,
@@ -139,90 +138,85 @@ impl ThemeKind {
 
     pub fn palette(self) -> Palette {
         match self {
-            // 1. 黛墨夜色：墨黑、黛蓝、暗青、朱砂色
+            // 1. 黛墨夜色：冷调深黛蓝墨底 + 青黛霁蓝印章点缀
             Self::Dark => Palette {
-                bg: hex(0x0D1117),
-                bg_deep: hex(0x080B0F),
-                surface: hex(0x131922),
-                surface_elevated: hex(0x1A2330),
-                surface_hover: hex(0x222E3E),
-                surface_selected: hex(0x2B3B4E),
-                border: hex(0x263445),
-                text: hex(0xEDEAE4),
-                text_muted: hex(0xA6B0BC),
-                text_faint: hex(0x768290),
-                accent: hex(0xD9483B),
-                accent_secondary: hex(0x3B6E8C),
-                accent_foreground: hex(0xFAF7F2),
-                wash_strength: 0.36,
+                bg: hex(0x0B101B),
+                bg_deep: hex(0x070A12),
+                surface: hex(0x121A2A),
+                surface_elevated: hex(0x192438),
+                surface_hover: hex(0x21304A),
+                border: hex(0x24344E),
+                text: hex(0xECF0F6),
+                text_muted: hex(0x9BA9BF),
+                text_faint: hex(0x67768E),
+                accent: hex(0x52B8D2),
+                accent_secondary: hex(0x356D8F),
+                accent_foreground: hex(0x071318),
+                wash_strength: 0.14,
             },
-            // 2. 宋韵青瓷：青瓷绿、米白、浅灰、淡青
+            // 2. 宋韵青瓷：汝窑天青釉色 + 素洁雅白
             Self::Light => Palette {
-                bg: hex(0xF3F0E8),
-                bg_deep: hex(0xEAE6DC),
-                surface: hex(0xF8F6F0),
-                surface_elevated: hex(0xFCFBF7),
-                surface_hover: hex(0xE5ECE8),
-                surface_selected: hex(0xD5E2DC),
-                border: hex(0xD2DBD6),
-                text: hex(0x1E2624),
-                text_muted: hex(0x5A6864),
-                text_faint: hex(0x7E8D88),
-                accent: hex(0x3D786E),
-                accent_secondary: hex(0x6C9A8B),
-                accent_foreground: hex(0xF9F8F4),
-                wash_strength: 0.25,
+                bg: hex(0xEBF2F0),
+                bg_deep: hex(0xDFECE8),
+                surface: hex(0xF4F8F7),
+                surface_elevated: hex(0xFAFCFB),
+                surface_hover: hex(0xE1ECE9),
+                border: hex(0xC4DAD4),
+                text: hex(0x182624),
+                text_muted: hex(0x4E6661),
+                text_faint: hex(0x76908A),
+                accent: hex(0x267B72),
+                accent_secondary: hex(0x569E94),
+                accent_foreground: hex(0xF7FBFA),
+                wash_strength: 0.12,
             },
-            // 3. 丹青山水：宣纸白、墨灰、松石绿、山水蓝
+            // 3. 丹青山水：温润熟宣纸米色 + 石青矿物蓝 / 石绿
             Self::DanQing => Palette {
-                bg: hex(0xF5F1E6),
-                bg_deep: hex(0xECE6D8),
-                surface: hex(0xFAF7EF),
-                surface_elevated: hex(0xFDFBF5),
-                surface_hover: hex(0xE8E4D8),
-                surface_selected: hex(0xDAD6C8),
-                border: hex(0xD5D0C3),
-                text: hex(0x252B30),
-                text_muted: hex(0x5C646A),
-                text_faint: hex(0x828A90),
-                accent: hex(0x2E7468),
-                accent_secondary: hex(0x3B6078),
-                accent_foreground: hex(0xFAF8F2),
-                wash_strength: 0.22,
+                bg: hex(0xF6EFE2),
+                bg_deep: hex(0xECE2CF),
+                surface: hex(0xFAF5EB),
+                surface_elevated: hex(0xFFFDF8),
+                surface_hover: hex(0xEDE4D3),
+                border: hex(0xDDD1BC),
+                text: hex(0x26231E),
+                text_muted: hex(0x665E52),
+                text_faint: hex(0x908678),
+                accent: hex(0x2E5E88),
+                accent_secondary: hex(0x3B826E),
+                accent_foreground: hex(0xFAF8F3),
+                wash_strength: 0.12,
             },
-            // 4. 朱砂金：深棕、朱砂红、暖金、米色
+            // 4. 朱砂金：紫檀大漆暖棕 + 朱砂红 / 暖鎏金
             Self::ZhuSha => Palette {
-                bg: hex(0x16100E),
-                bg_deep: hex(0x0E0A08),
-                surface: hex(0x1F1613),
-                surface_elevated: hex(0x291E1A),
-                surface_hover: hex(0x352621),
-                surface_selected: hex(0x443029),
-                border: hex(0x3D2B24),
-                text: hex(0xF2E8DC),
-                text_muted: hex(0xC2AFA0),
-                text_faint: hex(0x8F7C6E),
-                accent: hex(0xD6453A),
-                accent_secondary: hex(0xD4A359),
+                bg: hex(0x17100E),
+                bg_deep: hex(0x0E0908),
+                surface: hex(0x221714),
+                surface_elevated: hex(0x2D1F1B),
+                surface_hover: hex(0x3B2924),
+                border: hex(0x432E28),
+                text: hex(0xF5ECE2),
+                text_muted: hex(0xC4AEA0),
+                text_faint: hex(0x8E786B),
+                accent: hex(0xE85848),
+                accent_secondary: hex(0xDFA855),
                 accent_foreground: hex(0xFDF8F2),
-                wash_strength: 0.32,
+                wash_strength: 0.16,
             },
-            // 5. 竹影清风：竹青、月白、浅墨、灰绿
+            // 5. 竹影清风：月白竹林青雾 + 翠竹青
             Self::ZhuYing => Palette {
-                bg: hex(0xEDF3EF),
-                bg_deep: hex(0xE2EBE5),
-                surface: hex(0xF4F8F5),
-                surface_elevated: hex(0xFAFCFA),
-                surface_hover: hex(0xE0EAE3),
-                surface_selected: hex(0xCFE0D5),
-                border: hex(0xC9D9CE),
-                text: hex(0x222C26),
-                text_muted: hex(0x55665C),
-                text_faint: hex(0x7A8C81),
-                accent: hex(0x3A6E57),
-                accent_secondary: hex(0x5E8C76),
-                accent_foreground: hex(0xF7FAF8),
-                wash_strength: 0.24,
+                bg: hex(0xEAF1E8),
+                bg_deep: hex(0xDDE8DA),
+                surface: hex(0xF3F7F1),
+                surface_elevated: hex(0xF9FCF8),
+                surface_hover: hex(0xDFEADF),
+                border: hex(0xC4D6BF),
+                text: hex(0x1C281E),
+                text_muted: hex(0x4F6352),
+                text_faint: hex(0x778C7A),
+                accent: hex(0x357A4D),
+                accent_secondary: hex(0x689F77),
+                accent_foreground: hex(0xF7FAF7),
+                wash_strength: 0.12,
             },
         }
     }
@@ -508,12 +502,13 @@ impl LyricsAlign {
 static CURRENT_THEME: AtomicU8 = AtomicU8::new(0);
 static UI_FONT_SIZE: AtomicU32 = AtomicU32::new(14);
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
+static DYNAMIC_COVER_COLOR: AtomicBool = AtomicBool::new(true);
 // bit31 表示存在主色；低 24 位是 RGB。渲染线程每帧设置，后台只传值不读全局。
 static AMBIENT_COLOR: AtomicU32 = AtomicU32::new(0);
 
-const BORDER_TINT: f32 = 0.25;
-const TEXT_TINT: f32 = 0.08;
-const MAX_WASH_SATURATION: f32 = 0.52;
+const BORDER_TINT: f32 = 0.16;
+const TEXT_TINT: f32 = 0.05;
+const MAX_WASH_SATURATION: f32 = 0.48;
 
 pub fn set_theme(theme: ThemeKind) {
     CURRENT_THEME.store(theme as u8, Ordering::Relaxed);
@@ -539,6 +534,14 @@ pub fn reduced_motion() -> bool {
     REDUCED_MOTION.load(Ordering::Relaxed)
 }
 
+pub fn set_dynamic_cover_color(enabled: bool) {
+    DYNAMIC_COVER_COLOR.store(enabled, Ordering::Relaxed);
+}
+
+pub fn dynamic_cover_color() -> bool {
+    DYNAMIC_COVER_COLOR.load(Ordering::Relaxed)
+}
+
 pub fn motion_enabled() -> bool {
     !reduced_motion()
 }
@@ -558,6 +561,9 @@ pub fn set_ambient_rgb(color: Option<(u8, u8, u8)>) {
 }
 
 pub fn ambient_color() -> Option<Rgba> {
+    if !dynamic_cover_color() {
+        return None;
+    }
     let packed = AMBIENT_COLOR.load(Ordering::Relaxed);
     if packed & 0x8000_0000 == 0 {
         return None;
@@ -625,15 +631,21 @@ pub fn mix_rgba(from: Rgba, to: Rgba, delta: f32) -> Rgba {
     }
 }
 
-/// 保持中式主题固有明度与气韵，适度混入封面环境色。
+/// 计算色相环 `[0.0, 1.0)` 上的最短有向差值 `[-0.5, 0.5]`，避免跨越 `0/1` 边界时逆向绕远。
+fn shortest_hue_delta(from: f32, to: f32) -> f32 {
+    (to - from + 0.5).rem_euclid(1.0) - 0.5
+}
+
+/// 保持中式主题固有明度与气韵，轻柔微调底色以呼应封面（约保留 ~90% 主题本色，避免盖过所选主题）。
 fn tint(base: Rgba, strength: f32) -> Rgba {
     let Some(ambient) = ambient_color() else {
         return base;
     };
     let (base_hue, base_saturation, base_lightness) = rgba_to_hsl(base);
     let (ambient_hue, ambient_saturation, _) = rgba_to_hsl(ambient);
-    let blended_hue = base_hue + (ambient_hue - base_hue) * (strength * 0.55).clamp(0.0, 1.0);
-    let saturation = (base_saturation * 0.72 + ambient_saturation * strength * 0.45)
+    let blended_hue =
+        base_hue + shortest_hue_delta(base_hue, ambient_hue) * (strength * 0.35).clamp(0.0, 0.18);
+    let saturation = (base_saturation * 0.85 + ambient_saturation * strength * 0.22)
         .clamp(0.0, MAX_WASH_SATURATION);
     let washed = hsl_to_rgba(
         blended_hue.rem_euclid(1.0),
@@ -641,7 +653,7 @@ fn tint(base: Rgba, strength: f32) -> Rgba {
         base_lightness,
         base.a,
     );
-    mix_rgba(base, washed, (strength * 0.65).clamp(0.0, 0.55))
+    mix_rgba(base, washed, (strength * 0.35).clamp(0.0, 0.12))
 }
 
 pub fn is_dark() -> bool {
@@ -671,19 +683,17 @@ pub fn surface() -> Rgba {
 /// 抬升面：搜索框、卡片、徽章。
 pub fn surface_elevated() -> Rgba {
     let p = current_palette();
-    tint(p.surface_elevated, p.wash_strength * 0.85)
+    tint(p.surface_elevated, p.wash_strength * 0.75)
 }
 
-/// 行悬停。
+/// 行悬停（半透明叠层，自然融于全屏连贯背景，不形成生硬色块）。
 pub fn surface_hover() -> Rgba {
-    let p = current_palette();
-    tint(p.surface_hover, p.wash_strength * 0.85)
+    rgba_alpha(text(), if is_dark() { 0.06 } else { 0.05 })
 }
 
-/// 选中行。
+/// 选中行（低透明主题色晕染）。
 pub fn surface_selected() -> Rgba {
-    let p = current_palette();
-    tint(p.surface_selected, p.wash_strength * 0.9)
+    rgba_alpha(accent(), if is_dark() { 0.12 } else { 0.10 })
 }
 
 /// 1px 描边。
@@ -710,17 +720,14 @@ pub fn text_faint() -> Rgba {
     tint(p.text_faint, TEXT_TINT)
 }
 
-/// 主题主强调色（兼顾封面色彩与中式主题印章/青瓷/松石主色）。
+/// 主题主强调色：直接取当前中式主题的纯净点缀色，不再被互补封面色冲淡成灰白。
 pub fn accent() -> Rgba {
-    let p = current_palette();
-    let Some(ambient) = ambient_color() else {
-        return p.accent;
-    };
-    let (hue, sat, _) = rgba_to_hsl(ambient);
-    let target_l = if p.bg.r < 0.3 { 0.66 } else { 0.38 };
-    let cover_accent = hsl_to_rgba(hue, sat.clamp(0.45, 0.78), target_l, 1.0);
-    // 保留 65% 主题特征色 + 35% 封面联动色，防止刺眼纯色破坏中式美感
-    mix_rgba(p.accent, cover_accent, 0.35)
+    current_palette().accent
+}
+
+/// 播放舞台高亮色（歌词当前行 / 沉浸进度条）：直接采用鲜明的中式主题强调色。
+pub fn stage_accent() -> Rgba {
+    current_palette().accent
 }
 
 /// 主色上的前景文字/图标颜色。
@@ -732,13 +739,6 @@ pub fn accent_foreground() -> Rgba {
 pub fn accent_soft() -> Rgba {
     let mut color = accent();
     color.a = if is_dark() { 0.18 } else { 0.14 };
-    color
-}
-
-/// 歌词高亮行/水墨光晕底色。
-pub fn ink_glow() -> Rgba {
-    let mut color = accent();
-    color.a = if is_dark() { 0.12 } else { 0.09 };
     color
 }
 
@@ -756,37 +756,29 @@ pub fn danger() -> Rgba {
     }
 }
 
-/// 全局自适应背景：中式底色与封面主色轻柔晕染的线性渐变。
+/// 全局自适应背景：贯穿整个窗口（左侧/内容/底部一体化“大连屏”连续渐变）。
 pub fn ambient_background() -> Background {
     let p = current_palette();
     let from = tint(p.bg, p.wash_strength);
-    let to = mix_rgba(tint(p.bg_deep, p.wash_strength * 1.15), p.surface, 0.35);
+    let to = tint(p.bg_deep, (p.wash_strength * 1.1).clamp(0.0, 0.16));
     linear_gradient(
-        135.0,
+        145.0,
         linear_color_stop(from, 0.0),
         linear_color_stop(to, 1.0),
     )
 }
 
-/// 沉浸播放页与全屏模式的深层动态背景：更强的封面色晕染与水墨层次。
+/// 沉浸播放页与全屏模式背景：严格忠于所选主题色阶，仅保留极其克制的东方水墨呼吸感。
 pub fn immersive_background() -> Background {
     let p = current_palette();
-    let ambient_boost = (p.wash_strength * 1.65).clamp(0.28, 0.62);
-    let top = if let Some(ambient) = ambient_color() {
-        let (h, s, _) = rgba_to_hsl(ambient);
-        let l = if is_dark() { 0.14 } else { 0.88 };
-        let cover_tone = hsl_to_rgba(h, s.clamp(0.25, 0.60), l, 1.0);
-        mix_rgba(p.bg, cover_tone, ambient_boost)
-    } else {
-        mix_rgba(
-            p.bg,
-            p.accent_secondary,
-            if is_dark() { 0.16 } else { 0.10 },
-        )
-    };
-    let bottom = tint(p.bg_deep, ambient_boost * 0.8);
+    let top = mix_rgba(
+        tint(p.bg, p.wash_strength.min(0.12)),
+        p.accent_secondary,
+        if is_dark() { 0.08 } else { 0.05 },
+    );
+    let bottom = tint(p.bg_deep, p.wash_strength.min(0.12));
     linear_gradient(
-        155.0,
+        145.0,
         linear_color_stop(top, 0.0),
         linear_color_stop(bottom, 1.0),
     )

@@ -110,6 +110,10 @@ pub struct Settings {
     pub bottom_lyrics_enabled: bool,
     /// 降低动画强度（低性能设备或偏好安静体验时启用）。
     pub reduced_motion: bool,
+    /// 左侧导航栏是否手动收起为紧凑图标轨。
+    pub sidebar_collapsed: bool,
+    /// 是否根据当前专辑封面提取主色并动态晕染界面与沉浸舞台。
+    pub dynamic_cover_color: bool,
     /// 界面主题：`daimo`（黛墨夜色） / `qingci`（宋韵青瓷） / `danqing`（丹青山水） / `zhusha`（朱砂金） / `zhuying`（竹影清风） / `dark` / `light`；空 = 跟随系统偏好。
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
@@ -181,6 +185,8 @@ impl Default for Settings {
             lyrics_align: "center".to_string(),
             bottom_lyrics_enabled: false,
             reduced_motion: false,
+            sidebar_collapsed: false,
+            dynamic_cover_color: true,
             theme: String::new(),
             language: String::new(),
         }
@@ -363,6 +369,8 @@ mod tests {
         assert_eq!(loaded.lyrics_font_size, 18);
         assert_eq!(loaded.lyrics_line_height, 32);
         assert_eq!(loaded.lyrics_offset_ms, 0);
+        assert!(!loaded.sidebar_collapsed);
+        assert!(loaded.dynamic_cover_color);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

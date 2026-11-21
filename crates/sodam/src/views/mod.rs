@@ -135,8 +135,6 @@ fn track_header(cols: Columns, language: crate::ui::i18n::Language) -> AnyElemen
         .px(px(ROW_PAD))
         .text_size(theme::Text::Small.size())
         .text_color(theme::text_faint())
-        .border_b_1()
-        .border_color(theme::border())
         .child(
             div()
                 .w(px(COL_INDEX))
@@ -1823,21 +1821,22 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
         Nav::Artist => search::artist_page(root, cx),
         Nav::Album => search::album_page(root, cx),
         Nav::Downloads => downloads::downloads_view(root, window, cx),
-        Nav::Settings => settings::settings_view(root, cx),
+        Nav::Settings => settings::settings_view(root, window, cx),
         Nav::Lyrics => lyrics::lyrics_view(root, window, cx),
     };
 
+    let is_lyrics = root.nav == Nav::Lyrics;
     div()
         .flex()
         .flex_col()
         .size_full()
-        .bg(theme::ambient_background())
-        .p(px(theme::space::XL))
-        .gap(px(theme::space::LG))
+        .when(!is_lyrics, |this| {
+            this.p(px(theme::space::XL)).gap(px(theme::space::LG))
+        })
         .when(
             !matches!(
                 root.nav,
-                Nav::Lyrics | Nav::Search | Nav::Artist | Nav::Album
+                Nav::Lyrics | Nav::Search | Nav::Artist | Nav::Album | Nav::Settings
             ),
             |this| {
                 let title = if root.nav == Nav::Scenes {
@@ -1855,7 +1854,7 @@ pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl Into
                 .flex_col()
                 .flex_1()
                 .min_h(px(0.0))
-                .gap(px(theme::space::LG))
+                .when(!is_lyrics, |this| this.gap(px(theme::space::LG)))
                 .child(body),
         )
 }

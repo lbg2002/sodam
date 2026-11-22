@@ -6,8 +6,8 @@
 use std::collections::HashSet;
 
 use crate::models::{
-    AlbumDetail, AlbumItem, ArtistDetail, ArtistItem, ArtistTracksPage, PlaylistItem, SceneItem,
-    SearchEntry, SearchGroup, SearchResults, TrackItem,
+    AlbumDetail, AlbumItem, ArtistDetail, ArtistItem, ArtistTracksPage, MusicProvider,
+    PlaylistItem, SceneItem, SearchEntry, SearchGroup, SearchResults, TrackItem,
 };
 use crate::session::Session;
 use libresoda::soda::track::build_song_from_track;
@@ -40,6 +40,8 @@ pub fn feed_scenes(session: &Session) -> anyhow::Result<Vec<SceneItem>> {
 /// 推荐队列分页状态，语义对齐官方 `queueLoader.pagination`。
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecommendationSource {
+    /// 所属音源，保证后台追加加载不因全局音源切换而串台。
+    pub provider: MusicProvider,
     /// `None` 是首页推荐；`Some` 是听歌模式。
     pub scene: Option<SceneItem>,
     /// 官方在每次发请求前 +1；首次请求为 1。
@@ -70,6 +72,7 @@ impl RecommendationSource {
             .map(|value| value.as_secs())
             .unwrap_or_default();
         Self {
+            provider: MusicProvider::Soda,
             scene: None,
             fetch_counter: 0,
             has_more: true,
@@ -180,12 +183,25 @@ fn recommended_tracks(value: &serde_json::Value) -> anyhow::Result<Vec<TrackItem
     Ok(tracks)
 }
 
-/// 请求一页官方推荐队列。
+/// 请求一页推荐队列（自动按 source.provider 路由汽水 / 咪咕）。
 fn recommended_page(
     session: &Session,
     source: &RecommendationSource,
 ) -> anyhow::Result<(RecommendationSource, Vec<TrackItem>)> {
     let fetch_counter = source.fetch_counter.saturating_add(1);
+    if source.provider == MusicProvider::Migu {
+        let tracks = session
+            .migu()
+            .recommend_tracks(source.scene.as_ref(), fetch_counter)?;
+        let next = RecommendationSource {
+            provider: MusicProvider::Migu,
+            scene: source.scene.clone(),
+            fetch_counter,
+            has_more: !tracks.is_empty() && fetch_counter < 10,
+            did_first_use_time: source.did_first_use_time,
+        };
+        return Ok((next, tracks));
+    }
     let mut body = serde_json::json!({
         "played_media": [],
         "did_first_use_time": source.did_first_use_time,
@@ -207,6 +223,7 @@ fn recommended_page(
         .map_err(|err| wrap_err("读取推荐队列失败", err))?;
     let tracks = recommended_tracks(&value)?;
     let source = RecommendationSource {
+        provider: MusicProvider::Soda,
         scene: source.scene.clone(),
         fetch_counter,
         has_more: value
@@ -220,7 +237,9 @@ fn recommended_page(
 
 /// 首次加载官方推荐队列。
 pub fn recommended_start(session: &Session) -> anyhow::Result<RecommendedStart> {
-    let (source, tracks) = recommended_page(session, &RecommendationSource::new())?;
+    let mut init = RecommendationSource::new();
+    init.provider = session.active_provider();
+    let (source, tracks) = recommended_page(session, &init)?;
     anyhow::ensure!(!tracks.is_empty(), "推荐队列为空");
     Ok(RecommendedStart { source, tracks })
 }
@@ -231,6 +250,11 @@ pub fn recommended_scene_start(
     scene: SceneItem,
 ) -> anyhow::Result<RecommendedStart> {
     let mut source = RecommendationSource::new();
+    source.provider = if scene.sub_queue_type.starts_with("migu_") {
+        MusicProvider::Migu
+    } else {
+        session.active_provider()
+    };
     source.scene = Some(scene);
     let (source, tracks) = recommended_page(session, &source)?;
     anyhow::ensure!(!tracks.is_empty(), "该听歌模式队列为空");
@@ -239,6 +263,9 @@ pub fn recommended_scene_start(
 
 /// 官方听歌模式页常用模式：本地“熟悉/新鲜” + feed_mode 第一组前 6 项。
 pub fn scene_modes(session: &Session) -> anyhow::Result<Vec<SceneItem>> {
+    if session.active_provider() == MusicProvider::Migu {
+        return session.migu().scene_modes();
+    }
     let mode = session
         .soda()
         .feed_mode()
@@ -449,6 +476,19 @@ fn scene_card(block: &serde_json::Value) -> Option<SceneCard> {
 
 /// 首屏探索卡：官方 `/luna/pc/discover` 中 `discover_feed_playlist` block。
 pub fn scene_discover_cards(session: &Session) -> anyhow::Result<Vec<SceneCard>> {
+    if session.active_provider() == MusicProvider::Migu {
+        return Ok(session
+            .migu()
+            .discover_playlists()?
+            .into_iter()
+            .map(|card| SceneCard {
+                kind: SceneCardKind::Playlist,
+                inner_block_id: card.block_id,
+                playlist: card.playlist,
+                radio: None,
+            })
+            .collect());
+    }
     let value = session
         .soda()
         .fetch_discover()
@@ -485,6 +525,9 @@ pub fn scene_discover_cards_more(
     session: &Session,
     exposure_ids: &[u64],
 ) -> anyhow::Result<Vec<SceneCard>> {
+    if session.active_provider() == MusicProvider::Migu {
+        return Ok(Vec::new());
+    }
     let body = serde_json::json!({
         "block_type": "discover_playlist_mix",
         "sub_channel_id": -2,
@@ -754,6 +797,16 @@ pub fn search(
     keyword: &str,
     scope: SearchScope,
 ) -> anyhow::Result<SearchResults> {
+    if session.active_provider() == MusicProvider::Migu {
+        let mode = match scope {
+            SearchScope::All => "all",
+            SearchScope::Tracks => "tracks",
+            SearchScope::Artists => "artists",
+            SearchScope::Albums => "albums",
+            SearchScope::Playlists => "playlists",
+        };
+        return session.migu().search(keyword, mode);
+    }
     let soda = session.soda();
     match scope {
         SearchScope::All => {
@@ -840,6 +893,10 @@ pub fn search(
 
 /// 音乐人页：详情接口已返回热歌和专辑，无需分别翻页。
 pub fn artist_detail(session: &Session, artist_id: &str) -> anyhow::Result<ArtistDetail> {
+    let (provider, _) = MusicProvider::from_entity_id(artist_id, session.active_provider());
+    if provider == MusicProvider::Migu {
+        return session.migu().artist_detail(artist_id);
+    }
     let value = session
         .soda()
         .fetch_artist_detail(artist_id)
@@ -935,6 +992,10 @@ pub fn artist_tracks_page(
     cursor: &str,
     count: i64,
 ) -> anyhow::Result<ArtistTracksPage> {
+    let (provider, _) = MusicProvider::from_entity_id(artist_id, session.active_provider());
+    if provider == MusicProvider::Migu {
+        return session.migu().artist_tracks(artist_id, cursor);
+    }
     let value = session
         .soda()
         .list_artist_tracks(artist_id, cursor, count)
@@ -978,6 +1039,10 @@ pub fn artist_tracks_page(
 
 /// 专辑页：PC 详情接口一次返回专辑信息和全碟曲目。
 pub fn album_detail(session: &Session, album_id: &str) -> anyhow::Result<AlbumDetail> {
+    let (provider, _) = MusicProvider::from_entity_id(album_id, session.active_provider());
+    if provider == MusicProvider::Migu {
+        return session.migu().album_detail(album_id);
+    }
     let value = session
         .soda()
         .fetch_pc_album_detail(album_id)
@@ -1015,6 +1080,9 @@ pub fn album_detail(session: &Session, album_id: &str) -> anyhow::Result<AlbumDe
 
 /// 我的歌单（含「我喜欢的音乐」）。
 pub fn user_playlists(session: &Session) -> anyhow::Result<Vec<PlaylistItem>> {
+    if session.active_provider() == MusicProvider::Migu {
+        return session.migu().user_playlists();
+    }
     let playlists = session
         .soda()
         .get_user_playlists(1, 50)
@@ -1036,6 +1104,9 @@ pub fn user_playlists(session: &Session) -> anyhow::Result<Vec<PlaylistItem>> {
 /// 官方客户端把它当作一张 `type == 1` 的系统歌单；这里按名字匹配兜底
 /// （不同版本命名可能是「我喜欢的音乐」/「喜欢的音乐」）。
 pub fn liked_songs(session: &Session) -> anyhow::Result<Vec<TrackItem>> {
+    if session.active_provider() == MusicProvider::Migu {
+        return session.migu().liked_songs();
+    }
     let playlists = session
         .soda()
         .get_user_playlists(1, 50)
@@ -1056,6 +1127,9 @@ pub fn liked_songs(session: &Session) -> anyhow::Result<Vec<TrackItem>> {
 
 /// 我收藏的（歌单 / 专辑）。参数与官方客户端一致。
 pub fn collected_playlists_and_albums(session: &Session) -> anyhow::Result<Vec<PlaylistItem>> {
+    if session.active_provider() == MusicProvider::Migu {
+        return session.migu().user_playlists();
+    }
     let items = session
         .soda()
         .collected_items("", 500, &["album", "playlist"])
@@ -1074,6 +1148,10 @@ pub fn collected_playlists_and_albums(session: &Session) -> anyhow::Result<Vec<P
 
 /// 某个歌单的全部歌曲（点歌单卡片后展示）。
 pub fn playlist_tracks(session: &Session, playlist_id: &str) -> anyhow::Result<Vec<TrackItem>> {
+    let (provider, _) = MusicProvider::from_entity_id(playlist_id, session.active_provider());
+    if provider == MusicProvider::Migu {
+        return session.migu().playlist_tracks(playlist_id);
+    }
     let songs = session
         .soda()
         .get_playlist_songs(playlist_id)
@@ -1091,6 +1169,9 @@ pub fn liked_track_ids(session: &Session) -> anyhow::Result<std::collections::Ha
 
 /// 收藏 / 取消收藏一首歌到「我喜欢的音乐」。
 pub fn set_track_liked(session: &Session, track_id: &str, liked: bool) -> anyhow::Result<()> {
+    if MusicProvider::from_track_id(track_id) == MusicProvider::Migu {
+        return session.migu().set_track_liked(track_id, liked);
+    }
     let media = [libresoda::soda::media_ref::MediaRef::track(track_id)];
     let result = if liked {
         session.soda().collect_media(&media)

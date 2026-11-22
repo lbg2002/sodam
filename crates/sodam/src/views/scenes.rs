@@ -67,7 +67,12 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
         .map(|card| {
             let cover_path = root.cover_of(&card.playlist.cover);
             let title = card.playlist.title.clone();
-            let count = card.playlist.track_count.to_string();
+            let sub = if card.playlist.track_count > 0 {
+                let count = card.playlist.track_count.to_string();
+                root.localized("{} 首", &[count])
+            } else {
+                root.tr("精选歌单").to_string()
+            };
             let click_card = card.clone();
             div()
                 .id(gpui::ElementId::Name(
@@ -101,7 +106,7 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     div()
                         .text_size(theme::Text::Small.size())
                         .text_color(theme::text_muted())
-                        .child(root.localized("{} 首", &[count])),
+                        .child(sub),
                 )
                 .into_any_element()
         })
@@ -174,6 +179,11 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
             let label = root.scene_display_text(&scene.sub_queue_type, &scene.text);
             let click_scene = scene.clone();
             let sub_type = scene.sub_queue_type.clone();
+            let scene_icon = if sub_type.starts_with("migu_") {
+                cover(root.cover_of(&scene.cover), 24.0, theme::radius::ART)
+            } else {
+                crate::ui::artwork::scene_image(&sub_type, 24.0)
+            };
             div()
                 .id(("home-scene-pill", idx))
                 .flex()
@@ -191,7 +201,7 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
                     root.start_scene_queue(click_scene.clone(), cx);
                 }))
-                .child(crate::ui::artwork::scene_image(&sub_type, 24.0))
+                .child(scene_icon)
                 .child(
                     div()
                         .text_size(theme::Text::Body.size())
@@ -629,6 +639,20 @@ pub(crate) fn scenes_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                     .as_ref()
                     .is_some_and(|selected| selected == &scene.sub_queue_type);
                 let click_scene = scene.clone();
+                let scene_icon = if scene.sub_queue_type.starts_with("migu_") {
+                    let scene_url = scene.cover.clone();
+                    let scene_cover = covers.get(&scene_url).cloned();
+                    if scene_cover.is_none() && !scene_url.is_empty() {
+                        if let Ok(mut pending) = cover_requests.lock() {
+                            if !pending.iter().any(|item| item == &scene_url) {
+                                pending.push(scene_url);
+                            }
+                        }
+                    }
+                    cover(scene_cover, 24.0, theme::radius::ART)
+                } else {
+                    scene_image(&scene.sub_queue_type, 24.0)
+                };
                 row_element = row_element.child(
                     div()
                         .id(gpui::ElementId::Name(
@@ -660,7 +684,7 @@ pub(crate) fn scenes_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                                 });
                             }
                         })
-                        .child(scene_image(&scene.sub_queue_type, 24.0))
+                        .child(scene_icon)
                         .child(
                             div()
                                 .min_w(px(0.0))
@@ -722,8 +746,10 @@ pub(crate) fn scenes_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 
                     let subtitle = if card.kind == sodam_core::library::SceneCardKind::Radio {
                         language.text("电台").to_string()
-                    } else {
+                    } else if card.playlist.track_count > 0 {
                         language.textf("{} 首", &[card.playlist.track_count.to_string()])
+                    } else {
+                        language.text("精选歌单").to_string()
                     };
                     row_element = row_element.child(
                         div()

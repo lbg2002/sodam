@@ -215,6 +215,22 @@ pub enum QueueOrigin {
     Search,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MiguLoginTab {
+    #[default]
+    Cookie,
+    Sim,
+    Sms,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MiguInputField {
+    #[default]
+    Cookie,
+    Phone,
+    Code,
+}
+
 /// 歌曲右键菜单状态：目标曲目与弹出位置。
 pub struct TrackMenu {
     pub track: TrackItem,
@@ -381,6 +397,20 @@ pub struct Root {
     pub played_history: Vec<String>,
     /// 设置页里的登录 modal 是否展开。
     pub login_modal_open: bool,
+    /// 左上角数据源切换弹层是否展开。
+    pub provider_menu_open: bool,
+    /// 咪咕登录弹层与输入框状态。
+    pub migu_login_modal_open: bool,
+    pub migu_login_tab: MiguLoginTab,
+    pub migu_active_field: MiguInputField,
+    pub migu_cookie_input: String,
+    pub migu_phone_input: String,
+    pub migu_code_input: String,
+    pub migu_input_focus: FocusHandle,
+    pub(crate) migu_input_marked_range: Option<std::ops::Range<usize>>,
+    pub migu_login_busy: bool,
+    pub migu_login_status: String,
+    pub(crate) migu_sim_session_seq: u64,
     /// 队列右键菜单：被点中的行下标与鼠标位置。
     pub queue_menu: Option<(usize, gpui::Point<gpui::Pixels>)>,
     /// 搜索/歌单/我喜欢等歌曲行右键菜单。
@@ -442,6 +472,7 @@ pub struct Root {
     /// 扫码登录状态与轮询中的 token。
     pub login: LoginState,
     pub account: Option<AccountInfo>,
+    pub migu_account: Option<AccountInfo>,
     /// 音频播放引擎（rodio，跑在专属线程上）
     pub engine: PlaybackEngine,
 }
@@ -511,16 +542,17 @@ impl Root {
                 .map(|track| (track.id.clone(), track))
                 .collect();
 
-        let logged_in = !settings.cookie.trim().is_empty();
+        let can_browse = settings.can_browse_active_provider();
+        let active_logged_in = settings.is_provider_logged_in(settings.active_provider());
         let mut root = Self {
-            // 未登录只能待在设置页（登录入口在设置 → 账户）
-            nav: if logged_in {
+            // 未登录且当前音源不可免登录浏览时才停留在设置页
+            nav: if can_browse {
                 Nav::Lyrics
             } else {
                 Nav::Settings
             },
             nav_history: Vec::new(),
-            lyrics_return_nav: if logged_in { Some(Nav::Home) } else { None },
+            lyrics_return_nav: if can_browse { Some(Nav::Home) } else { None },
             theme,
             theme_follows_system,
             window_mode,
@@ -538,7 +570,7 @@ impl Root {
             language,
             language_follows_system,
             settings,
-            settings_section: if logged_in {
+            settings_section: if can_browse {
                 SettingsSection::General
             } else {
                 SettingsSection::Account
@@ -549,6 +581,18 @@ impl Root {
             queue_origin: QueueOrigin::None,
             played_history: Vec::new(),
             login_modal_open: false,
+            provider_menu_open: false,
+            migu_login_modal_open: false,
+            migu_login_tab: MiguLoginTab::Cookie,
+            migu_active_field: MiguInputField::Cookie,
+            migu_cookie_input: String::new(),
+            migu_phone_input: String::new(),
+            migu_code_input: String::new(),
+            migu_input_focus: cx.focus_handle(),
+            migu_input_marked_range: None,
+            migu_login_busy: false,
+            migu_login_status: String::new(),
+            migu_sim_session_seq: 0,
             queue_menu: None,
             track_menu: None,
             search_marked_range: None,
@@ -688,11 +732,17 @@ impl Root {
             cover_pool: CoverPool::new(),
             login: LoginState::Idle,
             account: None,
+            migu_account: None,
             engine: PlaybackEngine::new(),
         };
-        if logged_in {
+        if !root.settings.cookie.trim().is_empty() {
             root.refresh_account(cx);
-            if !root.settings.lazy_startup {
+        }
+        if !root.settings.migu_cookie.trim().is_empty() {
+            root.refresh_migu_account(cx);
+        }
+        if can_browse {
+            if active_logged_in && !root.settings.lazy_startup {
                 root.load_liked_ids(cx);
             }
             if root.queue.is_empty() {
@@ -797,7 +847,10 @@ impl Root {
                     .timer(std::time::Duration::from_millis(650))
                     .await;
                 this.update(cx, |root, cx| {
-                    if !root.settings.cookie.trim().is_empty() {
+                    if root
+                        .settings
+                        .is_provider_logged_in(root.settings.active_provider())
+                    {
                         root.load_liked_ids(cx);
                     }
                     root.refresh_downloads(cx);
@@ -942,6 +995,40 @@ fn utf16_range_from_byte(text: &str, range: std::ops::Range<usize>) -> std::ops:
     byte_to_utf16_offset(text, range.start)..byte_to_utf16_offset(text, range.end)
 }
 
+impl Root {
+    pub fn migu_active_input(&self) -> &str {
+        match self.migu_active_field {
+            MiguInputField::Cookie => &self.migu_cookie_input,
+            MiguInputField::Phone => &self.migu_phone_input,
+            MiguInputField::Code => &self.migu_code_input,
+        }
+    }
+
+    pub fn migu_active_input_mut(&mut self) -> &mut String {
+        match self.migu_active_field {
+            MiguInputField::Cookie => &mut self.migu_cookie_input,
+            MiguInputField::Phone => &mut self.migu_phone_input,
+            MiguInputField::Code => &mut self.migu_code_input,
+        }
+    }
+
+    pub fn migu_input_focused(&self, window: &Window) -> bool {
+        self.migu_login_modal_open && self.migu_input_focus.is_focused(window)
+    }
+
+    pub fn active_provider(&self) -> sodam_core::MusicProvider {
+        self.settings.active_provider()
+    }
+
+    pub fn provider_display_name(&self, provider: sodam_core::MusicProvider) -> &'static str {
+        if self.language.is_zh() {
+            provider.name_zh()
+        } else {
+            provider.name_en()
+        }
+    }
+}
+
 impl EntityInputHandler for Root {
     fn text_for_range(
         &mut self,
@@ -950,6 +1037,14 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<String> {
+        if self.migu_input_focused(window) {
+            let range = byte_range_from_utf16(self.migu_active_input(), range_utf16);
+            actual_range.replace(utf16_range_from_byte(
+                self.migu_active_input(),
+                range.clone(),
+            ));
+            return Some(self.migu_active_input()[range].to_string());
+        }
         if self.download_search_focus.is_focused(window) {
             let range = byte_range_from_utf16(&self.download_search_input, range_utf16);
             actual_range.replace(utf16_range_from_byte(
@@ -972,6 +1067,14 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
+        if self.migu_input_focused(window) {
+            let len = self.migu_active_input().len();
+            let range = self.migu_input_marked_range.clone().unwrap_or(len..len);
+            return Some(UTF16Selection {
+                range: utf16_range_from_byte(self.migu_active_input(), range),
+                reversed: false,
+            });
+        }
         if self.download_search_focus.is_focused(window) {
             let range = self
                 .download_search_marked_range
@@ -1000,6 +1103,12 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<std::ops::Range<usize>> {
+        if self.migu_input_focused(window) {
+            return self
+                .migu_input_marked_range
+                .as_ref()
+                .map(|range| utf16_range_from_byte(self.migu_active_input(), range.clone()));
+        }
         if self.download_search_focus.is_focused(window) {
             return self
                 .download_search_marked_range
@@ -1016,7 +1125,9 @@ impl EntityInputHandler for Root {
     }
 
     fn unmark_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let changed = if self.download_search_focus.is_focused(window) {
+        let changed = if self.migu_input_focused(window) {
+            self.migu_input_marked_range.take().is_some()
+        } else if self.download_search_focus.is_focused(window) {
             self.download_search_marked_range.take().is_some()
         } else {
             self.search_marked_range.take().is_some()
@@ -1033,6 +1144,17 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.migu_input_focused(window) {
+            let marked = self.migu_input_marked_range.take();
+            let buf = self.migu_active_input_mut();
+            let range = range_utf16
+                .map(|r| byte_range_from_utf16(buf, r))
+                .or(marked)
+                .unwrap_or(buf.len()..buf.len());
+            buf.replace_range(range, text);
+            cx.notify();
+            return;
+        }
         if self.download_search_focus.is_focused(window) {
             let range = range_utf16
                 .map(|range| byte_range_from_utf16(&self.download_search_input, range))
@@ -1059,6 +1181,20 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.migu_input_focused(window) {
+            let marked = self.migu_input_marked_range.take();
+            let buf = self.migu_active_input_mut();
+            let range = range_utf16
+                .map(|r| byte_range_from_utf16(buf, r))
+                .or(marked)
+                .unwrap_or(buf.len()..buf.len());
+            let start = range.start;
+            buf.replace_range(range, new_text);
+            let end = start + new_text.len();
+            self.migu_input_marked_range = Some(start..end);
+            cx.notify();
+            return;
+        }
         if self.download_search_focus.is_focused(window) {
             let range = range_utf16
                 .map(|range| byte_range_from_utf16(&self.download_search_input, range))
@@ -1088,8 +1224,10 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<gpui::Bounds<gpui::Pixels>> {
-        (self.download_search_focus.is_focused(window) || self.search_input_focused(window))
-            .then_some(element_bounds)
+        (self.migu_input_focused(window)
+            || self.download_search_focus.is_focused(window)
+            || self.search_input_focused(window))
+        .then_some(element_bounds)
     }
 
     fn character_index_for_point(
@@ -1098,6 +1236,9 @@ impl EntityInputHandler for Root {
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
+        if self.migu_input_focused(window) {
+            return Some(self.migu_active_input().chars().map(char::len_utf16).sum());
+        }
         if self.download_search_focus.is_focused(window) {
             return Some(
                 self.download_search_input
@@ -1113,6 +1254,9 @@ impl EntityInputHandler for Root {
     }
 
     fn text_length_utf16(&mut self, window: &mut Window, _cx: &mut Context<Self>) -> Option<usize> {
+        if self.migu_input_focused(window) {
+            return Some(self.migu_active_input().chars().map(char::len_utf16).sum());
+        }
         if self.download_search_focus.is_focused(window) {
             return Some(
                 self.download_search_input
@@ -1128,7 +1272,9 @@ impl EntityInputHandler for Root {
     }
 
     fn accepts_text_input(&self, window: &mut Window, _cx: &mut Context<Self>) -> bool {
-        self.download_search_focus.is_focused(window) || self.search_input_focused(window)
+        self.migu_input_focused(window)
+            || self.download_search_focus.is_focused(window)
+            || self.search_input_focused(window)
     }
 }
 
@@ -1349,9 +1495,10 @@ impl Render for Root {
                 .into_any_element()
         };
 
-        let text_input_focused = !is_fullscreen_mode
+        let text_input_focused = (!is_fullscreen_mode
             && ((self.nav == Nav::Search && self.search_focus.is_focused(window))
-                || (self.nav == Nav::Downloads && self.download_search_focus.is_focused(window)));
+                || (self.nav == Nav::Downloads && self.download_search_focus.is_focused(window))))
+            || self.migu_input_focused(window);
         if !text_input_focused && !self.root_focus.is_focused(window) {
             self.root_focus.focus(window, cx);
         }
@@ -1367,10 +1514,17 @@ impl Render for Root {
             .on_key_down(
                 cx.listener(|root, event: &gpui::KeyDownEvent, _window, cx| {
                     let key = event.keystroke.key.as_str();
-                    if key.eq_ignore_ascii_case("escape")
-                        && root.window_mode != theme::WindowMode::Normal
-                    {
-                        root.set_window_mode(theme::WindowMode::Normal, cx);
+                    if key.eq_ignore_ascii_case("escape") {
+                        if root.provider_menu_open {
+                            root.provider_menu_open = false;
+                            cx.notify();
+                        } else if root.migu_login_modal_open {
+                            root.migu_login_modal_open = false;
+                            root.migu_sim_session_seq = root.migu_sim_session_seq.wrapping_add(1);
+                            cx.notify();
+                        } else if root.window_mode != theme::WindowMode::Normal {
+                            root.set_window_mode(theme::WindowMode::Normal, cx);
+                        }
                     } else if key.eq_ignore_ascii_case("f11") {
                         let next = if root.window_mode == theme::WindowMode::Fullscreen {
                             theme::WindowMode::Normal
@@ -1449,6 +1603,12 @@ impl Render for Root {
                 self.login_modal_open && self.settings.cookie.trim().is_empty(),
                 |this| this.child(crate::views::login_modal(self, cx)),
             )
+            .when(self.migu_login_modal_open, |this| {
+                this.child(crate::views::migu_login_modal(self, window, cx))
+            })
+            .when(self.provider_menu_open && !is_fullscreen_mode, |this| {
+                this.child(ui::sidebar::provider_popover(self, cx))
+            })
             .when(
                 self.queue_menu.is_some() || self.track_menu.is_some(),
                 |this| {

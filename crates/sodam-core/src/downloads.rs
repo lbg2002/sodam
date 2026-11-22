@@ -481,23 +481,24 @@ fn find_cached_assets(track_id: &str) -> Result<Vec<CachedAsset>> {
     let mut assets = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_file() {
+        if !path.is_file() || !audio::is_audio_cache_file(&path) {
             continue;
         }
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if !name.starts_with(&prefix) || !name.ends_with(".m4a") {
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !stem.starts_with(&prefix) {
             continue;
         }
-        let tag = name
-            .trim_start_matches(&prefix)
-            .trim_end_matches(".m4a")
-            .to_string();
+        let tag = stem[prefix.len()..].to_string();
+        if tag.is_empty() {
+            continue;
+        }
         let bytes = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
         if bytes == 0 {
             continue;
         }
-        let sidecar = cache_dir.join(format!("{track_id}-{tag}.quality"));
+        let sidecar = path.with_extension("quality");
         let quality = fs::read_to_string(&sidecar)
             .ok()
             .and_then(|text| text.split('\t').next().map(str::trim).map(str::to_string))
@@ -519,10 +520,18 @@ fn quality_matches(asset: &CachedAsset, preferred: &str) -> bool {
     }
     let label = asset.quality.to_ascii_lowercase();
     match preferred {
-        "lossless" => label.contains("无损") || label.contains("lossless"),
-        "highest" => label.contains("极高"),
+        "zq24" => {
+            label.contains("臻品")
+                || label.contains("hi-res")
+                || label.contains("24bit")
+                || label.contains("zq24")
+        }
+        "lossless" => {
+            label.contains("无损") || label.contains("lossless") || label.contains("flac")
+        }
+        "highest" => label.contains("极高") || label.contains("320k"),
         "medium" => label.contains("较高"),
-        "low" => label.contains("标准"),
+        "low" => label.contains("标准") || label.contains("128k"),
         _ => false,
     }
 }

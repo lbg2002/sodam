@@ -7,8 +7,9 @@
 
 use gpui::prelude::*;
 use gpui::{div, img, px, svg, AnyElement, ClickEvent, Context, IntoElement};
+use sodam_core::MusicProvider;
 
-use crate::app::{Nav, Root};
+use crate::app::{Nav, Root, SettingsSection};
 use crate::ui::{icons, theme};
 
 /// 导航项的图标名（Lucide 线性图标）。
@@ -30,7 +31,9 @@ fn icon_name(nav: Nav) -> &'static str {
 }
 
 fn handle_nav_click(root: &mut Root, nav: Nav, cx: &mut Context<Root>) {
-    if root.settings.cookie.trim().is_empty()
+    let provider = root.active_provider();
+    let can_browse = root.settings.can_browse_active_provider();
+    let blocked_unauth_browse = !can_browse
         && !matches!(
             nav,
             Nav::Settings
@@ -39,17 +42,53 @@ fn handle_nav_click(root: &mut Root, nav: Nav, cx: &mut Context<Root>) {
                 | Nav::LocalMusic
                 | Nav::LocalPlaylists
                 | Nav::Lyrics
-        )
-    {
-        root.settings_section = crate::app::SettingsSection::Account;
+        );
+    let blocked_personal_library =
+        matches!(nav, Nav::Liked | Nav::Library) && !root.settings.is_provider_logged_in(provider);
+    if blocked_unauth_browse || blocked_personal_library {
+        root.settings_section = SettingsSection::Account;
         root.set_nav(Nav::Settings, cx);
-        root.set_status("请先在「设置 → 账号与会员」扫码登录", &[]);
+        if provider == MusicProvider::Migu {
+            root.set_status("请先在「设置 → 账号与会员」登录咪咕音乐", &[]);
+        } else {
+            root.set_status("请先在「设置 → 账号与会员」扫码登录", &[]);
+        }
         return;
     }
     if nav == Nav::Lyrics {
         root.open_playback(cx);
     } else {
         root.set_nav(nav, cx);
+    }
+}
+
+fn provider_badge(provider: MusicProvider, size_px: f32) -> AnyElement {
+    match provider {
+        MusicProvider::Soda => div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(size_px))
+            .rounded(px(theme::radius::ROW))
+            .overflow_hidden()
+            .child(img("icons/sodam-logo.svg").size(px(size_px)))
+            .into_any_element(),
+        MusicProvider::Migu => div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .size(px(size_px))
+            .rounded(px(theme::radius::ROW))
+            .bg(theme::accent())
+            .child(
+                svg()
+                    .path(icons::path("music"))
+                    .size(px((size_px * 0.56).round()))
+                    .text_color(theme::accent_foreground()),
+            )
+            .into_any_element(),
     }
 }
 
@@ -181,40 +220,50 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .p(px(theme::space::MD))
         .gap(px(theme::space::XS))
         .child(
-            // 品牌区：汽水音乐标志 + 收起侧栏按钮（透明融于一体背景）
+            // 品牌与数据源切换区：点击切换 汽水音乐 / 咪咕音乐（透明融于一体背景）
             div()
                 .flex()
                 .flex_row()
                 .items_center()
                 .justify_between()
-                .gap(px(theme::space::SM))
-                .px(px(theme::space::MD))
-                .py(px(theme::space::SM))
+                .gap(px(theme::space::XS))
+                .px(px(theme::space::SM))
+                .py(px(theme::space::XS))
                 .child(
                     div()
+                        .id("provider-switcher-btn")
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap(px(theme::space::MD))
+                        .gap(px(theme::space::SM))
                         .min_w(px(0.0))
-                        .child(
-                            div()
-                                .flex_none()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .size(px(28.0))
-                                .rounded(px(theme::radius::ROW))
-                                .overflow_hidden()
-                                .child(img("icons/sodam-logo.svg").size(px(28.0))),
-                        )
+                        .px(px(theme::space::SM))
+                        .py(px(6.0))
+                        .rounded(px(theme::radius::ROW))
+                        .cursor_pointer()
+                        .when(root.provider_menu_open, |this| {
+                            this.bg(theme::surface_hover())
+                        })
+                        .hover(|style| style.bg(theme::surface_hover()))
+                        .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.provider_menu_open = !root.provider_menu_open;
+                            cx.notify();
+                        }))
+                        .child(provider_badge(root.active_provider(), 26.0))
                         .child(
                             div()
                                 .truncate()
                                 .text_size(theme::Text::Large.size())
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme::text())
-                                .child(root.tr("汽水音乐")),
+                                .child(root.provider_display_name(root.active_provider())),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_size(theme::Text::Tiny.size())
+                                .text_color(theme::text_muted())
+                                .child("▾"),
                         ),
                 )
                 .child(
@@ -229,6 +278,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .cursor_pointer()
                         .hover(|style| style.bg(theme::surface_hover()))
                         .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                            root.provider_menu_open = false;
                             root.toggle_sidebar_collapsed(cx);
                         }))
                         .child(
@@ -287,10 +337,12 @@ pub fn render_compact(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .size(px(36.0))
                 .rounded(px(theme::radius::ROW))
                 .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()))
                 .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.set_nav(Nav::Lyrics, cx);
+                    root.provider_menu_open = !root.provider_menu_open;
+                    cx.notify();
                 }))
-                .child(img("icons/sodam-logo.svg").size(px(26.0))),
+                .child(provider_badge(root.active_provider(), 26.0)),
         )
         .child(
             div()
@@ -387,5 +439,215 @@ pub fn render_top_nav(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
         .w_full()
         .px(px(theme::space::MD))
         .py(px(theme::space::SM))
+        .child(
+            div()
+                .id("top-nav-provider-btn")
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(theme::space::XS))
+                .h(px(30.0))
+                .px(px(theme::space::SM))
+                .rounded(px(theme::radius::PILL))
+                .bg(theme::surface_elevated())
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()))
+                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.provider_menu_open = !root.provider_menu_open;
+                    cx.notify();
+                }))
+                .child(provider_badge(root.active_provider(), 18.0))
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .text_color(theme::text())
+                        .child(root.provider_display_name(root.active_provider())),
+                )
+                .child(
+                    div()
+                        .text_size(theme::Text::Tiny.size())
+                        .text_color(theme::text_muted())
+                        .child("▾"),
+                ),
+        )
         .children(items)
+}
+
+/// 左上角音乐源切换浮层（支持 汽水音乐 ⇄ 咪咕音乐 一键切换与账号状态展示）。
+pub fn provider_popover(root: &Root, cx: &mut Context<Root>) -> AnyElement {
+    let active = root.active_provider();
+    let soda_logged = !root.settings.cookie.trim().is_empty();
+    let migu_logged = !root.settings.migu_cookie.trim().is_empty();
+
+    let soda_sub = if soda_logged {
+        if root.account.as_ref().is_some_and(|a| a.vip) {
+            root.tr("VIP 会员 · 无损直连").to_string()
+        } else {
+            root.tr("已登录").to_string()
+        }
+    } else {
+        root.tr("需扫码登录后使用").to_string()
+    };
+
+    let migu_sub = if migu_logged {
+        if root.migu_account.as_ref().is_some_and(|a| a.vip) {
+            root.tr("VIP 会员 · 24bit 母带").to_string()
+        } else {
+            root.tr("已登录").to_string()
+        }
+    } else {
+        root.tr("免登录可用 · 登录后享 VIP 音质").to_string()
+    };
+
+    let option = |id: &'static str, provider: MusicProvider, sub: String| {
+        let selected = active == provider;
+        div()
+            .id(id)
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(theme::space::MD))
+            .px(px(theme::space::MD))
+            .py(px(theme::space::SM))
+            .rounded(px(theme::radius::ROW))
+            .cursor_pointer()
+            .when(selected, |this| this.bg(theme::surface_selected()))
+            .hover(|style| style.bg(theme::surface_hover()))
+            .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                root.set_music_provider(provider, cx);
+            }))
+            .child(provider_badge(provider, 28.0))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w(px(0.0))
+                    .gap(px(2.0))
+                    .child(
+                        div()
+                            .text_size(theme::Text::Body.size())
+                            .font_weight(if selected {
+                                gpui::FontWeight::SEMIBOLD
+                            } else {
+                                gpui::FontWeight::MEDIUM
+                            })
+                            .text_color(if selected {
+                                theme::accent()
+                            } else {
+                                theme::text()
+                            })
+                            .child(root.provider_display_name(provider)),
+                    )
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(theme::Text::Tiny.size())
+                            .text_color(theme::text_muted())
+                            .child(sub),
+                    ),
+            )
+            .when(selected, |this| {
+                this.child(
+                    svg()
+                        .path(icons::path("check"))
+                        .size(px(theme::ICON_SM))
+                        .text_color(theme::accent()),
+                )
+            })
+    };
+
+    let top_offset = if cfg!(target_os = "macos") {
+        76.0
+    } else {
+        84.0
+    };
+
+    let scrim = div()
+        .id("provider-popover-scrim")
+        .absolute()
+        .size_full()
+        .on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(|root, _event, _window, cx| {
+                root.provider_menu_open = false;
+                cx.notify();
+            }),
+        );
+
+    let card = div()
+        .id("provider-popover-card")
+        .absolute()
+        .top(px(top_offset))
+        .left(px(theme::space::MD))
+        .w(px(252.0))
+        .p(px(theme::space::SM))
+        .flex()
+        .flex_col()
+        .gap(px(theme::space::XS))
+        .rounded(px(theme::radius::CARD))
+        .bg(theme::surface_elevated())
+        .border_1()
+        .border_color(theme::border())
+        .shadow_lg()
+        .on_mouse_down(gpui::MouseButton::Left, |_event, _window, cx| {
+            cx.stop_propagation();
+        })
+        .child(
+            div()
+                .px(px(theme::space::MD))
+                .py(px(4.0))
+                .text_size(theme::Text::Tiny.size())
+                .text_color(theme::text_faint())
+                .child(root.tr("切换音乐平台")),
+        )
+        .child(option(
+            "switch-provider-soda",
+            MusicProvider::Soda,
+            soda_sub,
+        ))
+        .child(option(
+            "switch-provider-migu",
+            MusicProvider::Migu,
+            migu_sub,
+        ))
+        .child(
+            div()
+                .h(px(1.0))
+                .mx(px(theme::space::SM))
+                .my(px(2.0))
+                .bg(theme::border()),
+        )
+        .child(
+            div()
+                .id("provider-manage-accounts")
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .px(px(theme::space::MD))
+                .py(px(theme::space::SM))
+                .rounded(px(theme::radius::ROW))
+                .cursor_pointer()
+                .hover(|style| style.bg(theme::surface_hover()))
+                .text_size(theme::Text::Small.size())
+                .text_color(theme::text_muted())
+                .on_click(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.provider_menu_open = false;
+                    root.settings_section = SettingsSection::Account;
+                    root.set_nav(Nav::Settings, cx);
+                }))
+                .child(root.tr("管理账号与会员"))
+                .child(
+                    svg()
+                        .path(icons::path("chevron-right"))
+                        .size(px(theme::ICON_SM))
+                        .text_color(theme::text_muted()),
+                ),
+        );
+
+    gpui::deferred(div().absolute().size_full().child(scrim).child(card))
+        .with_priority(9)
+        .into_any_element()
 }

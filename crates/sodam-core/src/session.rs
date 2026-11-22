@@ -114,18 +114,33 @@ impl Session {
     /// 表现为同一首歌每次都从中间开始/中途跳下一首。
     /// 旧格式 sidecar（只有音质、没记大小）视为 miss：重下一次完成自愈。
     pub fn cached_track(&self, track_id: &str) -> Option<CachedTrack> {
-        let path = crate::audio::cache_dir().join(format!("{track_id}-{}.m4a", self.quality_tag()));
-        let actual = std::fs::metadata(&path).ok()?.len();
-        if actual == 0 {
-            return None;
+        let dir = crate::audio::cache_dir();
+        let tag = self.quality_tag();
+        for ext in crate::audio::AUDIO_CACHE_EXTS {
+            let path = dir.join(format!("{track_id}-{tag}.{ext}"));
+            let Ok(meta) = std::fs::metadata(&path) else {
+                continue;
+            };
+            let actual = meta.len();
+            if actual == 0 {
+                continue;
+            }
+            let quality_path = path.with_extension("quality");
+            let Ok(text) = std::fs::read_to_string(&quality_path) else {
+                continue;
+            };
+            let mut fields = text.split('\t');
+            let Some(quality) = fields.next().map(str::trim).map(str::to_string) else {
+                continue;
+            };
+            let Some(size) = fields.next().and_then(|v| v.trim().parse::<u64>().ok()) else {
+                continue;
+            };
+            if size == actual && !quality.is_empty() {
+                return Some(CachedTrack { path, quality });
+            }
         }
-        let quality_path =
-            crate::audio::cache_dir().join(format!("{track_id}-{}.quality", self.quality_tag()));
-        let text = std::fs::read_to_string(&quality_path).ok()?;
-        let mut fields = text.split('\t');
-        let quality = fields.next()?.trim().to_string();
-        let size = fields.next()?.trim().parse::<u64>().ok()?;
-        (size == actual && !quality.is_empty()).then_some(CachedTrack { path, quality })
+        None
     }
 
     /// 这首是否已经在本地缓存里（**按当前音质档位**判断，
@@ -180,9 +195,10 @@ fn is_truncated_download(declared: i64, written: u64) -> bool {
     declared > 0 && written < declared as u64
 }
 
-/// 一次进程内共享的会话（持有 `Soda` 与当前设置）。
+/// 一次进程内共享的会话（持有汽水 `Soda`、咪咕 [`crate::migu::MiguClient`] 与当前设置）。
 pub struct Session {
     pumpkin: Soda,
+    migu: crate::migu::MiguClient,
     settings: Settings,
 }
 
@@ -202,15 +218,27 @@ impl Session {
             let provider = CompatHttpSignature::new(url, settings.signer_token.trim());
             pumpkin.set_signature_provider(Arc::new(provider));
         }
-        if !settings.quality.trim().is_empty() {
-            pumpkin.set_quality_preference(settings.quality.trim());
+        let soda_quality = settings.quality.trim();
+        if !soda_quality.is_empty() {
+            let mapped = if soda_quality.eq_ignore_ascii_case("zq24") {
+                "lossless"
+            } else {
+                soda_quality
+            };
+            pumpkin.set_quality_preference(mapped);
         }
         // libresoda 0.4 系列支持纯 HTTP 扫码，遇到二次验证才打开系统浏览器。
         // 与音乐取流签名设备保持独立，不强制依赖 Chromium/CDP。
         let _ = pumpkin.set_qr_device(settings.login_device());
         pumpkin.enable_http_login();
 
-        Self { pumpkin, settings }
+        let migu = crate::migu::MiguClient::new(&settings.migu_cookie, &settings.migu_device_id);
+
+        Self {
+            pumpkin,
+            migu,
+            settings,
+        }
     }
 
     /// 创建扫码登录二维码（`scan_url` 由 UI 渲染成二维码）。
@@ -354,6 +382,16 @@ impl Session {
             return Ok(cached);
         }
 
+        if crate::models::MusicProvider::from_track_id(&track.id)
+            == crate::models::MusicProvider::Migu
+        {
+            return self.migu.download_to_cache(
+                track,
+                &self.quality_tag(),
+                self.settings.audio_download_timeout_seconds,
+            );
+        }
+
         let song = libresoda::Song {
             id: track.id.clone(),
             name: track.title.clone(),
@@ -447,9 +485,15 @@ impl Session {
             return Ok(cached);
         }
 
-        let response = libresoda::soda::track::fetch_web_track_v2(&self.pumpkin, track_id)
-            .map_err(|err| anyhow::anyhow!("获取歌词失败: {err}"))?;
-        let raw = response.lyric.content;
+        let raw = if crate::models::MusicProvider::from_track_id(track_id)
+            == crate::models::MusicProvider::Migu
+        {
+            self.migu.fetch_lyrics_lrc(track_id)?
+        } else {
+            let response = libresoda::soda::track::fetch_web_track_v2(&self.pumpkin, track_id)
+                .map_err(|err| anyhow::anyhow!("获取歌词失败: {err}"))?;
+            response.lyric.content
+        };
         let path = Self::lyrics_cache_path(track_id);
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -458,8 +502,21 @@ impl Session {
         Ok(crate::models::parse_lrc(&raw))
     }
 
+    pub fn active_provider(&self) -> crate::models::MusicProvider {
+        self.settings.active_provider()
+    }
+
     pub fn soda(&self) -> &Soda {
         &self.pumpkin
+    }
+
+    pub fn migu(&self) -> &crate::migu::MiguClient {
+        &self.migu
+    }
+
+    /// 读取咪咕音乐账号信息与 VIP 状态。
+    pub fn fetch_migu_account(&self) -> anyhow::Result<AccountInfo> {
+        self.migu.fetch_account()
     }
 
     pub fn has_cookie(&self) -> bool {
@@ -468,6 +525,11 @@ impl Session {
 
     /// 简单搜索（同步；UI 侧应放到后台线程执行）。
     pub fn search(&self, keyword: &str) -> anyhow::Result<Vec<crate::models::TrackItem>> {
+        if self.active_provider() == crate::models::MusicProvider::Migu {
+            return self
+                .migu
+                .search_songs(&crate::migu::url_encode(keyword.trim()), 30);
+        }
         let songs = self
             .pumpkin
             .search(keyword)

@@ -12,7 +12,7 @@ use crate::ui::icons;
 use crate::ui::spinner::loading_state;
 use crate::ui::theme;
 
-pub use login::login_modal;
+pub use login::{login_modal, migu_login_modal};
 pub mod downloads;
 pub mod login;
 pub mod lyrics;
@@ -1123,7 +1123,8 @@ pub(crate) fn back_button(cx: &mut Context<Root>) -> AnyElement {
 /// 当前页面的副标题：**从状态推导**，不要复用全局 `status`
 /// （否则切页会残留上一页的文案，比如「共 11 个歌单」出现在收藏页）。
 fn subtitle_for(root: &Root) -> String {
-    let logged_in = !root.settings.cookie.trim().is_empty();
+    let provider = root.active_provider();
+    let logged_in = root.settings.is_provider_logged_in(provider);
     match root.nav {
         Nav::Search => {
             if root.searching {
@@ -1136,7 +1137,12 @@ fn subtitle_for(root: &Root) -> String {
         }
         Nav::Liked => {
             if !logged_in {
-                root.tr("未登录：先在「登录」页扫码").to_string()
+                if provider == sodam_core::MusicProvider::Migu {
+                    root.tr("未登录：先在「设置 → 账号与会员」登录咪咕音乐")
+                        .to_string()
+                } else {
+                    root.tr("未登录：先在「登录」页扫码").to_string()
+                }
             } else if root.liked.is_empty() {
                 root.tr("正在读取…").to_string()
             } else {
@@ -1168,7 +1174,12 @@ fn subtitle_for(root: &Root) -> String {
             Some((_, _, tracks)) => root.localized("{} 首", &[tracks.len().to_string()]),
             None => {
                 if !logged_in {
-                    root.tr("未登录：先在「登录」页扫码").to_string()
+                    if provider == sodam_core::MusicProvider::Migu {
+                        root.tr("未登录：先在「设置 → 账号与会员」登录咪咕音乐")
+                            .to_string()
+                    } else {
+                        root.tr("未登录：先在「登录」页扫码").to_string()
+                    }
                 } else if root.playlists.is_empty() {
                     root.tr("正在读取…").to_string()
                 } else {
@@ -1180,7 +1191,10 @@ fn subtitle_for(root: &Root) -> String {
             .tr("外观、播放、歌词、下载、存储、桌面、高级与账户")
             .to_string(),
         Nav::Lyrics => root.tr("正在播放").to_string(),
-        Nav::Home => root.tr("来自汽水的推荐").to_string(),
+        Nav::Home => match provider {
+            sodam_core::MusicProvider::Soda => root.tr("来自汽水的推荐").to_string(),
+            sodam_core::MusicProvider::Migu => root.tr("来自咪咕的推荐").to_string(),
+        },
         Nav::Scenes => root.tr("按场景选歌").to_string(),
         Nav::Artist => root.tr("音乐人详情").to_string(),
         Nav::Album => root.tr("专辑详情").to_string(),
@@ -1666,7 +1680,7 @@ fn local_playlists_page(root: &Root, cx: &mut Context<Root>) -> AnyElement {
 /// 渲染内容区。
 pub fn render(root: &Root, window: &Window, cx: &mut Context<Root>) -> impl IntoElement {
     let settings = &root.settings;
-    let logged_in = !settings.cookie.trim().is_empty();
+    let logged_in = settings.is_provider_logged_in(root.active_provider());
 
     let body = match root.nav {
         // 首页直接承载推荐内容。此前这里只显示加载状态，即使推荐队列已经

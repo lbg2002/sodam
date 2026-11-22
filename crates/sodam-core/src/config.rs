@@ -118,6 +118,12 @@ pub struct Settings {
     pub theme: String,
     /// 界面语言：`zh` / `en`；空或 `auto` = 跟随系统语言。
     pub language: String,
+    /// 当前音乐源：`soda`（汽水音乐） / `migu`（咪咕音乐）。
+    pub music_provider: String,
+    /// 咪咕音乐登录凭证（`pacmtoken` 或完整浏览器 `Cookie`）。
+    pub migu_cookie: String,
+    /// 咪咕音乐客户端设备标识（UUIDv4）。
+    pub migu_device_id: String,
 }
 
 pub const DEFAULT_SIGNER_URL: &str = "https://signer.lingchuanbio.com/sign";
@@ -189,6 +195,9 @@ impl Default for Settings {
             dynamic_cover_color: true,
             theme: String::new(),
             language: String::new(),
+            music_provider: "soda".to_string(),
+            migu_cookie: String::new(),
+            migu_device_id: String::new(),
         }
     }
 }
@@ -199,10 +208,12 @@ impl Settings {
     /// VIP App 取流需要 device_id/iid/fp；旧版本只保存了 Cookie，导致
     /// 账号能登录但取流只能拿到试听。生成后由应用保存到配置，后续请求保持一致。
     pub fn ensure_device_identity(&mut self) -> bool {
-        if !self.device_id.trim().is_empty()
-            && !self.iid.trim().is_empty()
-            && !self.fp.trim().is_empty()
-        {
+        let mut changed = false;
+        let need_soda = self.device_id.trim().is_empty()
+            || self.iid.trim().is_empty()
+            || self.fp.trim().is_empty();
+        let need_migu = self.migu_device_id.trim().is_empty();
+        if !need_soda && !need_migu {
             return false;
         }
         use std::hash::{Hash, Hasher};
@@ -214,10 +225,27 @@ impl Settings {
             .as_nanos()
             .hash(&mut hasher);
         let seed = hasher.finish();
-        self.device_id = format!("{:016}", seed % 10_000_000_000_000_000);
-        self.iid = format!("{:015}", (seed / 10) % 1_000_000_000_000_000);
-        self.fp = self.device_id.clone();
-        true
+        if need_soda {
+            self.device_id = format!("{:016}", seed % 10_000_000_000_000_000);
+            self.iid = format!("{:015}", (seed / 10) % 1_000_000_000_000_000);
+            self.fp = self.device_id.clone();
+            changed = true;
+        }
+        if need_migu {
+            let mut hasher2 = std::collections::hash_map::DefaultHasher::new();
+            seed.wrapping_mul(0x9e37_79b9_7f4a_7c15).hash(&mut hasher2);
+            "migu-device".hash(&mut hasher2);
+            let hi = seed;
+            let lo = hasher2.finish();
+            let b0 = (hi >> 32) as u32;
+            let b1 = (hi >> 16) as u16;
+            let b2 = (((hi as u16) & 0x0fff) | 0x4000) & 0x4fff;
+            let b3 = (((lo >> 48) as u16) & 0x3fff) | 0x8000;
+            let b4 = lo & 0xffff_ffff_ffff;
+            self.migu_device_id = format!("{b0:08x}-{b1:04x}-{b2:04x}-{b3:04x}-{b4:012x}");
+            changed = true;
+        }
+        changed
     }
 
     /// 首次使用从 libresoda 旧身份迁移或生成，不在登出时清除。
@@ -291,6 +319,24 @@ impl Settings {
         Ok(())
     }
 
+    pub fn active_provider(&self) -> crate::models::MusicProvider {
+        crate::models::MusicProvider::from_key(&self.music_provider)
+    }
+
+    pub fn is_provider_logged_in(&self, provider: crate::models::MusicProvider) -> bool {
+        match provider {
+            crate::models::MusicProvider::Soda => !self.cookie.trim().is_empty(),
+            crate::models::MusicProvider::Migu => !self.migu_cookie.trim().is_empty(),
+        }
+    }
+
+    pub fn can_browse_active_provider(&self) -> bool {
+        match self.active_provider() {
+            crate::models::MusicProvider::Soda => !self.cookie.trim().is_empty(),
+            crate::models::MusicProvider::Migu => true,
+        }
+    }
+
     pub fn is_ready_for_vip(&self) -> bool {
         !self.cookie.trim().is_empty() && !self.signer_url.trim().is_empty()
     }
@@ -310,6 +356,7 @@ impl Settings {
             ("SODAM_DOWNLOAD_FORMAT", &mut self.download_format),
             ("SODAM_DOWNLOAD_DIR", &mut self.download_dir),
             ("SODAM_AUDIO_DEVICE", &mut self.audio_output_device),
+            ("MIGU_COOKIE", &mut self.migu_cookie),
         ];
         for (key, slot) in pairs {
             if slot.trim().is_empty() {
@@ -318,6 +365,20 @@ impl Settings {
                         *slot = value.trim().to_string();
                     }
                 }
+            }
+        }
+        if self.migu_cookie.trim().is_empty() {
+            if let Ok(value) = std::env::var("MIGU_PACMTOKEN") {
+                if !value.trim().is_empty() {
+                    self.migu_cookie = value.trim().to_string();
+                }
+            }
+        }
+        if let Ok(provider) = std::env::var("SODAM_PROVIDER") {
+            if !provider.trim().is_empty() {
+                self.music_provider = crate::models::MusicProvider::from_key(&provider)
+                    .key()
+                    .to_string();
             }
         }
         self

@@ -427,13 +427,29 @@ pub fn lyrics_cache_dir() -> std::path::PathBuf {
         .join("lyrics")
 }
 
+/// 支持的本地音频缓存扩展名（汽水为 m4a，咪咕为 flac/mp3）。
+pub const AUDIO_CACHE_EXTS: &[&str] = &["m4a", "flac", "mp3"];
+
+/// 判断路径是否为受支持的音频缓存文件。
+pub fn is_audio_cache_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            AUDIO_CACHE_EXTS
+                .iter()
+                .any(|known| ext.eq_ignore_ascii_case(known))
+        })
+}
+
 /// 从缓存文件名中提取曲目 id。
 ///
-/// 正常文件名为 `<track-id>-<quality>.m4a`。优先匹配已知音质后缀，
+/// 正常文件名为 `<track-id>-<quality>.<ext>`。优先匹配已知音质后缀，
 /// 兼容 track id 自身包含 `-` 的情况。
 fn cache_track_id(path: &std::path::Path) -> Option<String> {
     let stem = path.file_stem()?.to_str()?;
-    for tag in ["lossless", "highest", "medium", "low", "best", "auto"] {
+    for tag in [
+        "zq24", "lossless", "highest", "medium", "low", "best", "auto",
+    ] {
         let suffix = format!("-{tag}");
         if let Some(id) = stem.strip_suffix(&suffix) {
             if !id.is_empty() {
@@ -474,7 +490,7 @@ pub fn cached_audio_ids_for_quality(quality: &str) -> std::collections::HashSet<
             value
         }
     };
-    let suffix = format!("-{tag}.m4a");
+    let suffix = format!("-{tag}");
     let Ok(entries) = std::fs::read_dir(cache_dir()) else {
         return std::collections::HashSet::new();
     };
@@ -483,8 +499,11 @@ pub fn cached_audio_ids_for_quality(quality: &str) -> std::collections::HashSet<
         .flatten()
         .filter_map(|entry| {
             let path = entry.path();
-            let name = path.file_name()?.to_str()?;
-            let track_id = name.strip_suffix(&suffix)?;
+            if !is_audio_cache_file(&path) {
+                return None;
+            }
+            let stem = path.file_stem()?.to_str()?;
+            let track_id = stem.strip_suffix(&suffix)?;
             if track_id.is_empty() {
                 return None;
             }
@@ -513,7 +532,7 @@ pub fn cached_audio_ids() -> std::collections::HashSet<String> {
         .flatten()
         .filter_map(|entry| {
             let path = entry.path();
-            (path.extension().and_then(|ext| ext.to_str()) == Some("m4a"))
+            is_audio_cache_file(&path)
                 .then(|| cache_track_id(&path))
                 .flatten()
         })
@@ -582,7 +601,7 @@ pub fn trim_audio_cache(
     let mut total = 0u64;
     for entry in entries.flatten() {
         let audio = entry.path();
-        if audio.extension().and_then(|ext| ext.to_str()) != Some("m4a") {
+        if !is_audio_cache_file(&audio) {
             continue;
         }
         let Some(track_id) = cache_track_id(&audio) else {
@@ -668,7 +687,8 @@ fn dir_usage(dir: &std::path::Path) -> (u64, usize) {
     (bytes, files)
 }
 
-/// 顶层目录里指定扩展名的文件数（用于「歌曲数」：只数 `.m4a`）。
+/// 顶层目录里指定扩展名的文件数。
+#[cfg(test)]
 fn count_extension(dir: &std::path::Path, extension: &str) -> usize {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;
@@ -679,17 +699,27 @@ fn count_extension(dir: &std::path::Path, extension: &str) -> usize {
         .count()
 }
 
+fn count_audio_files(dir: &std::path::Path) -> usize {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| is_audio_cache_file(&entry.path()))
+        .count()
+}
+
 /// 缓存统计：(音频字节, 歌曲数, 封面字节, 封面张数)。
 ///
-/// * 字节数含**全部**文件（`.m4a` / `.quality` / `.access` 边车 /
+/// * 字节数含**全部**文件（`.m4a` / `.flac` / `.mp3` / `.quality` / `.access` 边车 /
 ///   下载中的 `.part` / 封面原图子目录）；
-/// * 「歌曲数」只数 `.m4a`：边车和临时文件不是歌，全算会把数量翻倍（踩过）；
+/// * 「歌曲数」只数音频缓存文件：边车和临时文件不是歌，全算会把数量翻倍（踩过）；
 /// * 「封面张数」数全部图片缓存文件（含原图）。
 ///
 /// 注意：这是同步扫盘，别在渲染路径里每帧调 —— 调用方应后台执行并缓存结果。
 pub fn cache_stats() -> (u64, usize, u64, usize) {
     let (audio_bytes, _) = dir_usage(&cache_dir());
-    let songs = count_extension(&cache_dir(), "m4a");
+    let songs = count_audio_files(&cache_dir());
     let (cover_bytes, cover_files) = dir_usage(&cover_cache_dir());
     (audio_bytes, songs, cover_bytes, cover_files)
 }

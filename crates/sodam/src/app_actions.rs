@@ -6,7 +6,7 @@ use crate::ui::theme::{self, ThemeKind};
 use gpui::prelude::*;
 use gpui::{Context, Window};
 use sodam_core::library::RecommendationSource;
-use sodam_core::models::{PlaylistItem, SceneItem, TrackItem};
+use sodam_core::models::{MusicProvider, PlaylistItem, SceneItem, TrackItem};
 use sodam_core::session::Session;
 use sodam_core::Settings;
 use std::collections::HashSet;
@@ -36,6 +36,435 @@ fn clear_qr_device_state() {
 }
 
 impl Root {
+    pub fn set_music_provider(&mut self, provider: MusicProvider, cx: &mut Context<Self>) {
+        self.provider_menu_open = false;
+        if self.active_provider() == provider {
+            cx.notify();
+            return;
+        }
+        let mut settings = self.settings.clone();
+        settings.music_provider = provider.key().to_string();
+        let save_res = if let Some(session) = self.session.as_mut() {
+            session.apply(settings.clone())
+        } else {
+            settings.save()
+        };
+        if let Err(err) = save_res {
+            self.set_status("保存音源配置失败：{err}", &[err.to_string()]);
+            cx.notify();
+            return;
+        }
+        self.settings = settings;
+
+        // 重置浏览态缓存（保留正在播放的音频与当前播放队列，避免切源误停歌）
+        self.scenes = Arc::new(Vec::new());
+        self.scene_cards = Arc::new(Vec::new());
+        self.scenes_list.reset(0);
+        self.loading_scenes = false;
+        self.loading_scene_cards = false;
+        self.playlists.clear();
+        self.open_playlist = None;
+        self.loading_library = false;
+        self.loading_playlist = false;
+        self.liked = Arc::new(Vec::new());
+        self.liked_ids = Arc::new(HashSet::new());
+        self.liked_loaded = false;
+        self.liked_loading = false;
+        self.liked_ids_failed = false;
+        self.loading_liked = false;
+        self.results = Arc::new(Vec::new());
+        self.search_results = sodam_core::models::SearchResults::default();
+        self.search_playlist = None;
+        self.search_error = None;
+        self.open_artist = None;
+        self.open_album = None;
+        self.nav_transition_seq = self.nav_transition_seq.wrapping_add(1);
+
+        if provider == MusicProvider::Migu && !self.settings.migu_cookie.trim().is_empty() {
+            self.refresh_migu_account(cx);
+        } else if provider == MusicProvider::Soda && !self.settings.cookie.trim().is_empty() {
+            self.refresh_account(cx);
+        }
+
+        if self.settings.is_provider_logged_in(provider) {
+            self.load_liked_ids(cx);
+        }
+
+        if !self.settings.can_browse_active_provider()
+            && !matches!(
+                self.nav,
+                Nav::Settings
+                    | Nav::Downloads
+                    | Nav::Recent
+                    | Nav::LocalMusic
+                    | Nav::LocalPlaylists
+                    | Nav::Lyrics
+            )
+        {
+            self.settings_section = crate::app::SettingsSection::Account;
+            self.set_nav(Nav::Settings, cx);
+        } else {
+            match self.nav {
+                Nav::Home | Nav::Scenes => self.load_scenes(cx),
+                Nav::Library if self.settings.is_provider_logged_in(provider) => {
+                    self.load_playlists(cx)
+                }
+                Nav::Liked if self.settings.is_provider_logged_in(provider) => self.load_liked(cx),
+                Nav::Search if !self.search_input.trim().is_empty() => self.run_search(cx),
+                _ => {}
+            }
+        }
+
+        let name = self.provider_display_name(provider).to_string();
+        let msg = self.localized("已切换音源：{}", &[name]);
+        self.status = msg.clone();
+        self.toast(msg, cx);
+    }
+
+    pub fn open_migu_login_modal(&mut self, cx: &mut Context<Self>) {
+        self.provider_menu_open = false;
+        self.migu_login_modal_open = true;
+        self.migu_login_busy = false;
+        self.migu_login_status.clear();
+        cx.notify();
+    }
+
+    pub fn close_migu_login_modal(&mut self, cx: &mut Context<Self>) {
+        self.migu_login_modal_open = false;
+        self.migu_login_busy = false;
+        self.migu_sim_session_seq = self.migu_sim_session_seq.wrapping_add(1);
+        cx.notify();
+    }
+
+    pub fn open_migu_web(&mut self, cx: &mut Context<Self>) {
+        self.status = match system_open("https://music.migu.cn") {
+            Ok(_) => self
+                .tr("已在浏览器打开咪咕音乐，请登录后复制 Cookie 或 pacmtoken")
+                .to_string(),
+            Err(err) => self.localized("打开浏览器失败：{err}", &[err.to_string()]),
+        };
+        let msg = self.status.clone();
+        self.toast(msg, cx);
+    }
+
+    fn apply_migu_credentials(&mut self, raw: String, cx: &mut Context<Self>) {
+        let trimmed = raw.trim().to_string();
+        if trimmed.is_empty() {
+            self.migu_login_status = self.tr("请先输入或粘贴咪咕 Cookie / pacmtoken").to_string();
+            cx.notify();
+            return;
+        }
+        let settings_base = self.settings.clone();
+        self.migu_login_busy = true;
+        self.migu_login_status = self.tr("正在验证咪咕会员凭证…").to_string();
+        cx.notify();
+
+        let work = cx.background_spawn(async move {
+            let mut probe_settings = settings_base;
+            probe_settings.migu_cookie = trimmed.clone();
+            let info = Session::new(probe_settings).fetch_migu_account()?;
+            Ok::<_, anyhow::Error>((trimmed, info))
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.migu_login_busy = false;
+                match result {
+                    Ok((cookie, info)) => {
+                        let mut next = root.settings.clone();
+                        next.migu_cookie = cookie;
+                        let save_res = if let Some(session) = root.session.as_mut() {
+                            session.apply(next.clone())
+                        } else {
+                            next.save()
+                        };
+                        match save_res {
+                            Ok(()) => {
+                                root.settings = next;
+                                root.migu_account = Some(info.clone());
+                                if !info.avatar_url.trim().is_empty() {
+                                    root.ensure_covers(std::slice::from_ref(&info.avatar_url), cx);
+                                }
+                                root.migu_login_modal_open = false;
+                                root.migu_login_status.clear();
+                                root.migu_cookie_input.clear();
+                                if root.active_provider() == MusicProvider::Migu {
+                                    root.load_liked_ids(cx);
+                                    if root.nav == Nav::Library {
+                                        root.playlists.clear();
+                                        root.load_playlists(cx);
+                                    } else if root.nav == Nav::Liked {
+                                        root.liked_loaded = false;
+                                        root.load_liked(cx);
+                                    }
+                                }
+                                let badge = if info.vip {
+                                    root.tr("VIP")
+                                } else {
+                                    root.tr("非 VIP")
+                                }
+                                .to_string();
+                                let msg = root
+                                    .localized("咪咕登录成功：{}（{}）", &[info.nickname, badge]);
+                                root.status = msg.clone();
+                                root.toast(msg, cx);
+                            }
+                            Err(err) => {
+                                root.migu_login_status = root
+                                    .localized("保存咪咕登录状态失败：{err}", &[err.to_string()]);
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        root.migu_login_status =
+                            root.localized("验证失败：{err}", &[err.to_string()]);
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn submit_migu_cookie(&mut self, cx: &mut Context<Self>) {
+        let raw = self.migu_cookie_input.clone();
+        self.apply_migu_credentials(raw, cx);
+    }
+
+    pub fn paste_migu_cookie_from_clipboard(&mut self, cx: &mut Context<Self>) {
+        let Some(text) = cx
+            .read_from_clipboard()
+            .and_then(|item| item.text())
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+        else {
+            self.migu_login_status = self
+                .tr("剪贴板为空或不包含文本，请先在浏览器复制 Cookie / pacmtoken")
+                .to_string();
+            cx.notify();
+            return;
+        };
+        self.migu_cookie_input = text.clone();
+        self.apply_migu_credentials(text, cx);
+    }
+
+    pub fn start_migu_sim_login(&mut self, cx: &mut Context<Self>) {
+        let phone = self.migu_phone_input.trim().to_string();
+        if phone.len() < 11 {
+            self.migu_login_status = self.tr("请输入完整的 11 位中国移动手机号").to_string();
+            cx.notify();
+            return;
+        }
+        self.migu_sim_session_seq = self.migu_sim_session_seq.wrapping_add(1);
+        let sim_seq = self.migu_sim_session_seq;
+        self.migu_login_busy = true;
+        self.migu_login_status = self.tr("正在发送 SIM 一键认证请求…").to_string();
+        cx.notify();
+
+        let settings = self.settings.clone();
+        let send_phone = phone.clone();
+        let send_task = cx.background_spawn(async move {
+            Session::new(settings).migu().sim_login_send(&send_phone)
+        });
+        cx.spawn(async move |this, cx| {
+            let sid = match send_task.await {
+                Ok(sid) => sid,
+                Err(err) => {
+                    let _ = this.update(cx, |root, cx| {
+                        if root.migu_sim_session_seq == sim_seq {
+                            root.migu_login_busy = false;
+                            root.migu_login_status =
+                                root.localized("SIM 认证请求失败：{err}", &[err.to_string()]);
+                            cx.notify();
+                        }
+                    });
+                    return;
+                }
+            };
+
+            let _ = this.update(cx, |root, cx| {
+                if root.migu_sim_session_seq == sim_seq {
+                    root.migu_login_status = root
+                        .tr("已向手机推送 SIM 确认弹窗，请在手机上点击确认…")
+                        .to_string();
+                    cx.notify();
+                }
+            });
+
+            for _ in 0..40 {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(3))
+                    .await;
+                let still_active = this
+                    .update(cx, |root, _cx| {
+                        root.migu_login_modal_open && root.migu_sim_session_seq == sim_seq
+                    })
+                    .unwrap_or(false);
+                if !still_active {
+                    return;
+                }
+
+                let poll_settings = this
+                    .update(cx, |root, _cx| root.settings.clone())
+                    .unwrap_or_default();
+                let poll_sid = sid.clone();
+                let poll_task = cx.background_spawn(async move {
+                    Session::new(poll_settings).migu().sim_login_poll(&poll_sid)
+                });
+                match poll_task.await {
+                    Ok(sodam_core::migu::MiguSimPoll::Waiting) => continue,
+                    Ok(sodam_core::migu::MiguSimPoll::Success { cookie }) => {
+                        let _ = this.update(cx, |root, cx| {
+                            if root.migu_sim_session_seq == sim_seq {
+                                root.apply_migu_credentials(cookie, cx);
+                            }
+                        });
+                        return;
+                    }
+                    Ok(sodam_core::migu::MiguSimPoll::Failed(reason)) => {
+                        let _ = this.update(cx, |root, cx| {
+                            if root.migu_sim_session_seq == sim_seq {
+                                root.migu_login_busy = false;
+                                root.migu_login_status = reason;
+                                cx.notify();
+                            }
+                        });
+                        return;
+                    }
+                    Err(_) => continue,
+                }
+            }
+
+            let _ = this.update(cx, |root, cx| {
+                if root.migu_sim_session_seq == sim_seq {
+                    root.migu_login_busy = false;
+                    root.migu_login_status = root
+                        .tr("SIM 认证等待超时，可重试或使用 Cookie 导入")
+                        .to_string();
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub fn send_migu_sms_code(&mut self, cx: &mut Context<Self>) {
+        let phone = self.migu_phone_input.trim().to_string();
+        if phone.len() < 11 {
+            self.migu_login_status = self.tr("请输入 11 位手机号").to_string();
+            cx.notify();
+            return;
+        }
+        self.migu_login_busy = true;
+        self.migu_login_status = self.tr("正在发送短信验证码…").to_string();
+        cx.notify();
+        let settings = self.settings.clone();
+        let work =
+            cx.background_spawn(async move { Session::new(settings).migu().sms_send_code(&phone) });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.migu_login_busy = false;
+                root.migu_login_status = match result {
+                    Ok(()) => root.tr("验证码已发送，请查收短信并填写").to_string(),
+                    Err(err) => err.to_string(),
+                };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn submit_migu_sms_login(&mut self, cx: &mut Context<Self>) {
+        let phone = self.migu_phone_input.trim().to_string();
+        let code = self.migu_code_input.trim().to_string();
+        if phone.len() < 11 || code.is_empty() {
+            self.migu_login_status = self.tr("请填写手机号与短信验证码").to_string();
+            cx.notify();
+            return;
+        }
+        self.migu_login_busy = true;
+        self.migu_login_status = self.tr("正在校验短信验证码…").to_string();
+        cx.notify();
+        let settings = self.settings.clone();
+        let work = cx.background_spawn(async move {
+            Session::new(settings)
+                .migu()
+                .sms_verify_login(&phone, &code)
+        });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                root.migu_login_busy = false;
+                match result {
+                    Ok(cookie) => root.apply_migu_credentials(cookie, cx),
+                    Err(err) => {
+                        root.migu_login_status = err.to_string();
+                        cx.notify();
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    pub fn refresh_migu_account(&mut self, cx: &mut Context<Self>) {
+        if self.settings.migu_cookie.trim().is_empty() {
+            return;
+        }
+        let settings = self.settings.clone();
+        let work = cx.background_spawn(async move { Session::new(settings).fetch_migu_account() });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |root, cx| {
+                match result {
+                    Ok(info) => {
+                        if !info.avatar_url.trim().is_empty() {
+                            root.ensure_covers(std::slice::from_ref(&info.avatar_url), cx);
+                        }
+                        root.migu_account = Some(info);
+                    }
+                    Err(err) => {
+                        if root.active_provider() == MusicProvider::Migu {
+                            root.status =
+                                root.localized("读取咪咕账号失败：{err}", &[err.to_string()]);
+                        }
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn logout_migu(&mut self, cx: &mut Context<Self>) {
+        let mut next = self.settings.clone();
+        next.migu_cookie.clear();
+        let save_res = if let Some(session) = self.session.as_mut() {
+            session.apply(next.clone())
+        } else {
+            next.save()
+        };
+        self.settings = next;
+        self.migu_account = None;
+        self.migu_cookie_input.clear();
+        self.migu_code_input.clear();
+        self.migu_login_modal_open = false;
+        self.migu_sim_session_seq = self.migu_sim_session_seq.wrapping_add(1);
+        if self.active_provider() == MusicProvider::Migu {
+            self.playlists.clear();
+            self.liked = Arc::new(Vec::new());
+            self.liked_ids = Arc::new(HashSet::new());
+            self.liked_loaded = false;
+        }
+        self.status = match save_res {
+            Ok(()) => self.tr("已退出咪咕音乐账号").to_string(),
+            Err(err) => self.localized("已退出咪咕账号，但保存配置失败：{err}", &[err.to_string()]),
+        };
+        let msg = self.status.clone();
+        self.toast(msg, cx);
+    }
+
     pub(crate) fn search_input_focused(&self, window: &Window) -> bool {
         self.search_focus.is_focused(window)
     }
@@ -1756,13 +2185,15 @@ impl Root {
         if self.loading_scenes {
             return;
         }
+        let initial_load = self.scene_cards.is_empty();
+        let active_provider = self.active_provider();
         let existing_ids: Vec<u64> = self
             .scene_cards
             .iter()
             .filter_map(|card| card.inner_block_id.parse().ok())
             .collect();
         self.loading_scenes = true;
-        self.loading_scene_cards = !existing_ids.is_empty();
+        self.loading_scene_cards = !initial_load;
         if std::env::var("SODAM_SCENE_LOG").is_ok() {
             eprintln!(
                 "[scenes] load_more start existing={} loading={}",
@@ -1770,7 +2201,7 @@ impl Root {
                 self.loading_scene_cards
             );
         }
-        self.status = if existing_ids.is_empty() {
+        self.status = if initial_load {
             self.tr("正在读取听歌模式…").to_string()
         } else {
             self.tr("正在加载更多探索歌单…").to_string()
@@ -1784,14 +2215,14 @@ impl Root {
             let mut modes = Vec::new();
             let mut cards = Vec::new();
 
-            if existing_ids.is_empty() {
+            if initial_load {
                 match sodam_core::library::scene_modes(&session) {
                     Ok(value) => modes = value,
                     Err(err) => mode_error = Some(err.to_string()),
                 }
             }
 
-            let result = if existing_ids.is_empty() {
+            let result = if initial_load {
                 sodam_core::library::scene_discover_cards(&session).and_then(|mut cards| {
                     if cards.is_empty() {
                         cards = sodam_core::library::scene_discover_cards_more(
@@ -1801,6 +2232,8 @@ impl Root {
                     }
                     Ok(cards)
                 })
+            } else if active_provider == MusicProvider::Migu {
+                Ok(Vec::new())
             } else {
                 sodam_core::library::scene_discover_cards_more(&session, &[])
             };
@@ -2023,9 +2456,9 @@ impl Root {
         cx.notify();
     }
 
-    /// 点击「推荐」：清空旧队列并切换到官方推荐队列。
+    /// 点击「推荐」：清空旧队列并切换到当前音源的推荐队列。
     pub fn start_recommendation(&mut self, autoplay: bool, cx: &mut Context<Self>) {
-        if self.loading_recommendation || self.settings.cookie.trim().is_empty() {
+        if self.loading_recommendation || !self.settings.can_browse_active_provider() {
             return;
         }
         self.loading_recommendation = true;
@@ -2204,7 +2637,9 @@ impl Root {
         let Some(source) = self.recommendation.clone() else {
             return;
         };
-        if !source.has_more || self.loading_recommendation || self.settings.cookie.trim().is_empty()
+        if !source.has_more
+            || self.loading_recommendation
+            || (source.provider == MusicProvider::Soda && self.settings.cookie.trim().is_empty())
         {
             return;
         }
@@ -2264,32 +2699,35 @@ impl Root {
         let mut settings = self.settings.clone();
         settings.cookie.clear();
 
-        self.engine.stop();
-        self.playing = false;
-        self.pending_track = None;
-        self.playback_error = None;
-        self.queue = Queue::new(Vec::new());
-        self.played_history.clear();
-        self.restore_seek_seconds = None;
-        self.restore_was_playing = None;
-        self.invalidate_prefetch();
-        sodam_core::PlaybackState::clear();
-        self.sync_queue_cache();
+        if self.active_provider() == MusicProvider::Soda {
+            self.engine.stop();
+            self.playing = false;
+            self.pending_track = None;
+            self.playback_error = None;
+            self.queue = Queue::new(Vec::new());
+            self.played_history.clear();
+            self.restore_seek_seconds = None;
+            self.restore_was_playing = None;
+            self.invalidate_prefetch();
+            sodam_core::PlaybackState::clear();
+            self.sync_queue_cache();
+
+            self.results = Arc::new(Vec::new());
+            self.searching = false;
+            self.playlists.clear();
+            self.liked = Arc::new(Vec::new());
+            self.liked_ids = Arc::new(HashSet::new());
+            self.liked_ids_failed = false;
+            self.liked_loaded = false;
+            self.open_playlist = None;
+            self.track_menu = None;
+            self.queue_menu = None;
+            self.set_nav(Nav::Settings, cx);
+        }
 
         self.account = None;
         self.login = LoginState::Idle;
         self.login_modal_open = false;
-        self.results = Arc::new(Vec::new());
-        self.searching = false;
-        self.playlists.clear();
-        self.liked = Arc::new(Vec::new());
-        self.liked_ids = Arc::new(HashSet::new());
-        self.liked_ids_failed = false;
-        self.liked_loaded = false;
-        self.open_playlist = None;
-        self.track_menu = None;
-        self.queue_menu = None;
-        self.set_nav(Nav::Settings, cx);
 
         let save_result = if let Some(session) = self.session.as_mut() {
             session.apply(settings.clone())
@@ -2748,7 +3186,7 @@ impl Root {
             cx.notify();
             return;
         }
-        let fallback = if self.settings.cookie.trim().is_empty() {
+        let fallback = if !self.settings.can_browse_active_provider() {
             Nav::Settings
         } else {
             Nav::Home
@@ -2765,19 +3203,22 @@ impl Root {
     ///
     /// 未登录时其他页面一律进不去（登录入口在设置 → 账户）。
     pub fn on_nav_changed(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.cookie.trim().is_empty() {
-            match self.nav {
-                Nav::Home | Nav::Scenes if self.scene_cards.is_empty() && !self.loading_scenes => {
-                    self.load_scenes(cx)
-                }
-                Nav::Library => self.load_playlists(cx),
-                Nav::Liked => {
-                    // 收藏页使用独立列表状态；已加载数据也要重建到页首。
-                    self.liked_detail_list.reset(self.liked.len() + 1);
-                    self.load_liked(cx);
-                }
-                _ => {}
+        let provider = self.active_provider();
+        let can_browse = self.settings.can_browse_active_provider();
+        let logged_in = self.settings.is_provider_logged_in(provider);
+        match self.nav {
+            Nav::Home | Nav::Scenes
+                if can_browse && self.scene_cards.is_empty() && !self.loading_scenes =>
+            {
+                self.load_scenes(cx)
             }
+            Nav::Library if logged_in => self.load_playlists(cx),
+            Nav::Liked if logged_in => {
+                // 收藏页使用独立列表状态；已加载数据也要重建到页首。
+                self.liked_detail_list.reset(self.liked.len() + 1);
+                self.load_liked(cx);
+            }
+            _ => {}
         }
     }
 
@@ -2905,7 +3346,7 @@ impl Root {
 
     /// 只拉「我喜欢的音乐」的 id 集合（列表爱心状态用，比整表轻）。
     pub fn load_liked_ids(&mut self, cx: &mut Context<Self>) {
-        if self.liked_loading || self.settings.cookie.trim().is_empty() {
+        if self.liked_loading || !self.settings.is_provider_logged_in(self.active_provider()) {
             return;
         }
         self.liked_loading = true;

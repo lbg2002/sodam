@@ -3,6 +3,62 @@
 use libresoda::Song;
 use serde::{Deserialize, Serialize};
 
+/// 音乐数据源（目前内置汽水音乐与咪咕音乐）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum MusicProvider {
+    #[default]
+    Soda,
+    Migu,
+}
+
+impl MusicProvider {
+    pub fn from_key(key: &str) -> Self {
+        if key.trim().eq_ignore_ascii_case("migu") {
+            Self::Migu
+        } else {
+            Self::Soda
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Soda => "soda",
+            Self::Migu => "migu",
+        }
+    }
+
+    pub fn name_zh(self) -> &'static str {
+        match self {
+            Self::Soda => "汽水音乐",
+            Self::Migu => "咪咕音乐",
+        }
+    }
+
+    pub fn name_en(self) -> &'static str {
+        match self {
+            Self::Soda => "Qishui Music",
+            Self::Migu => "Migu Music",
+        }
+    }
+
+    pub fn from_track_id(track_id: &str) -> Self {
+        if track_id.trim().starts_with("migu_") {
+            Self::Migu
+        } else {
+            Self::Soda
+        }
+    }
+
+    pub fn from_entity_id(id: &str, fallback: Self) -> (Self, &str) {
+        let trimmed = id.trim();
+        if let Some(rest) = trimmed.strip_prefix("migu_") {
+            (Self::Migu, rest)
+        } else {
+            (fallback, trimmed)
+        }
+    }
+}
+
 /// 曲目（列表行 / 播放器 / 队列都用它）。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TrackItem {

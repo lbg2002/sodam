@@ -1432,6 +1432,201 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         )
         .into_any_element();
 
+    let active_provider = root.active_provider();
+    let provider_card = card(
+        text(root, "当前音乐平台", "Active Music Platform"),
+        text(
+            root,
+            "也可随时点击左上角品牌标志在「汽水音乐」与「咪咕音乐」间无缝切换，当前播放不会中断。",
+            "Switch between Qishui Music and Migu Music anytime from the top-left header without interrupting playback.",
+        ),
+        vec![div()
+            .flex()
+            .flex_row()
+            .flex_wrap()
+            .gap(px(theme::space::SM))
+            .px(px(theme::space::XS))
+            .child(action_button(
+                "settings-provider-soda",
+                text(root, "汽水音乐", "Qishui Music"),
+                active_provider == sodam_core::MusicProvider::Soda,
+                cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.set_music_provider(sodam_core::MusicProvider::Soda, cx);
+                }),
+            ))
+            .child(action_button(
+                "settings-provider-migu",
+                text(root, "咪咕音乐", "Migu Music"),
+                active_provider == sodam_core::MusicProvider::Migu,
+                cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.set_music_provider(sodam_core::MusicProvider::Migu, cx);
+                }),
+            ))
+            .into_any_element()],
+    );
+
+    let migu_logged_in = !root.settings.migu_cookie.trim().is_empty();
+    let migu_vip = migu_logged_in && root.migu_account.as_ref().is_some_and(|info| info.vip);
+    let migu_title = if migu_logged_in {
+        root.migu_account
+            .as_ref()
+            .filter(|info| !info.nickname.trim().is_empty())
+            .map(|info| info.nickname.clone())
+            .unwrap_or_else(|| text(root, "咪咕音乐会员", "Migu Music User"))
+    } else {
+        text(root, "咪咕音乐（未登录）", "Migu Music (Not Signed In)")
+    };
+    let migu_badge = if !migu_logged_in {
+        text(root, "免登录可用", "Guest Ready")
+    } else if migu_vip {
+        text(root, "VIP 会员 · 24bit", "VIP · Hi-Res")
+    } else if root.migu_account.is_some() {
+        text(root, "普通用户", "Standard")
+    } else {
+        text(root, "同步中", "Syncing")
+    };
+    let migu_detail = if let Some(info) = root.migu_account.as_ref().filter(|_| migu_logged_in) {
+        if info.user_id.trim().is_empty() {
+            text(root, "咪咕协议直连已就绪", "Migu native session ready")
+        } else {
+            format!("Migu UID: {}", info.user_id)
+        }
+    } else if migu_logged_in {
+        text(
+            root,
+            "正在读取咪咕账号信息…",
+            "Loading Migu account details…",
+        )
+    } else {
+        text(
+            root,
+            "已内置纯 Rust 咪咕协议：未登录即可听歌与搜索；登录后解锁 VIP 曲目、24bit 母带、个人歌单与红心收藏。",
+            "Built-in native Migu protocol: browse and play immediately, or sign in to unlock VIP tracks, 24-bit Hi-Res, playlists, and likes.",
+        )
+    };
+    let migu_avatar = root
+        .migu_account
+        .as_ref()
+        .and_then(|info| root.cover_of(&info.avatar_url));
+
+    let migu_card = div()
+        .flex()
+        .flex_row()
+        .flex_wrap()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::LG))
+        .p(px(theme::space::LG))
+        .rounded(px(theme::radius::CARD))
+        .bg(theme::surface_elevated())
+        .border_1()
+        .border_color(if migu_vip {
+            pal.accent_secondary
+        } else {
+            theme::border()
+        })
+        .child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .flex_1()
+                .min_w(px(220.0))
+                .gap(px(theme::space::LG))
+                .child(crate::ui::artwork::cover(
+                    migu_avatar,
+                    68.0,
+                    theme::radius::PILL,
+                ))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .flex_1()
+                        .min_w(px(0.0))
+                        .gap(px(6.0))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_row()
+                                .flex_wrap()
+                                .items_center()
+                                .gap(px(theme::space::SM))
+                                .child(
+                                    div()
+                                        .text_size(theme::Text::Large.size())
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_color(theme::text())
+                                        .child(migu_title),
+                                )
+                                .child(
+                                    div()
+                                        .px(px(theme::space::SM))
+                                        .py(px(2.0))
+                                        .rounded(px(theme::radius::PILL))
+                                        .bg(if migu_vip {
+                                            pal.accent_secondary
+                                        } else {
+                                            theme::surface()
+                                        })
+                                        .border_1()
+                                        .border_color(if migu_vip {
+                                            pal.accent_secondary
+                                        } else {
+                                            theme::border()
+                                        })
+                                        .text_size(theme::Text::Tiny.size())
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(if migu_vip {
+                                            theme::accent_foreground()
+                                        } else {
+                                            theme::text_muted()
+                                        })
+                                        .child(migu_badge),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Small.size())
+                                .text_color(theme::text_muted())
+                                .child(migu_detail),
+                        ),
+                ),
+        )
+        .child(if migu_logged_in {
+            div()
+                .flex()
+                .flex_row()
+                .gap(px(theme::space::SM))
+                .child(action_button(
+                    "migu-refresh-account",
+                    text(root, "刷新状态", "Refresh"),
+                    false,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.refresh_migu_account(cx);
+                    }),
+                ))
+                .child(action_button(
+                    "migu-account-logout",
+                    text(root, "退出登录", "Sign out"),
+                    false,
+                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.logout_migu(cx);
+                    }),
+                ))
+                .into_any_element()
+        } else {
+            action_button(
+                "migu-account-login",
+                text(root, "登录咪咕会员", "Sign In Migu"),
+                true,
+                cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.open_migu_login_modal(cx);
+                }),
+            )
+        })
+        .into_any_element();
+
     let body = div()
         .flex()
         .flex_col()
@@ -1440,11 +1635,13 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
             text(root, "账号与会员", "Account & VIP"),
             text(
                 root,
-                "管理登录身份、会员权益与播放签名服务状态。",
-                "Manage sign-in identity, VIP membership status, and signing diagnostics.",
+                "管理多音乐源切换、双平台会员权益与播放签名服务状态。",
+                "Manage active music provider switching, dual-platform VIP status, and signing diagnostics.",
             ),
         ))
+        .child(provider_card)
         .child(hero_card)
+        .child(migu_card)
         .child(card(
             text(root, "服务状态与诊断", "Service & Diagnostics"),
             text(
@@ -1747,6 +1944,10 @@ fn playback_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEle
     };
     let quality_items = [
         ("auto", text(root, "自动择优", "Auto")),
+        (
+            "zq24",
+            text(root, "臻品母带 24bit (咪咕)", "Hi-Res 24-bit (Migu)"),
+        ),
         ("lossless", text(root, "无损 FLAC", "Lossless")),
         ("highest", text(root, "极高 (≈320k)", "Highest (≈320k)")),
         ("medium", text(root, "较高", "Medium")),
@@ -2552,6 +2753,10 @@ fn storage_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         (
             "follow",
             text(root, "跟随播放音质", "Follow playback quality"),
+        ),
+        (
+            "zq24",
+            text(root, "臻品母带 24bit (咪咕)", "Hi-Res 24-bit (Migu)"),
         ),
         ("lossless", text(root, "无损 FLAC", "Lossless")),
         ("highest", text(root, "极高 (≈320k)", "Highest")),

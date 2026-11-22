@@ -917,6 +917,80 @@ impl Language {
             "已恢复完整动效" => "Standard motion restored",
             "音频缓存等待时间：{} 秒" => "Audio cache timeout: {} s",
             "缓存等待时间保存失败：{err}" => "Failed to save cache timeout: {err}",
+            // 咪咕音乐与双平台音源切换词条
+            "咪咕音乐" => "Migu Music",
+            "来自咪咕的推荐" => "Recommended from Migu",
+            "已切换音源：{}" => "Switched source to {}",
+            "保存音源配置失败：{err}" => "Failed to save music source config: {err}",
+            "请先在「设置 → 账号与会员」登录咪咕音乐" => {
+                "Sign in to Migu Music in Settings → Account & VIP."
+            }
+            "未登录：先在「设置 → 账号与会员」登录咪咕音乐" => {
+                "Sign in to Migu Music in Settings → Account & VIP."
+            }
+            "切换音乐平台" => "Switch Music Platform",
+            "管理账号与会员" => "Manage Accounts & VIP",
+            "VIP 会员 · 无损直连" => "VIP Member · Lossless Direct",
+            "VIP 会员 · 24bit 母带" => "VIP Member · 24-bit Hi-Res",
+            "需扫码登录后使用" => "QR sign-in required",
+            "免登录可用 · 登录后享 VIP 音质" => "Browse free · Sign in for VIP Hi-Res",
+            "精选歌单" => "Featured Playlist",
+            "臻品母带 24bit (咪咕)" => "Hi-Res 24-bit (Migu)",
+            "登录咪咕音乐会员" => "Migu Music VIP Sign-In",
+            "Cookie 导入" => "Cookie Import",
+            "SIM 快捷认证" => "SIM Quick Auth",
+            "短信验证码" => "SMS Code",
+            "在浏览器登录 music.migu.cn 后，从开发者工具复制请求 Cookie、cURL 或 pacmtoken 即可解锁 VIP 与无损音质。" => {
+                "Sign in at music.migu.cn in your browser, then copy Cookie, cURL, or pacmtoken from DevTools to unlock VIP Hi-Res."
+            }
+            "点击后 Ctrl+V 粘贴 Cookie / pacmtoken / cURL…" => {
+                "Click then Ctrl+V Cookie / pacmtoken / cURL…"
+            }
+            "打开咪咕网页版" => "Open Migu Web",
+            "读取剪贴板并登录" => "Paste & Sign In",
+            "验证并登录" => "Verify & Sign In",
+            "仅支持中国移动号码：点击发送后，请在手机端收到的 SIM 认证弹窗内确认登录。" => {
+                "China Mobile numbers only: tap send, then approve the SIM prompt on your phone."
+            }
+            "输入 11 位中国移动手机号" => "Enter 11-digit China Mobile number",
+            "等待手机确认…" => "Waiting for phone confirmation…",
+            "发送 SIM 认证弹窗" => "Send SIM Prompt",
+            "输入 11 位手机号" => "Enter 11-digit phone number",
+            "输入短信验证码" => "Enter SMS code",
+            "获取验证码" => "Send Code",
+            "已在浏览器打开咪咕音乐，请登录后复制 Cookie 或 pacmtoken" => {
+                "Opened Migu Music in your browser. Copy Cookie or pacmtoken."
+            }
+            "打开浏览器失败：{err}" => "Failed to open browser: {err}",
+            "请先输入或粘贴咪咕 Cookie / pacmtoken" => {
+                "Enter or paste a Migu Cookie / pacmtoken first"
+            }
+            "正在验证咪咕会员凭证…" => "Verifying Migu credentials…",
+            "咪咕登录成功：{}（{}）" => "Migu signed in: {} ({})",
+            "保存咪咕登录状态失败：{err}" => "Failed to save Migu sign-in: {err}",
+            "验证失败：{err}" => "Verification failed: {err}",
+            "剪贴板为空或不包含文本，请先在浏览器复制 Cookie / pacmtoken" => {
+                "Clipboard has no text. Copy Cookie or pacmtoken from browser first."
+            }
+            "请输入完整的 11 位中国移动手机号" => "Enter a full 11-digit China Mobile number",
+            "正在发送 SIM 一键认证请求…" => "Sending SIM quick auth request…",
+            "SIM 认证请求失败：{err}" => "SIM auth request failed: {err}",
+            "已向手机推送 SIM 确认弹窗，请在手机上点击确认…" => {
+                "SIM confirmation pushed to your phone. Approve it to finish."
+            }
+            "SIM 认证等待超时，可重试或使用 Cookie 导入" => {
+                "SIM confirmation timed out. Retry or use Cookie import."
+            }
+            "请输入 11 位手机号" => "Enter an 11-digit phone number",
+            "正在发送短信验证码…" => "Sending SMS verification code…",
+            "验证码已发送，请查收短信并填写" => "Verification code sent. Check your messages.",
+            "请填写手机号与短信验证码" => "Enter both phone number and SMS code",
+            "正在校验短信验证码…" => "Verifying SMS code…",
+            "读取咪咕账号失败：{err}" => "Failed to load Migu account: {err}",
+            "已退出咪咕音乐账号" => "Signed out of Migu Music",
+            "已退出咪咕账号，但保存配置失败：{err}" => {
+                "Signed out of Migu, but saving failed: {err}"
+            }
             _ => key,
         }
     }

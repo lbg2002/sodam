@@ -1,11 +1,14 @@
 [Desktop Entry]
 Type=Application
-Name=SodaM
+Name=Lumina
+Name[zh_CN]=流光音乐
 GenericName=Music Player
-Comment=SodaM music client
+GenericName[zh_CN]=音乐播放器
+Comment=Lumina native lossless music player
+Comment[zh_CN]=流光音乐 — 原生多音源无损音乐播放器
 Exec=/usr/bin/sodam
 Icon=sodam
 Terminal=false
 Categories=AudioVideo;Audio;Music;Player;
-Keywords=music;qishui;soda;sodam;
+Keywords=music;lumina;qishui;migu;soda;sodam;
 StartupWMClass=SodaM

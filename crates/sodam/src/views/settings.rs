@@ -49,6 +49,7 @@ fn switch_section(root: &mut Root, section: SettingsSection, cx: &mut Context<Ro
     OPEN_SELECT.store(0, Ordering::Relaxed);
     root.settings_section = section;
     if matches!(section, SettingsSection::Storage) {
+        root.trim_cache_if_needed(cx);
         root.refresh_cache_stats(cx);
         root.refresh_audio_cache_index(cx);
     }
@@ -3098,8 +3099,8 @@ fn storage_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
             text(root, "缓存空间仪表盘", "Cache Storage Meter"),
             text(
                 root,
-                "达到上限后按最近使用顺序自动清理旧缓存；不会影响已导出的下载歌曲。",
-                "Older playback cache is automatically trimmed when full; exported downloads stay safe.",
+                "音频与封面缓存共用滚动清理机制：达到上限后按最近使用顺序自动腾出安全水位，不影响已导出的下载歌曲。",
+                "Audio and cover caches share rolling LRU eviction up to a safe watermark; exported downloads stay safe.",
             ),
             vec![
                 storage_meter,
@@ -3191,8 +3192,8 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
         UpdateState::UpToDate => text(root, "当前已是最新版本", "Already up to date"),
         UpdateState::Installed => text(
             root,
-            "更新安装成功，请退出并重新打开 SodaM。",
-            "Installed successfully. Please quit and reopen SodaM.",
+            "更新安装成功，请退出并重新打开流光音乐。",
+            "Installed successfully. Please quit and reopen Lumina.",
         ),
         UpdateState::Error(err) => format!("{} {err}", text(root, "更新失败：", "Update failed:")),
     };
@@ -3231,11 +3232,11 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
     }
 
     let brand_card = card(
-        text(root, "关于汽水音乐 · SodaM", "About SodaM"),
+        text(root, "关于流光音乐 · Lumina", "About Lumina"),
         text(
             root,
-            "基于 Rust + GPUI 构建的 Linux 原生中式美学汽水音乐客户端。",
-            "Native Soda Music desktop player built with Rust, GPUI, and Chinese aesthetic design.",
+            "基于 Rust + GPUI 构建的跨平台原生中式美学多音源音乐播放器，原生内置汽水音乐与咪咕音乐引擎。",
+            "Native multi-source lossless desktop music player built with Rust, GPUI, and Chinese aesthetic design (Qishui & Migu).",
         ),
         vec![div()
             .flex()
@@ -3277,7 +3278,11 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
                                                     .text_size(theme::Text::Large.size())
                                                     .font_weight(FontWeight::BOLD)
                                                     .text_color(theme::text())
-                                                    .child(text(root, "汽水音乐 · SodaM", "SodaM")),
+                                                    .child(text(
+                                                        root,
+                                                        "流光音乐 · Lumina",
+                                                        "Lumina",
+                                                    )),
                                             )
                                             .child(
                                                 div()

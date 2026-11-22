@@ -109,7 +109,7 @@ pub fn notify_track(title: &str, artist: &str, cover: Option<&std::path::Path>) 
         let mut command = Command::new("notify-send");
         command.args([
             "-a",
-            "SodaM",
+            "Lumina",
             "-h",
             "string:x-canonical-private-synchronous:sodam-track",
         ]);

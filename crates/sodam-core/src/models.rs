@@ -303,10 +303,30 @@ pub fn parse_lrc(raw: &str) -> Vec<LyricLine> {
             });
         }
         words.sort_by(|a, b| a.start_seconds.total_cmp(&b.start_seconds));
+        let hint_line_end = line_duration
+            .map(|duration| start_seconds + duration.max(0.0))
+            .unwrap_or(start_seconds);
+        let word_count = words.len();
+        for idx in 0..word_count {
+            let start = words[idx].start_seconds;
+            if words[idx].end_seconds <= start + 0.02 {
+                let next_start = words
+                    .get(idx + 1)
+                    .map(|next| next.start_seconds)
+                    .filter(|next| *next > start + 0.02);
+                let fallback_end = next_start.unwrap_or(if hint_line_end > start + 0.08 {
+                    hint_line_end
+                } else {
+                    start + 0.24
+                });
+                words[idx].end_seconds = fallback_end.max(start + 0.08);
+            }
+        }
         let end_seconds = words
             .last()
             .map(|word| word.end_seconds)
             .unwrap_or(start_seconds)
+            .max(hint_line_end)
             .max(start_seconds);
         lines.push(LyricLine {
             start_seconds,
@@ -408,16 +428,34 @@ fn push_text_before(
     });
 }
 
-fn parse_word_tag(tag: &str, line_start: f64, _line_duration: Option<f64>) -> Option<(f64, f64)> {
-    let (first, second) = tag.split_once(',')?;
-    let start = first.trim().parse::<f64>().ok()? / 1000.0;
-    let second = second.trim().parse::<f64>().ok()? / 1000.0;
-    let end = if second >= start {
-        second
-    } else {
-        start + second
-    };
-    Some((start.max(line_start), end.max(start)))
+/// 解析增强 LRC 逐字标签：
+/// - 汽水 3 元组 `<rel_offset_ms, dur_ms, 0>`（行内相对毫秒）；
+/// - 咪咕 / 绝对时间戳 2 元组 `<start_ms, dur_ms>` 或 `<start_ms, end_ms>`。
+fn parse_word_tag(tag: &str, line_start: f64, line_duration: Option<f64>) -> Option<(f64, f64)> {
+    let parts: Vec<&str> = tag.split(',').collect();
+    if parts.len() >= 3 {
+        let rel = parts[0].trim().parse::<f64>().ok()? / 1000.0;
+        let dur = parts[1].trim().parse::<f64>().ok()? / 1000.0;
+        let start = line_start + rel.max(0.0);
+        return Some((start, start + dur.max(0.0)));
+    }
+    if parts.len() == 2 {
+        let first = parts[0].trim().parse::<f64>().ok()? / 1000.0;
+        let second = parts[1].trim().parse::<f64>().ok()? / 1000.0;
+        let start = first.max(line_start);
+        let is_abs_end = if let Some(ld) = line_duration {
+            second > start && ld > 0.0 && start + second > line_start + ld + 0.5
+        } else {
+            second >= start + 1.0 && start > 1.0
+        };
+        let end = if is_abs_end {
+            second
+        } else {
+            start + second.max(0.0)
+        };
+        return Some((start, end.max(start)));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -448,6 +486,19 @@ mod tests {
         assert_eq!(lines[0].text, "Romeo take me somewhere");
         let joined: String = lines[0].words.iter().map(|w| w.text.as_str()).collect();
         assert_eq!(joined, "Romeo take me somewhere");
+    }
+
+    #[test]
+    fn parse_lrc_supports_qishui_three_part_relative_word_tags() {
+        let raw = "[977,5479]<0,243,0>原<243,242,0>谅<880,445,0>我\n[90,2970]<90,270>枕</360,270>";
+        let lines = parse_lrc(raw);
+        assert_eq!(lines.len(), 2);
+        assert!((lines[0].words[0].start_seconds - 0.09).abs() < 1e-6);
+        assert!((lines[0].words[0].end_seconds - 0.36).abs() < 1e-6);
+        assert!((lines[1].words[0].start_seconds - 0.977).abs() < 1e-6);
+        assert!((lines[1].words[0].end_seconds - 1.220).abs() < 1e-6);
+        assert!((lines[1].words[2].start_seconds - 1.857).abs() < 1e-6);
+        assert!((lines[1].words[2].end_seconds - 2.302).abs() < 1e-6);
     }
 
     #[test]

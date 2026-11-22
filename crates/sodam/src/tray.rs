@@ -39,7 +39,7 @@ pub struct TrayState {
 impl TrayState {
     /// 托盘标题/tooltip 的单行摘要；未播放时只显示应用名。
     pub fn summary(&self) -> String {
-        if self.title == "SodaM" {
+        if matches!(self.title.as_str(), "流光音乐" | "Lumina" | "SodaM") {
             self.title.clone()
         } else {
             format!("{} · {}", self.title, self.subtitle)
@@ -71,7 +71,11 @@ pub mod linux {
             Self {
                 tx,
                 language,
-                title: "SodaM".to_string(),
+                title: if language.is_zh() {
+                    "流光音乐".to_string()
+                } else {
+                    "Lumina".to_string()
+                },
                 subtitle: language.text("就绪").to_string(),
                 playing: false,
                 icon_cache: OnceLock::new(),
@@ -223,7 +227,7 @@ pub fn create_status_item(
         .with_icon_as_template(cfg!(target_os = "macos"))
         .with_menu(Box::new(menu))
         .with_menu_on_left_click(true)
-        .with_tooltip("SodaM")
+        .with_tooltip("Lumina")
         .build()
         .expect("创建 macOS 托盘不应失败");
 

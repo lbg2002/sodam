@@ -810,8 +810,11 @@ impl Language {
             "连续 3 首拉流失败，已暂停（检查网络或签名服务）" => {
                 "Paused after 3 stream failures. Check network or signer."
             }
-            "SodaM" => "SodaM",
-            "汽水音乐" => "Soda Music",
+            "SodaM" => "Lumina",
+            "流光音乐" => "Lumina",
+            "流光音乐 · Lumina" => "Lumina",
+            "流光音乐 · 切换音源" => "Lumina · Switch Source",
+            "汽水音乐" => "Qishui Music",
             "已关闭桌面歌词" => "Desktop lyrics closed",
             "双栏视图（封面 + 歌词）" => "Split View (Cover + Lyrics)",
             "内嵌队列" => "Inline Queue",

@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="crates/sodam/assets/brand/sodam-logo.svg" width="96" alt="SodaM logo">
-  <h1>SodaM</h1>
-  <p>基于 GPUI + Rust 的原生汽水音乐桌面客户端</p>
+  <img src="crates/sodam/assets/brand/sodam-logo.svg" width="96" alt="流光音乐 Lumina logo">
+  <h1>流光音乐 · Lumina</h1>
+  <p>基于 GPUI + Rust 的跨平台原生多音源无损音乐播放器（支持汽水音乐 & 咪咕音乐）</p>
   <p>
     <a href="https://github.com/sodahub-org/sodam/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-AGPL%203.0%20or%20later-blue.svg" alt="License: AGPL-3.0-or-later"></a>
     <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-1.85%2B-orange.svg" alt="Rust 1.85+"></a>

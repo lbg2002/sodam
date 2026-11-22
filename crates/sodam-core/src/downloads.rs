@@ -33,10 +33,18 @@ struct CachedAsset {
 }
 
 pub fn default_download_dir() -> PathBuf {
+    let resolve = |base: PathBuf| {
+        let legacy = base.join("SodaM Downloads");
+        if legacy.exists() {
+            legacy
+        } else {
+            base.join("Lumina Downloads")
+        }
+    };
     dirs::audio_dir()
-        .map(|path| path.join("SodaM Downloads"))
-        .or_else(|| dirs::home_dir().map(|path| path.join("Music").join("SodaM Downloads")))
-        .unwrap_or_else(|| PathBuf::from("SodaM Downloads"))
+        .map(resolve)
+        .or_else(|| dirs::home_dir().map(|path| resolve(path.join("Music"))))
+        .unwrap_or_else(|| PathBuf::from("Lumina Downloads"))
 }
 
 pub fn download_dir_for(configured: &str) -> PathBuf {

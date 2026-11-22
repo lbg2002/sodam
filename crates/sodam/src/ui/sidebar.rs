@@ -226,8 +226,8 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                 .flex_row()
                 .items_center()
                 .justify_between()
-                .gap(px(theme::space::XS))
-                .px(px(theme::space::SM))
+                .gap(px(4.0))
+                .px(px(2.0))
                 .py(px(theme::space::XS))
                 .child(
                     div()
@@ -235,9 +235,11 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .flex()
                         .flex_row()
                         .items_center()
-                        .gap(px(theme::space::SM))
+                        .flex_1()
                         .min_w(px(0.0))
-                        .px(px(theme::space::SM))
+                        .overflow_hidden()
+                        .gap(px(6.0))
+                        .px(px(6.0))
                         .py(px(6.0))
                         .rounded(px(theme::radius::ROW))
                         .cursor_pointer()
@@ -249,15 +251,18 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                             root.provider_menu_open = !root.provider_menu_open;
                             cx.notify();
                         }))
-                        .child(provider_badge(root.active_provider(), 26.0))
-                        .child(
+                        .child(provider_badge(root.active_provider(), 24.0))
+                        .child({
+                            let title_px = (theme::ui_font_size() as f32 * 1.16)
+                                .round()
+                                .clamp(15.0, 18.0);
                             div()
-                                .truncate()
-                                .text_size(theme::Text::Large.size())
+                                .whitespace_nowrap()
+                                .text_size(px(title_px))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(theme::text())
-                                .child(root.provider_display_name(root.active_provider())),
-                        )
+                                .child(root.provider_display_name(root.active_provider()))
+                        })
                         .child(
                             div()
                                 .flex_none()
@@ -273,7 +278,7 @@ pub fn render(root: &Root, cx: &mut Context<Root>) -> impl IntoElement {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .size(px(28.0))
+                        .size(px(26.0))
                         .rounded(px(theme::radius::ROW))
                         .cursor_pointer()
                         .hover(|style| style.bg(theme::surface_hover()))
@@ -600,7 +605,7 @@ pub fn provider_popover(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .py(px(4.0))
                 .text_size(theme::Text::Tiny.size())
                 .text_color(theme::text_faint())
-                .child(root.tr("切换音乐平台")),
+                .child(root.tr("流光音乐 · 切换音源")),
         )
         .child(option(
             "switch-provider-soda",

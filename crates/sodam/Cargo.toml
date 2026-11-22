@@ -1,6 +1,6 @@
 [package]
 name = "sodam"
-description = "SodaM —— 基于 GPUI + libresoda 的原生汽水音乐客户端"
+description = "流光音乐 (Lumina) —— 基于 GPUI + Rust 的原生多音源无损音乐播放器（支持汽水音乐与咪咕音乐）"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

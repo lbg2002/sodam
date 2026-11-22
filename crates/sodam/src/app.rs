@@ -284,6 +284,8 @@ pub struct Root {
     pub loading_lyrics: bool,
     pub lyrics_error: Option<String>,
     pub lyrics_active: Option<usize>,
+    /// 单调平滑歌词时钟（track_id, 秒），避免 60fps 外插与音频线程步进之间轻微回跳。
+    pub(crate) lyric_clock: (String, f64),
     pub lyrics_scroll: gpui::UniformListScrollHandle,
     pub(crate) lyrics_last_scrolled_index: Option<usize>,
     pub(crate) lyrics_last_scrolled_track: String,
@@ -434,8 +436,6 @@ pub struct Root {
     pub(crate) prefetch_failed: HashMap<String, std::time::Instant>,
     /// 预取代际令牌：队列/账号切换后，旧任务结果不得回写当前状态。
     pub(crate) prefetch_generation: u64,
-    /// 预取巡检节拍：心跳每 100ms 自增，每 50 拍（约 5s）补一次预取。
-    pub(crate) prefetch_patrol: u32,
     /// 缓存统计快照（音频字节, 歌曲数, 封面字节, 封面张数）：
     /// 后台扫盘后回填，设置页只读它（渲染路径不做同步 IO）。
     pub(crate) cache_summary: (u64, usize, u64, usize),
@@ -443,6 +443,7 @@ pub struct Root {
     pub cached_ids: Arc<HashSet<String>>,
     pub(crate) cache_index_loading: bool,
     pub(crate) cache_trim_inflight: bool,
+    pub(crate) cache_trim_pending: bool,
     /// 启动恢复：当前歌曲装载完成后跳到这个秒数。
     pub(crate) restore_seek_seconds: Option<f64>,
     /// 启动恢复：Some(false) 表示恢复后保持暂停，Some(true) 表示继续播放。
@@ -615,6 +616,7 @@ impl Root {
             loading_lyrics: false,
             lyrics_error: None,
             lyrics_active: None,
+            lyric_clock: (String::new(), 0.0),
             lyrics_scroll: gpui::UniformListScrollHandle::new(),
             lyrics_last_scrolled_index: None,
             lyrics_last_scrolled_track: String::new(),
@@ -709,11 +711,11 @@ impl Root {
             prefetch_inflight: HashSet::new(),
             prefetch_failed: HashMap::new(),
             prefetch_generation: 0,
-            prefetch_patrol: 0,
             cache_summary: (0, 0, 0, 0),
             cached_ids: Arc::new(HashSet::new()),
             cache_index_loading: false,
             cache_trim_inflight: false,
+            cache_trim_pending: false,
             restore_seek_seconds,
             restore_was_playing,
             playback_state_save_inflight: false,
@@ -1279,6 +1281,22 @@ impl EntityInputHandler for Root {
 }
 
 impl Root {
+    /// 计算经平滑外插且单调递增的歌词播放时钟（秒）。
+    pub(crate) fn smooth_lyric_position(
+        &self,
+        snapshot: &sodam_core::audio::PlaybackSnapshot,
+    ) -> f64 {
+        let raw = snapshot.interpolated_position_seconds()
+            - self.settings.lyrics_offset_ms as f64 / 1000.0;
+        if self.lyric_clock.0 == snapshot.track_id && snapshot.playing {
+            let prev = self.lyric_clock.1;
+            if raw < prev && prev - raw < 0.18 {
+                return prev;
+            }
+        }
+        raw
+    }
+
     /// 所有歌词界面共用同一套“当前行”判定。
     ///
     /// 只有歌词与音频引擎属于同一首歌时才返回索引，避免切歌/后台装载期间
@@ -1301,10 +1319,13 @@ impl Root {
         {
             return None;
         }
-        let position = snapshot.position_seconds - self.settings.lyrics_offset_ms as f64 / 1000.0;
+        let position = self.smooth_lyric_position(&snapshot);
         self.lyrics
             .iter()
-            .rposition(|line| position + 0.25 >= line.start_seconds)
+            .rposition(|line| {
+                let lead = if line.words.len() > 1 { 0.08 } else { 0.20 };
+                position + lead >= line.start_seconds
+            })
             .or_else(|| (!self.lyrics.is_empty()).then_some(0))
     }
 

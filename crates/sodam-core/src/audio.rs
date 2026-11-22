@@ -29,15 +29,34 @@ pub struct PlaybackSnapshot {
     /// 播完序号：每播完一次 +1。UI 用它做「处理过了吗」的判断 ——
     /// 之前用 track_id 比较，遇到循环同一首或 id 重复就会漏切。
     pub finished_seq: u64,
+    /// 最近一次音频线程刷新播放位置的时间点，供 60fps 歌词动画平滑外插。
+    pub synced_at: Option<std::time::Instant>,
 }
 
 impl PlaybackSnapshot {
+    /// 平滑插值后的当前播放秒数（播放中按 `synced_at` 连续推进，避免歌词逐字跳跃）。
+    pub fn interpolated_position_seconds(&self) -> f64 {
+        if !self.playing || self.finished {
+            return self.position_seconds.max(0.0);
+        }
+        let elapsed = self
+            .synced_at
+            .map(|t| t.elapsed().as_secs_f64().clamp(0.0, 0.25))
+            .unwrap_or(0.0);
+        let pos = (self.position_seconds + elapsed).max(0.0);
+        if self.duration_seconds > 0.0 {
+            pos.min(self.duration_seconds)
+        } else {
+            pos
+        }
+    }
+
     /// 播放进度比例（0.0~1.0），时长未知时返回 0。
     pub fn progress_fraction(&self) -> f32 {
         if self.duration_seconds <= 0.0 {
             return 0.0;
         }
-        (self.position_seconds / self.duration_seconds).clamp(0.0, 1.0) as f32
+        (self.interpolated_position_seconds() / self.duration_seconds).clamp(0.0, 1.0) as f32
     }
 
     /// 当前播放位置 `mm:ss`。
@@ -175,6 +194,7 @@ fn sync_progress(state: &Arc<Mutex<PlaybackSnapshot>>, player: &rodio::Player) {
     if let Ok(mut snap) = state.lock() {
         snap.position_seconds = player.get_pos().as_secs_f64();
         snap.playing = !player.is_paused() && !player.empty();
+        snap.synced_at = Some(std::time::Instant::now());
     }
 }
 
@@ -199,7 +219,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
     loop {
         // 为什么要超时 recv：进度必须**持续**更新（UI 的进度条依赖它）。
         // 之前只在 play/pause 时同步一次，所以进度条永远停在 0。
-        let command = match rx.recv_timeout(std::time::Duration::from_millis(50)) {
+        let command = match rx.recv_timeout(std::time::Duration::from_millis(30)) {
             Ok(command) => Some(command),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
@@ -244,6 +264,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                         snap.playing = false;
                         snap.finished = true;
                         snap.finished_seq = snap.finished_seq.wrapping_add(1);
+                        snap.synced_at = Some(std::time::Instant::now());
                     }
                 }
             }
@@ -311,6 +332,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                     snap.quality = quality.clone();
                     snap.error.clear();
                     snap.finished = false;
+                    snap.synced_at = Some(std::time::Instant::now());
                     finished_reported = false;
                 }
                 player = Some(new_player);
@@ -361,6 +383,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                 if let Ok(mut snap) = state.lock() {
                     snap.playing = false;
                     snap.position_seconds = 0.0;
+                    snap.synced_at = Some(std::time::Instant::now());
                 }
             }
             Command::Seek(seconds) => {
@@ -372,6 +395,7 @@ fn audio_thread(rx: Receiver<Command>, state: Arc<Mutex<PlaybackSnapshot>>) {
                         // 跳转后进度要立刻反映出来（避免界面回跳）
                         if let Ok(mut snap) = state.lock() {
                             snap.position_seconds = seconds;
+                            snap.synced_at = Some(std::time::Instant::now());
                         }
                     }
                 }
@@ -576,7 +600,192 @@ fn asset_last_used(audio: &std::path::Path, access: &std::path::Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// 按最近使用顺序把**播放缓存**裁剪到给定上限。
+fn file_modified_secs(path: &std::path::Path) -> u64 {
+    std::fs::metadata(path)
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|value| value.as_secs())
+        .unwrap_or(0)
+}
+
+fn collect_cover_files(dir: &std::path::Path, out: &mut Vec<(std::path::PathBuf, u64, u128)>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(meta) = entry.metadata() else {
+            continue;
+        };
+        if meta.is_file() {
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|value| value.as_nanos())
+                .unwrap_or(0);
+            out.push((path, meta.len(), modified));
+        } else if meta.is_dir() {
+            collect_cover_files(&path, out);
+        }
+    }
+}
+
+fn clean_stale_parts_and_orphans(audio_dir: &std::path::Path, result: &mut CacheTrimResult) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|value| value.as_secs())
+        .unwrap_or(0);
+    let Ok(entries) = std::fs::read_dir(audio_dir) else {
+        return;
+    };
+
+    let mut audio_stems = std::collections::HashSet::new();
+    let mut sidecars = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_ascii_lowercase)
+            .unwrap_or_default();
+        if is_audio_cache_file(&path) {
+            if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                audio_stems.insert(stem.to_string());
+            }
+            continue;
+        }
+        if ext == "part" {
+            let age = now.saturating_sub(file_modified_secs(&path));
+            if age > 900 {
+                let bytes = file_bytes(&path);
+                if std::fs::remove_file(&path).is_ok() {
+                    result.removed_assets += 1;
+                    result.removed_bytes = result.removed_bytes.saturating_add(bytes);
+                }
+            }
+            continue;
+        }
+        if ext == "quality" || ext == "access" {
+            sidecars.push(path);
+        }
+    }
+
+    for sidecar in sidecars {
+        let stem = sidecar
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or_default();
+        if !audio_stems.contains(stem) {
+            let bytes = file_bytes(&sidecar);
+            if std::fs::remove_file(&sidecar).is_ok() {
+                result.removed_bytes = result.removed_bytes.saturating_add(bytes);
+            }
+        }
+    }
+}
+
+fn trim_cache_dirs(
+    audio_dir: &std::path::Path,
+    cover_dir: &std::path::Path,
+    max_bytes: u64,
+    protected_ids: &std::collections::HashSet<String>,
+) -> CacheTrimResult {
+    if max_bytes == 0 {
+        let audio_bytes = dir_usage(audio_dir).0;
+        let cover_bytes = dir_usage(cover_dir).0;
+        return CacheTrimResult {
+            remaining_bytes: audio_bytes.saturating_add(cover_bytes),
+            ..Default::default()
+        };
+    }
+
+    let mut result = CacheTrimResult::default();
+    clean_stale_parts_and_orphans(audio_dir, &mut result);
+
+    // 1. 先按修改时间滚动清理超额专辑封面缓存（保留最近访问/加载的封面）。
+    let cover_cap = if max_bytes >= 128 * 1024 * 1024 {
+        (max_bytes / 10).clamp(64 * 1024 * 1024, 384 * 1024 * 1024)
+    } else {
+        (max_bytes / 5).max(1)
+    };
+    let mut covers = Vec::new();
+    collect_cover_files(cover_dir, &mut covers);
+    let mut cover_total: u64 = covers.iter().map(|(_, len, _)| *len).sum();
+    if cover_total > cover_cap {
+        let cover_target = cover_cap.saturating_mul(90) / 100;
+        covers.sort_by_key(|(_, _, modified)| *modified);
+        for (path, len, _) in covers {
+            if cover_total <= cover_target {
+                break;
+            }
+            if std::fs::remove_file(&path).is_ok() {
+                cover_total = cover_total.saturating_sub(len);
+                result.removed_assets += 1;
+                result.removed_bytes = result.removed_bytes.saturating_add(len);
+            }
+        }
+    }
+
+    // 2. 从总上限中扣除封面占用后，计算音频缓存硬上限，并以 92% 水位线滚动清理最久未用缓存。
+    let audio_ceiling = max_bytes.saturating_sub(cover_total);
+    let mut audio_dir_total = dir_usage(audio_dir).0;
+
+    let mut assets = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(audio_dir) {
+        for entry in entries.flatten() {
+            let audio = entry.path();
+            if !is_audio_cache_file(&audio) {
+                continue;
+            }
+            let Some(track_id) = cache_track_id(&audio) else {
+                continue;
+            };
+            let quality = audio.with_extension("quality");
+            let access = access_path(&audio);
+            let bytes = file_bytes(&audio) + file_bytes(&quality) + file_bytes(&access);
+            assets.push(CacheAsset {
+                last_used: asset_last_used(&audio, &access),
+                audio,
+                quality,
+                access,
+                track_id,
+                bytes,
+            });
+        }
+    }
+
+    if audio_dir_total > audio_ceiling {
+        let audio_target = audio_ceiling.saturating_mul(92) / 100;
+        assets.sort_by_key(|asset| asset.last_used);
+        for asset in assets {
+            if audio_dir_total <= audio_target {
+                break;
+            }
+            if protected_ids.contains(&asset.track_id) {
+                continue;
+            }
+
+            let removed_audio = std::fs::remove_file(&asset.audio).is_ok();
+            let _ = std::fs::remove_file(&asset.quality);
+            let _ = std::fs::remove_file(&asset.access);
+            if removed_audio {
+                result.removed_assets += 1;
+                result.removed_bytes = result.removed_bytes.saturating_add(asset.bytes);
+                audio_dir_total = audio_dir_total.saturating_sub(asset.bytes);
+            }
+        }
+    }
+
+    result.remaining_bytes = audio_dir_total.saturating_add(cover_total);
+    result
+}
+
+/// 按最近使用顺序把**播放缓存 + 封面缓存总占用**滚动裁剪到给定上限以内。
 ///
 /// 下载目录与播放缓存完全分离，所以这里不会删除用户主动下载的歌曲。
 /// `protected_ids` 用于保护正在播放、加载或预取的曲目。
@@ -584,73 +793,7 @@ pub fn trim_audio_cache(
     max_bytes: u64,
     protected_ids: &std::collections::HashSet<String>,
 ) -> CacheTrimResult {
-    if max_bytes == 0 {
-        let (bytes, _, _, _) = cache_stats();
-        return CacheTrimResult {
-            remaining_bytes: bytes,
-            ..Default::default()
-        };
-    }
-
-    let dir = cache_dir();
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return CacheTrimResult::default();
-    };
-
-    let mut assets = Vec::new();
-    let mut total = 0u64;
-    for entry in entries.flatten() {
-        let audio = entry.path();
-        if !is_audio_cache_file(&audio) {
-            continue;
-        }
-        let Some(track_id) = cache_track_id(&audio) else {
-            continue;
-        };
-        let quality = audio.with_extension("quality");
-        let access = access_path(&audio);
-        let bytes = file_bytes(&audio) + file_bytes(&quality) + file_bytes(&access);
-        total = total.saturating_add(bytes);
-        assets.push(CacheAsset {
-            last_used: asset_last_used(&audio, &access),
-            audio,
-            quality,
-            access,
-            track_id,
-            bytes,
-        });
-    }
-
-    if total <= max_bytes {
-        return CacheTrimResult {
-            remaining_bytes: total,
-            ..Default::default()
-        };
-    }
-
-    assets.sort_by_key(|asset| asset.last_used);
-    let mut result = CacheTrimResult {
-        remaining_bytes: total,
-        ..Default::default()
-    };
-    for asset in assets {
-        if result.remaining_bytes <= max_bytes {
-            break;
-        }
-        if protected_ids.contains(&asset.track_id) {
-            continue;
-        }
-
-        let removed_audio = std::fs::remove_file(&asset.audio).is_ok();
-        let _ = std::fs::remove_file(&asset.quality);
-        let _ = std::fs::remove_file(&asset.access);
-        if removed_audio {
-            result.removed_assets += 1;
-            result.removed_bytes = result.removed_bytes.saturating_add(asset.bytes);
-            result.remaining_bytes = result.remaining_bytes.saturating_sub(asset.bytes);
-        }
-    }
-    result
+    trim_cache_dirs(&cache_dir(), &cover_cache_dir(), max_bytes, protected_ids)
 }
 
 /// 封面缓存目录。
@@ -789,5 +932,80 @@ mod tests {
         assert_eq!(count_extension(&dir, "m4a"), 1);
         assert_eq!(count_extension(&dir, "img"), 0, "只看顶层");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn interpolated_position_advances_only_when_playing() {
+        let now = std::time::Instant::now()
+            .checked_sub(std::time::Duration::from_millis(80))
+            .unwrap();
+        let playing = PlaybackSnapshot {
+            playing: true,
+            position_seconds: 10.0,
+            duration_seconds: 120.0,
+            synced_at: Some(now),
+            ..Default::default()
+        };
+        let interp = playing.interpolated_position_seconds();
+        assert!((10.07..=10.30).contains(&interp), "interp={interp}");
+
+        let paused = PlaybackSnapshot {
+            playing: false,
+            ..playing
+        };
+        assert_eq!(paused.interpolated_position_seconds(), 10.0);
+    }
+
+    #[test]
+    fn trim_cache_dirs_accounts_for_covers_and_rolls_oldest_entries() {
+        let root = std::env::temp_dir().join(format!(
+            "sodam-rolling-trim-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let audio_dir = root.join("audio");
+        let cover_dir = root.join("covers");
+        std::fs::create_dir_all(&audio_dir).expect("mkdir audio");
+        std::fs::create_dir_all(&cover_dir).expect("mkdir cover");
+
+        // 总上限设为 800 字节；封面先占 340 字节（超过 cover_cap = 160），音频占 900 字节
+        std::fs::write(cover_dir.join("old.jpg"), [1u8; 200]).expect("old cover");
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        std::fs::write(cover_dir.join("new.jpg"), [2u8; 140]).expect("new cover");
+
+        for (id, used, payload) in [
+            ("t1", 10u64, 300usize),
+            ("t2", 20u64, 300usize),
+            ("t3", 30u64, 300usize),
+        ] {
+            let p = audio_dir.join(format!("{id}-lossless.flac"));
+            std::fs::write(&p, vec![9u8; payload]).expect("audio");
+            std::fs::write(p.with_extension("quality"), b"FLAC\t300").expect("q");
+            std::fs::write(p.with_extension("access"), used.to_string()).expect("a");
+        }
+        // 遗留孤立 sidecar
+        std::fs::write(audio_dir.join("orphan-lossless.quality"), b"orphan").expect("orphan");
+
+        let mut protected = std::collections::HashSet::new();
+        protected.insert("t3".to_string());
+
+        let res = trim_cache_dirs(&audio_dir, &cover_dir, 800, &protected);
+        assert!(res.removed_assets >= 2);
+        assert!(
+            res.remaining_bytes <= 800,
+            "remaining={} should fit max_bytes=800",
+            res.remaining_bytes
+        );
+        // 最早使用的 t1 与较旧的封面被优先滚动淘汰，受保护的 t3 与较新的封面保留
+        assert!(!audio_dir.join("t1-lossless.flac").exists());
+        assert!(audio_dir.join("t3-lossless.flac").exists());
+        assert!(!cover_dir.join("old.jpg").exists());
+        assert!(cover_dir.join("new.jpg").exists());
+        assert!(!audio_dir.join("orphan-lossless.quality").exists());
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -29,11 +29,11 @@ Version: ${version}
 Section: sound
 Priority: optional
 Architecture: ${arch}
-Maintainer: SodaM contributors <sodam@users.noreply.github.com>
+Maintainer: Lumina contributors <sodam@users.noreply.github.com>
 Depends: libc6 | libc6t64, libasound2 | libasound2t64, libdbus-1-3 | libdbus-1-3t64, libfontconfig1, libfreetype6 | libfreetype6t64, libxkbcommon0, libxkbcommon-x11-0, libxcb1
-Description: Native Qishui Music desktop client
- SodaM is a native GPUI/Rust desktop client for Qishui Music.
- It supports Linux Wayland/X11, local playback, lyrics, queues and caching.
+Description: Lumina native multi-source lossless music player
+ Lumina (formerly SodaM) is a native GPUI/Rust desktop client supporting Qishui and Migu Music.
+ It supports Linux Wayland/X11, lossless playback, karaoke lyrics, queues and rolling cache.
 CONTROL
 mkdir -p dist
 out="dist/sodam_${version}_${arch}.deb"

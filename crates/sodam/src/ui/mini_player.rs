@@ -36,7 +36,7 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         kind: WindowKind::Floating,
         is_resizable: true,
         titlebar: Some(TitlebarOptions {
-            title: Some("SodaM Mini".into()),
+            title: Some("Lumina Mini".into()),
             ..Default::default()
         }),
         app_id: Some("SodaM".into()),

@@ -226,8 +226,8 @@ fn compute_stage_metrics(
     }
 }
 
-/// 渲染单行歌词（支持逐字 LRC 染色与普通 LRC，保留英文单词间距）。
-fn render_lyric_line_content(
+/// 渲染单行歌词（支持 60fps 羽化渐变逐字卡拉OK扫色与普通 LRC，保留英文单词间距）。
+pub(crate) fn render_lyric_line_content(
     line: &sodam_core::models::LyricLine,
     is_active: bool,
     position_seconds: f64,
@@ -238,12 +238,13 @@ fn render_lyric_line_content(
 ) -> AnyElement {
     if is_active && line.words.len() > 1 {
         let word_gap = (font_size * 0.28).max(5.0);
+        let unsung_color = theme::rgba_alpha(active_color, 0.40);
+        let smooth_motion = theme::motion_enabled();
         let words: Vec<AnyElement> = line
             .words
             .iter()
             .enumerate()
             .map(|(idx, word)| {
-                let reached = position_seconds + 0.05 >= word.start_seconds;
                 let clean_word = word.text.trim().to_string();
                 let has_space_after = idx + 1 < line.words.len()
                     && (word.text.ends_with(char::is_whitespace)
@@ -251,14 +252,95 @@ fn render_lyric_line_content(
                             next.text.starts_with(char::is_whitespace)
                                 || needs_english_space(&clean_word, next.text.trim())
                         }));
+                if clean_word.is_empty() {
+                    return div()
+                        .when(has_space_after, |this| this.w(px(word_gap)))
+                        .into_any_element();
+                }
+
+                let dur = (word.end_seconds - word.start_seconds).max(0.08);
+                let raw_p = ((position_seconds - word.start_seconds) / dur).clamp(0.0, 1.0) as f32;
+                let smooth_p = raw_p * raw_p * (3.0 - 2.0 * raw_p);
+                let p = 0.68 * raw_p + 0.32 * smooth_p;
+
+                if !smooth_motion {
+                    let word_alpha = 0.40 + 0.60 * p;
+                    return div()
+                        .whitespace_nowrap()
+                        .text_color(theme::rgba_alpha(active_color, word_alpha))
+                        .when(has_space_after, |this| this.mr(px(word_gap)))
+                        .child(clean_word)
+                        .into_any_element();
+                }
+
+                if raw_p <= 0.0 {
+                    return div()
+                        .whitespace_nowrap()
+                        .text_color(unsung_color)
+                        .when(has_space_after, |this| this.mr(px(word_gap)))
+                        .child(clean_word)
+                        .into_any_element();
+                }
+
+                if raw_p >= 1.0 {
+                    return div()
+                        .whitespace_nowrap()
+                        .text_color(active_color)
+                        .when(has_space_after, |this| this.mr(px(word_gap)))
+                        .child(clean_word)
+                        .into_any_element();
+                }
+
                 div()
-                    .text_color(if reached {
-                        active_color
-                    } else {
-                        theme::rgba_alpha(active_color, 0.56)
-                    })
+                    .relative()
+                    .whitespace_nowrap()
                     .when(has_space_after, |this| this.mr(px(word_gap)))
-                    .child(clean_word)
+                    .child(div().text_color(unsung_color).child(clean_word.clone()))
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(0.0))
+                            .bottom(px(0.0))
+                            .left(px(0.0))
+                            .overflow_hidden()
+                            .w(gpui::relative((p + 0.24).clamp(0.0, 1.0)))
+                            .child(
+                                div()
+                                    .whitespace_nowrap()
+                                    .text_color(theme::rgba_alpha(active_color, 0.62))
+                                    .child(clean_word.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(0.0))
+                            .bottom(px(0.0))
+                            .left(px(0.0))
+                            .overflow_hidden()
+                            .w(gpui::relative((p + 0.11).clamp(0.0, 1.0)))
+                            .child(
+                                div()
+                                    .whitespace_nowrap()
+                                    .text_color(theme::rgba_alpha(active_color, 0.84))
+                                    .child(clean_word.clone()),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .top(px(0.0))
+                            .bottom(px(0.0))
+                            .left(px(0.0))
+                            .overflow_hidden()
+                            .w(gpui::relative(p.clamp(0.0, 1.0)))
+                            .child(
+                                div()
+                                    .whitespace_nowrap()
+                                    .text_color(active_color)
+                                    .child(clean_word),
+                            ),
+                    )
                     .into_any_element()
             })
             .collect();
@@ -309,8 +391,7 @@ fn build_lyrics_list(
     let font_family =
         theme::LyricsFontFamily::from_key(&root.settings.lyrics_font_family).font_name();
     let align = theme::LyricsAlign::from_key(&root.settings.lyrics_align);
-    let position_seconds =
-        snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
+    let position_seconds = root.smooth_lyric_position(snapshot);
     let lines = root.lyrics.clone();
     let total_items = lines.len() + LYRICS_PAD_ROWS * 2;
     let track_id = root.lyrics_track_id.clone();
@@ -398,15 +479,27 @@ fn build_lyrics_list(
                 }
                 .child(div().w_full().min_w(px(0.0)).max_w_full().child(content));
 
+                let has_karaoke_words = line.words.len() > 1;
                 if is_active && motion {
                     aligned_row
                         .with_animation(
                             gpui::ElementId::Name(
                                 format!("lyric-active-{track_id}-{index}").into(),
                             ),
-                            Animation::new(Duration::from_millis(220))
-                                .with_easing(|phase| 1.0 - (1.0 - phase.clamp(0.0, 1.0)).powi(3)),
-                            |this, delta| this.layer_scale(0.975 + delta * 0.025),
+                            Animation::new(Duration::from_millis(if has_karaoke_words {
+                                220
+                            } else {
+                                260
+                            }))
+                            .with_easing(|phase| 1.0 - (1.0 - phase.clamp(0.0, 1.0)).powi(3)),
+                            move |this, delta| {
+                                let scaled = this.layer_scale(0.978 + delta * 0.022);
+                                if has_karaoke_words {
+                                    scaled
+                                } else {
+                                    scaled.opacity(0.58 + delta * 0.42)
+                                }
+                            },
                         )
                         .into_any_element()
                 } else {
@@ -1042,8 +1135,7 @@ pub(crate) fn lyrics_view(root: &Root, window: &Window, cx: &mut Context<Root>) 
 
     let compact_lyrics = if use_compact_snippet {
         let active_index = active.unwrap_or(0);
-        let position_seconds =
-            snapshot.position_seconds - root.settings.lyrics_offset_ms as f64 / 1000.0;
+        let position_seconds = root.smooth_lyric_position(&snapshot);
         let base_font = (root.settings.lyrics_font_size.clamp(14, 30) as f32 + metrics.font_boost)
             .clamp(16.0, 32.0);
         let active_compact_size = (base_font + 4.0 + metrics.font_boost * 0.35).clamp(18.0, 34.0);
@@ -1694,7 +1786,7 @@ pub(crate) fn compact_window_view(root: &Root, cx: &mut Context<Root>) -> AnyEle
     let artist = current
         .as_ref()
         .map(|t| t.artist.clone())
-        .unwrap_or_else(|| root.tr("SodaM").to_string());
+        .unwrap_or_else(|| root.tr("流光音乐").to_string());
     let cover_path = current.as_ref().and_then(|t| root.cover_of(&t.cover));
     let liked = current
         .as_ref()

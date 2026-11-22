@@ -235,7 +235,7 @@ fn run_server(
                 .property::<String, _>("Identity", ())
                 .access(Access::Read)
                 .on_get(|iter, _| {
-                    iter.append("SodaM".to_string());
+                    iter.append("流光音乐 · Lumina".to_string());
                     Ok(())
                 }),
         )

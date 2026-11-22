@@ -789,7 +789,7 @@ pub fn immersive_background() -> Background {
 // ---------------------------------------------------------------------------
 
 /// 标准侧边栏宽度。
-pub const SIDEBAR_W: f32 = 216.0;
+pub const SIDEBAR_W: f32 = 228.0;
 /// 半屏 / 窄窗紧凑侧边栏宽度（图标栏）。
 pub const SIDEBAR_COMPACT_W: f32 = 64.0;
 /// 顶部工具条 / 抽屉头高度。

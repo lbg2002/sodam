@@ -47,12 +47,12 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>zh-CN</string>
-    <key>CFBundleDisplayName</key><string>SodaM</string>
+    <key>CFBundleDisplayName</key><string>Lumina</string>
     <key>CFBundleExecutable</key><string>sodam</string>
     <key>CFBundleIconFile</key><string>sodam</string>
     <key>CFBundleIdentifier</key><string>org.sodahub.sodam</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>CFBundleName</key><string>SodaM</string>
+    <key>CFBundleName</key><string>Lumina</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${version}</string>
     <key>CFBundleVersion</key><string>${version}</string>

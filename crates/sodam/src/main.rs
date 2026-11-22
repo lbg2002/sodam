@@ -33,7 +33,7 @@ fn main_window_options(cx: &mut App) -> WindowOptions {
         window_min_size: Some(size(px(MIN_SIZE.0), px(MIN_SIZE.1))),
         is_resizable: true,
         titlebar: Some(TitlebarOptions {
-            title: Some("SodaM".into()),
+            title: Some("流光音乐 · Lumina".into()),
             // 三个平台都使用透明标题栏。Windows/Linux 由 ui::titlebar
             // 自绘拖拽区与最小化/最大化/关闭按钮；Linux/Wayland（Ubuntu 26）
             // 不再依赖系统窗口装饰是否提供按钮。
@@ -92,7 +92,11 @@ fn start_tray_service(
                     app.update(cx, |root, _cx| {
                         let snapshot = root.engine.snapshot();
                         let title = if snapshot.track_id.is_empty() {
-                            "SodaM".to_string()
+                            if root.language.is_zh() {
+                                "流光音乐".to_string()
+                            } else {
+                                "Lumina".to_string()
+                            }
                         } else {
                             snapshot.title
                         };
@@ -353,7 +357,7 @@ fn graphical_session_preflight() -> Result<(), String> {
             return Ok(());
         }
         return Err(format!(
-            "Wayland compositor 不可用（{}）；请在 GNOME/Wayland 会话中启动 SodaM",
+            "Wayland compositor 不可用（{}）；请在 GNOME/Wayland 会话中启动流光音乐 (Lumina)",
             socket.display()
         ));
     }
@@ -400,7 +404,7 @@ fn desktop_integration_available() -> bool {
 fn main() {
     #[cfg(target_os = "linux")]
     if let Err(error) = graphical_session_preflight() {
-        eprintln!("SodaM 启动失败：{error}");
+        eprintln!("流光音乐 (Lumina) 启动失败：{error}");
         return;
     }
 

@@ -69,7 +69,7 @@ pub fn open(root: Entity<Root>, cx: &mut App) {
         is_resizable: !settings.desktop_lyrics_locked,
         window_background: WindowBackgroundAppearance::Transparent,
         titlebar: Some(TitlebarOptions {
-            title: Some("SodaM Lyrics".into()),
+            title: Some("流光音乐 · 桌面歌词".into()),
             ..Default::default()
         }),
         app_id: Some("SodaM".into()),
@@ -143,23 +143,16 @@ impl Render for DesktopLyrics {
             !snapshot.track_id.is_empty() && root.lyrics_track_id == snapshot.track_id;
         let active = root.synced_lyrics_active();
 
-        let current = if lyrics_synced {
-            active
-                .and_then(|index| root.lyrics.get(index))
-                .map(|line| line.text.clone())
-                .filter(|text| !text.trim().is_empty())
-                .unwrap_or_else(|| {
-                    root.queue
-                        .current()
-                        .map(|track| track.title.clone())
-                        .unwrap_or_else(|| root.tr("暂无歌词").to_string())
-                })
-        } else {
-            root.queue
-                .current()
-                .map(|track| track.title.clone())
-                .unwrap_or_else(|| root.tr("暂无歌词").to_string())
-        };
+        let active_line = lyrics_synced
+            .then(|| active.and_then(|index| root.lyrics.get(index)))
+            .flatten()
+            .filter(|line| !line.text.trim().is_empty());
+        let smooth_pos = root.smooth_lyric_position(&snapshot);
+        let fallback_current = root
+            .queue
+            .current()
+            .map(|track| track.title.clone())
+            .unwrap_or_else(|| root.tr("暂无歌词").to_string());
         let next = if lyrics_synced {
             active
                 .and_then(|index| root.lyrics.get(index.saturating_add(1)))
@@ -172,7 +165,8 @@ impl Render for DesktopLyrics {
         let mut background = theme::bg();
         background.a =
             (root.settings.desktop_lyrics_opacity.clamp(30, 100) as f32 / 100.0).clamp(0.3, 1.0);
-        let align = root.settings.desktop_lyrics_align.as_str().to_string();
+        let align_str = root.settings.desktop_lyrics_align.as_str().to_string();
+        let align = theme::LyricsAlign::from_key(&align_str);
         let single_line = root.settings.desktop_lyrics_single_line;
         let locked = root.settings.desktop_lyrics_locked;
         let click_through = root.settings.desktop_lyrics_click_through;
@@ -180,6 +174,26 @@ impl Render for DesktopLyrics {
             theme::text()
         } else {
             theme::accent()
+        };
+        let current_el = if let Some(line) = active_line {
+            crate::views::lyrics::render_lyric_line_content(
+                line,
+                true,
+                smooth_pos,
+                active_color,
+                active_color,
+                align,
+                base,
+            )
+        } else {
+            div()
+                .w_full()
+                .when(align_str == "left", |this| this.text_left())
+                .when(align_str == "center", |this| this.text_center())
+                .when(align_str == "right", |this| this.text_right())
+                .text_color(active_color)
+                .child(fallback_current)
+                .into_any_element()
         };
         let root_for_close = self.root.clone();
 
@@ -249,21 +263,17 @@ impl Render for DesktopLyrics {
             .child(
                 div()
                     .w_full()
-                    .when(align == "left", |this| this.text_left())
-                    .when(align == "center", |this| this.text_center())
-                    .when(align == "right", |this| this.text_right())
                     .text_size(px(base))
                     .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(active_color)
-                    .child(current),
+                    .child(current_el),
             )
             .when(!single_line && !next.is_empty(), |this| {
                 this.child(
                     div()
                         .w_full()
-                        .when(align == "left", |this| this.text_left())
-                        .when(align == "center", |this| this.text_center())
-                        .when(align == "right", |this| this.text_right())
+                        .when(align_str == "left", |this| this.text_left())
+                        .when(align_str == "center", |this| this.text_center())
+                        .when(align_str == "right", |this| this.text_right())
                         .truncate()
                         .text_size(px((base - 8.0).clamp(16.0, 36.0)))
                         .text_color(theme::text_muted())

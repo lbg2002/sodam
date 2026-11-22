@@ -663,173 +663,187 @@ impl Root {
         }
     }
 
-    /// UI 心跳：播放中每 100ms 刷新一次（进度条与独立播放器窗口需要持续重绘），
-    /// 曲目播完则自动切下一首。
+    /// UI 心跳：播放中常规 100ms 刷新，歌词/桌面歌词活跃时自适应 16ms (~60fps) 平滑重绘；
+    /// 曲目播完自动切下一首，并按时间间隔触发预取与滚动缓存清理。
     pub(crate) fn start_heartbeat(cx: &mut Context<Self>) {
-        cx.spawn(async move |this, cx| loop {
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(100))
-                .await;
-            let _ = this.update(cx, |root, cx| {
-                let snap = root.engine.snapshot();
+        cx.spawn(async move |this, cx| {
+            let mut next_sleep_ms = 100u64;
+            let mut last_fast_patrol = std::time::Instant::now();
+            let mut last_trim_patrol = std::time::Instant::now();
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(next_sleep_ms))
+                    .await;
+                let _ = this.update(cx, |root, cx| {
+                    let snap = root.engine.snapshot();
+                    let smooth_pos = root.smooth_lyric_position(&snap);
+                    root.lyric_clock = (snap.track_id.clone(), smooth_pos);
 
-                // 歌词时钟属于播放状态，不属于某个可见页面。即使主窗口最小化、
-                // 关闭到托盘或当前不在歌词页，也持续维护同一个 active index。
-                // DesktopLyrics 观察 Root 的 notify；GNOME 顶栏则读取同一方法生成的状态。
-                let active = root.synced_lyrics_active();
-                let lyric_changed = active != root.lyrics_active;
-                if lyric_changed {
-                    root.lyrics_active = active;
-                    root.scroll_lyrics_to_active(cx);
-                    cx.notify();
-                }
+                    let high_fps = theme::motion_enabled()
+                        && snap.playing
+                        && !root.lyrics.is_empty()
+                        && (root.nav == Nav::Lyrics
+                            || root.desktop_lyrics_open
+                            || root.window_mode == theme::WindowMode::Compact);
+                    next_sleep_ms = if high_fps { 16 } else { 100 };
 
-                // 封面主色随切歌平滑插值过渡，实现柔和不闪烁的流光晕染。
-                let ambient_target = root
-                    .pending_track
-                    .as_ref()
-                    .or_else(|| root.queue.current())
-                    .and_then(|track| root.ambient_colors.get(&track.cover).copied());
-                if root.settings.dynamic_cover_color {
-                    if let Some((tr, tg, tb)) = ambient_target {
-                        let (tr, tg, tb) = (f32::from(tr), f32::from(tg), f32::from(tb));
-                        match root.displayed_ambient_rgb {
-                            Some((cr, cg, cb)) if theme::motion_enabled() => {
-                                let diff =
-                                    (tr - cr).abs().max((tg - cg).abs()).max((tb - cb).abs());
-                                if diff > 1.2 {
-                                    root.displayed_ambient_rgb = Some((
-                                        cr + (tr - cr) * 0.30,
-                                        cg + (tg - cg) * 0.30,
-                                        cb + (tb - cb) * 0.30,
-                                    ));
-                                    cx.notify();
-                                } else if diff > 0.01 {
+                    // 歌词时钟属于播放状态，不属于某个可见页面。即使主窗口最小化、
+                    // 关闭到托盘或当前不在歌词页，也持续维护同一个 active index。
+                    // DesktopLyrics 观察 Root 的 notify；GNOME 顶栏则读取同一方法生成的状态。
+                    let active = root.synced_lyrics_active();
+                    let lyric_changed = active != root.lyrics_active;
+                    if lyric_changed {
+                        root.lyrics_active = active;
+                        root.scroll_lyrics_to_active(cx);
+                        cx.notify();
+                    }
+
+                    // 封面主色随切歌平滑插值过渡，实现柔和不闪烁的流光晕染。
+                    let ambient_target = root
+                        .pending_track
+                        .as_ref()
+                        .or_else(|| root.queue.current())
+                        .and_then(|track| root.ambient_colors.get(&track.cover).copied());
+                    if root.settings.dynamic_cover_color {
+                        if let Some((tr, tg, tb)) = ambient_target {
+                            let (tr, tg, tb) = (f32::from(tr), f32::from(tg), f32::from(tb));
+                            match root.displayed_ambient_rgb {
+                                Some((cr, cg, cb)) if theme::motion_enabled() => {
+                                    let diff =
+                                        (tr - cr).abs().max((tg - cg).abs()).max((tb - cb).abs());
+                                    if diff > 1.2 {
+                                        root.displayed_ambient_rgb = Some((
+                                            cr + (tr - cr) * 0.30,
+                                            cg + (tg - cg) * 0.30,
+                                            cb + (tb - cb) * 0.30,
+                                        ));
+                                        cx.notify();
+                                    } else if diff > 0.01 {
+                                        root.displayed_ambient_rgb = Some((tr, tg, tb));
+                                        cx.notify();
+                                    }
+                                }
+                                _ => {
                                     root.displayed_ambient_rgb = Some((tr, tg, tb));
                                     cx.notify();
                                 }
                             }
-                            _ => {
-                                root.displayed_ambient_rgb = Some((tr, tg, tb));
-                                cx.notify();
-                            }
+                        } else if root.displayed_ambient_rgb.is_some() {
+                            root.displayed_ambient_rgb = None;
+                            cx.notify();
                         }
                     } else if root.displayed_ambient_rgb.is_some() {
                         root.displayed_ambient_rgb = None;
                         cx.notify();
                     }
-                } else if root.displayed_ambient_rgb.is_some() {
-                    root.displayed_ambient_rgb = None;
-                    cx.notify();
-                }
 
-                // 全屏沉浸模式下鼠标静止超过 4.5s 自动收起浮动控制栏
-                if root.window_mode == theme::WindowMode::Fullscreen
-                    && root.fullscreen_controls_visible
-                    && !root.queue_open
-                    && snap.playing
-                    && root.fullscreen_last_interaction.elapsed()
-                        >= std::time::Duration::from_millis(4500)
-                {
-                    root.fullscreen_controls_visible = false;
-                    cx.notify();
-                }
-
-                // 加载完成：引擎已切到 pending 曲目 → 清 loading 态
-                if let Some(pending) = &root.pending_track {
-                    if snap.track_id == pending.id {
-                        root.pending_track = None;
-                    }
-                }
-                if snap.playing || root.pending_track.is_some() || snap.finished {
-                    cx.notify();
-                }
-                if snap.playing
-                    && snap.position_seconds >= 3.0
-                    && !snap.track_id.is_empty()
-                    && root.recent_recorded_track_id != snap.track_id
-                {
-                    if let Some(track) = root
-                        .queue
-                        .current()
-                        .filter(|track| track.id == snap.track_id)
-                        .cloned()
+                    // 全屏沉浸模式下鼠标静止超过 4.5s 自动收起浮动控制栏
+                    if root.window_mode == theme::WindowMode::Fullscreen
+                        && root.fullscreen_controls_visible
+                        && !root.queue_open
+                        && snap.playing
+                        && root.fullscreen_last_interaction.elapsed()
+                            >= std::time::Duration::from_millis(4500)
                     {
-                        root.recent_recorded_track_id = snap.track_id.clone();
-                        root.record_recent_play(track, cx);
-                    }
-                }
-                // 播完自动下一首：按序号判断（循环同一首也不会漏切）。
-                // 注意：正在装载下一首（pending）时「播完」属于旧曲目，
-                // 只消费事件不推进——否则会把 pending 的那首跳过去（收尾瞬间
-                // 手动切歌/插入队列时踩过）。
-                if let Some(deadline) = root.sleep_deadline {
-                    if std::time::Instant::now() >= deadline {
-                        root.sleep_deadline = None;
-                        root.sleep_timer_minutes = 0;
-                        root.sleep_after_current = false;
-                        root.engine.pause();
-                        root.playing = false;
-                        root.status = root.tr("睡眠定时结束，已暂停播放").to_string();
-                        root.persist_playback_state(cx);
+                        root.fullscreen_controls_visible = false;
                         cx.notify();
                     }
-                }
 
-                // Gapless / Crossfade：在自然播完前提前装载下一首。
-                // Crossfade 使用用户配置秒数；仅 Gapless 时提前约 80ms，
-                // 配合已经完成的智能预取可消除 UI finished -> Load 的人为缝隙。
-                let transition_lead = if root.settings.crossfade_seconds > 0 {
-                    root.settings.crossfade_seconds as f64
-                } else if root.settings.gapless_playback {
-                    0.08
-                } else {
-                    0.0
-                };
-                if transition_lead > 0.0
-                    && snap.playing
-                    && snap.duration_seconds > transition_lead
-                    && root.pending_track.is_none()
-                    && !root.sleep_after_current
-                    && root.sleep_deadline.is_none()
-                    && root.transition_triggered_track_id != snap.track_id
-                    && snap.duration_seconds - snap.position_seconds <= transition_lead
-                {
-                    root.transition_triggered_track_id = snap.track_id.clone();
-                    root.next_track(cx);
-                    return;
-                }
-
-                if snap.finished && snap.finished_seq != root.last_finished_seq {
-                    root.last_finished_seq = snap.finished_seq;
-                    if root.pending_track.is_none() {
-                        if root.sleep_after_current {
-                            root.sleep_after_current = false;
-                            root.sleep_deadline = None;
-                            root.sleep_timer_minutes = 0;
-                            root.engine.pause();
-                            root.playing = false;
-                            root.status = root.tr("当前歌曲播放结束，已暂停").to_string();
-                            root.persist_playback_state(cx);
-                            cx.notify();
-                        } else {
-                            root.next_track(cx);
+                    // 加载完成：引擎已切到 pending 曲目 → 清 loading 态
+                    if let Some(pending) = &root.pending_track {
+                        if snap.track_id == pending.id {
+                            root.pending_track = None;
                         }
                     }
-                }
-                // 预取巡检：每 50 拍（约 5s）补一次，覆盖 append/remove 等；
-                // 心跳本身为 100ms，以更快响应歌曲自然播完后的切歌。
-                root.prefetch_patrol = root.prefetch_patrol.wrapping_add(1);
-                if root.prefetch_patrol % 50 == 0 {
-                    root.spawn_prefetch(cx);
-                    root.process_pending_downloads(cx);
-                    root.persist_playback_state(cx);
-                }
-                if root.prefetch_patrol % 300 == 0 {
-                    root.trim_cache_if_needed(cx);
-                }
-                root.load_more_recommendation(cx);
-            });
+                    if snap.playing || root.pending_track.is_some() || snap.finished {
+                        cx.notify();
+                    }
+                    if snap.playing
+                        && snap.position_seconds >= 3.0
+                        && !snap.track_id.is_empty()
+                        && root.recent_recorded_track_id != snap.track_id
+                    {
+                        if let Some(track) = root
+                            .queue
+                            .current()
+                            .filter(|track| track.id == snap.track_id)
+                            .cloned()
+                        {
+                            root.recent_recorded_track_id = snap.track_id.clone();
+                            root.record_recent_play(track, cx);
+                        }
+                    }
+                    // 播完自动下一首：按序号判断（循环同一首也不会漏切）。
+                    // 注意：正在装载下一首（pending）时「播完」属于旧曲目，
+                    // 只消费事件不推进——否则会把 pending 的那首跳过去（收尾瞬间
+                    // 手动切歌/插入队列时踩过）。
+                    if let Some(deadline) = root.sleep_deadline {
+                        if std::time::Instant::now() >= deadline {
+                            root.sleep_deadline = None;
+                            root.sleep_timer_minutes = 0;
+                            root.sleep_after_current = false;
+                            root.engine.pause();
+                            root.playing = false;
+                            root.status = root.tr("睡眠定时结束，已暂停播放").to_string();
+                            root.persist_playback_state(cx);
+                            cx.notify();
+                        }
+                    }
+
+                    // Gapless / Crossfade：在自然播完前提前装载下一首。
+                    // Crossfade 使用用户配置秒数；仅 Gapless 时提前约 80ms，
+                    // 配合已经完成的智能预取可消除 UI finished -> Load 的人为缝隙。
+                    let transition_lead = if root.settings.crossfade_seconds > 0 {
+                        root.settings.crossfade_seconds as f64
+                    } else if root.settings.gapless_playback {
+                        0.08
+                    } else {
+                        0.0
+                    };
+                    if transition_lead > 0.0
+                        && snap.playing
+                        && snap.duration_seconds > transition_lead
+                        && root.pending_track.is_none()
+                        && !root.sleep_after_current
+                        && root.sleep_deadline.is_none()
+                        && root.transition_triggered_track_id != snap.track_id
+                        && snap.duration_seconds - snap.position_seconds <= transition_lead
+                    {
+                        root.transition_triggered_track_id = snap.track_id.clone();
+                        root.next_track(cx);
+                        return;
+                    }
+
+                    if snap.finished && snap.finished_seq != root.last_finished_seq {
+                        root.last_finished_seq = snap.finished_seq;
+                        if root.pending_track.is_none() {
+                            if root.sleep_after_current {
+                                root.sleep_after_current = false;
+                                root.sleep_deadline = None;
+                                root.sleep_timer_minutes = 0;
+                                root.engine.pause();
+                                root.playing = false;
+                                root.status = root.tr("当前歌曲播放结束，已暂停").to_string();
+                                root.persist_playback_state(cx);
+                                cx.notify();
+                            } else {
+                                root.next_track(cx);
+                            }
+                        }
+                    }
+                    if last_fast_patrol.elapsed() >= std::time::Duration::from_secs(5) {
+                        last_fast_patrol = std::time::Instant::now();
+                        root.spawn_prefetch(cx);
+                        root.process_pending_downloads(cx);
+                        root.persist_playback_state(cx);
+                    }
+                    if last_trim_patrol.elapsed() >= std::time::Duration::from_secs(25) {
+                        last_trim_patrol = std::time::Instant::now();
+                        root.trim_cache_if_needed(cx);
+                    }
+                    root.load_more_recommendation(cx);
+                });
+            }
         })
         .detach();
     }
@@ -1228,13 +1242,19 @@ impl Root {
         .detach();
     }
 
-    /// LRU 自动裁剪播放缓存；下载目录不在这里，永远不会被自动清理。
+    /// LRU 自动裁剪播放缓存 + 封面缓存；下载目录不在这里，永远不会被自动清理。
     pub(crate) fn trim_cache_if_needed(&mut self, cx: &mut Context<Self>) {
         let limit_gb = self.settings.cache_limit_gb;
-        if limit_gb == 0 || self.cache_trim_inflight {
+        if limit_gb == 0 {
+            self.cache_trim_pending = false;
+            return;
+        }
+        if self.cache_trim_inflight {
+            self.cache_trim_pending = true;
             return;
         }
         self.cache_trim_inflight = true;
+        self.cache_trim_pending = false;
         let max_bytes = limit_gb.saturating_mul(1024 * 1024 * 1024);
         let mut protected = self.prefetch_inflight.clone();
         if let Some(track) = self.queue.current() {
@@ -1250,13 +1270,17 @@ impl Root {
             let result = work.await;
             let _ = this.update(cx, |root, cx| {
                 root.cache_trim_inflight = false;
-                if result.removed_assets > 0 {
+                if result.removed_assets > 0 || result.removed_bytes > 0 {
                     root.status = root.localized(
                         "已自动清理 {} 个旧缓存",
                         &[result.removed_assets.to_string()],
                     );
                     root.refresh_audio_cache_index(cx);
                     root.refresh_cache_stats(cx);
+                }
+                if root.cache_trim_pending {
+                    root.cache_trim_pending = false;
+                    root.trim_cache_if_needed(cx);
                 }
                 cx.notify();
             });
@@ -3149,6 +3173,7 @@ impl Root {
             self.lyrics_scroll.0.borrow_mut().last_item_size = None;
         }
         if matches!(nav, Nav::Settings) {
+            self.trim_cache_if_needed(cx);
             self.refresh_cache_stats(cx);
         }
         if matches!(nav, Nav::Downloads) {
@@ -4086,7 +4111,7 @@ fn choose_directory_dialog(_initial: &std::path::Path) -> anyhow::Result<Option<
             .args([
                 "--file-selection",
                 "--directory",
-                "--title=选择 SodaM 下载目录",
+                "--title=选择流光音乐下载目录",
                 initial_arg.as_str(),
             ])
             .output();
@@ -4113,7 +4138,7 @@ fn choose_directory_dialog(_initial: &std::path::Path) -> anyhow::Result<Option<
 
     #[cfg(target_os = "macos")]
     {
-        let script = r#"POSIX path of (choose folder with prompt "Choose SodaM download folder")"#;
+        let script = r#"POSIX path of (choose folder with prompt "Choose Lumina download folder")"#;
         let output = std::process::Command::new("osascript")
             .args(["-e", script])
             .output()?;

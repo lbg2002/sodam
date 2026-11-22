@@ -307,8 +307,11 @@ pub fn decrypt_mrc(raw_hex: &str) -> Result<String> {
         plain_bytes.push(0);
     }
     let units: Vec<u16> = plain_bytes
-        .chunks_exact(2)
-        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .copied()
+        .map(u16::from_le_bytes)
         .collect();
     let decoded = char::decode_utf16(units)
         .map(|ch| ch.unwrap_or(char::REPLACEMENT_CHARACTER))
@@ -2559,8 +2562,11 @@ mod tests {
             utf16_bytes.push(b'0');
         }
         let mut data: Vec<i64> = utf16_bytes
-            .chunks_exact(8)
-            .map(|c| i64::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .copied()
+            .map(i64::from_le_bytes)
             .collect();
 
         let mut padded_key = MRC_KEY_RAW.to_vec();

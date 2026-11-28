@@ -326,66 +326,116 @@ fn shell(root: &Root, viewport_w: f32, body: AnyElement, cx: &mut Context<Root>)
         .into_any_element()
 }
 
-fn page_header(title: String, description: String) -> AnyElement {
-    let has_desc = !description.trim().is_empty();
+fn page_header(title: String) -> AnyElement {
     div()
-        .flex()
-        .flex_col()
-        .gap(px(4.0))
         .pb(px(theme::space::XS))
-        .child(
-            div()
-                .text_size(theme::Text::Title.size())
-                .font_weight(FontWeight::BOLD)
-                .text_color(theme::text())
-                .child(title),
-        )
-        .when(has_desc, |this| {
-            this.child(
-                div()
-                    .text_size(theme::Text::Small.size())
-                    .text_color(theme::text_muted())
-                    .child(description),
-            )
-        })
+        .text_size(theme::Text::Title.size())
+        .font_weight(FontWeight::BOLD)
+        .text_color(theme::text())
+        .child(title)
         .into_any_element()
 }
 
-fn card(title: String, description: String, children: Vec<AnyElement>) -> AnyElement {
-    let has_desc = !description.trim().is_empty();
-    div()
+fn section_group(title: String, rows: Vec<AnyElement>) -> AnyElement {
+    let total = rows.len();
+    let mut inner = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::SM))
-        .p(px(theme::space::LG))
-        .rounded(px(theme::radius::CARD))
-        .bg(theme::rgba_alpha(theme::surface(), 0.42))
+        .p(px(theme::space::XS))
+        .rounded(px(14.0))
+        .bg(theme::rgba_alpha(theme::surface_elevated(), 0.56))
+        .border_1()
+        .border_color(theme::rgba_alpha(theme::border(), 0.30));
+
+    for (idx, row) in rows.into_iter().enumerate() {
+        inner = inner.child(row);
+        if idx + 1 < total {
+            inner = inner.child(
+                div()
+                    .h(px(1.0))
+                    .mx(px(theme::space::MD))
+                    .bg(theme::rgba_alpha(theme::border(), 0.22)),
+            );
+        }
+    }
+
+    let mut wrap = div().flex().flex_col().gap(px(7.0));
+    if !title.trim().is_empty() {
+        wrap = wrap.child(
+            div()
+                .px(px(theme::space::MD))
+                .text_size(theme::Text::Tiny.size())
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(theme::text_muted())
+                .child(title),
+        );
+    }
+    wrap.child(inner).into_any_element()
+}
+
+type SegmentClick = Box<dyn Fn(&ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static>;
+
+fn segmented_row(
+    title: String,
+    description: &str,
+    segments: Vec<(&'static str, String, bool, SegmentClick)>,
+) -> AnyElement {
+    let track = div()
+        .flex()
+        .flex_row()
+        .flex_none()
+        .items_center()
+        .gap(px(2.0))
+        .p(px(3.0))
+        .rounded(px(10.0))
+        .bg(theme::rgba_alpha(theme::surface(), 0.72))
         .border_1()
         .border_color(theme::rgba_alpha(theme::border(), 0.28))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(px(3.0))
-                .px(px(theme::space::XS))
-                .pb(px(theme::space::XS))
-                .child(
+        .children(
+            segments
+                .into_iter()
+                .map(|(seg_id, label, active, listener)| {
                     div()
-                        .text_size(theme::Text::Large.size())
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(theme::text())
-                        .child(title),
-                )
-                .when(has_desc, |this| {
-                    this.child(
-                        div()
-                            .text_size(theme::Text::Tiny.size())
-                            .text_color(theme::text_muted())
-                            .child(description),
-                    )
+                        .id(seg_id)
+                        .h(px(26.0))
+                        .px(px(11.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(7.0))
+                        .cursor_pointer()
+                        .when(active, |this| {
+                            this.bg(theme::accent())
+                                .text_color(theme::accent_foreground())
+                                .font_weight(FontWeight::SEMIBOLD)
+                        })
+                        .when(!active, |this| {
+                            this.text_color(theme::text_muted()).hover(|style| {
+                                style
+                                    .bg(theme::rgba_alpha(theme::surface_hover(), 0.85))
+                                    .text_color(theme::text())
+                            })
+                        })
+                        .text_size(theme::Text::Tiny.size())
+                        .whitespace_nowrap()
+                        .on_click(listener)
+                        .child(label)
                 }),
-        )
-        .children(children)
+        );
+
+    div()
+        .flex()
+        .flex_row()
+        .flex_wrap()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::MD))
+        .min_h(px(44.0))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
+        .rounded(px(10.0))
+        .child(row_label(title, description.to_string()))
+        .child(track)
         .into_any_element()
 }
 
@@ -428,36 +478,37 @@ fn toggle_row(
         .items_center()
         .justify_between()
         .gap(px(theme::space::LG))
-        .px(px(theme::space::SM))
+        .min_h(px(44.0))
+        .px(px(theme::space::MD))
         .py(px(theme::space::SM))
-        .rounded(px(theme::radius::ROW))
+        .rounded(px(10.0))
         .cursor_pointer()
-        .hover(|style| style.bg(theme::surface_hover()))
+        .hover(|style| style.bg(theme::rgba_alpha(theme::surface_hover(), 0.72)))
         .on_click(listener)
         .child(row_label(title, description))
         .child(
             div()
-                .w(px(44.0))
-                .h(px(24.0))
+                .w(px(40.0))
+                .h(px(22.0))
                 .flex_none()
-                .rounded(px(theme::radius::PILL))
+                .rounded(px(11.0))
                 .bg(if enabled {
                     theme::accent()
                 } else {
-                    theme::surface_elevated()
+                    theme::rgba_alpha(theme::surface(), 0.85)
                 })
                 .border_1()
                 .border_color(if enabled {
                     theme::accent()
                 } else {
-                    theme::border()
+                    theme::rgba_alpha(theme::border(), 0.45)
                 })
                 .flex()
                 .items_center()
                 .px(px(2.0))
                 .justify_end()
                 .when(!enabled, |this| this.justify_start())
-                .child(div().size(px(18.0)).rounded_full().bg(if enabled {
+                .child(div().size(px(16.0)).rounded_full().bg(if enabled {
                     theme::accent_foreground()
                 } else {
                     theme::text_muted()
@@ -529,11 +580,12 @@ fn select_row(
                 .items_center()
                 .justify_between()
                 .gap(px(theme::space::LG))
-                .px(px(theme::space::SM))
+                .min_h(px(44.0))
+                .px(px(theme::space::MD))
                 .py(px(theme::space::SM))
-                .rounded(px(theme::radius::ROW))
+                .rounded(px(10.0))
                 .cursor_pointer()
-                .hover(|style| style.bg(theme::surface_hover()))
+                .hover(|style| style.bg(theme::rgba_alpha(theme::surface_hover(), 0.72)))
                 .on_click(cx.listener(move |_root, _event: &ClickEvent, _window, cx| {
                     let next = if OPEN_SELECT.load(Ordering::Relaxed) == menu_id {
                         0
@@ -552,15 +604,15 @@ fn select_row(
                         .flex_none()
                         .gap(px(theme::space::SM))
                         .px(px(theme::space::MD))
-                        .h(px(34.0))
+                        .h(px(32.0))
                         .max_w(px(280.0))
                         .rounded(px(theme::radius::ROW))
-                        .bg(theme::surface_elevated())
+                        .bg(theme::rgba_alpha(theme::surface(), 0.72))
                         .border_1()
                         .border_color(if expanded {
                             theme::accent()
                         } else {
-                            theme::border()
+                            theme::rgba_alpha(theme::border(), 0.35)
                         })
                         .child(
                             div()
@@ -570,22 +622,19 @@ fn select_row(
                                 .child(current),
                         )
                         .child(
-                            svg()
-                                .path(icons::path(if expanded {
-                                    "chevron-left"
-                                } else {
-                                    "chevron-right"
-                                }))
-                                .size(px(theme::ICON_SM))
-                                .text_color(theme::text_muted()),
+                            div()
+                                .flex_none()
+                                .text_size(theme::Text::Tiny.size())
+                                .text_color(theme::text_muted())
+                                .child(if expanded { "▴" } else { "▾" }),
                         ),
                 ),
         )
         .when(expanded, |this| {
             this.child(
                 div()
-                    .ml(px(theme::space::SM))
-                    .mr(px(theme::space::SM))
+                    .mx(px(theme::space::MD))
+                    .mb(px(theme::space::XS))
                     .p(px(theme::space::XS))
                     .flex()
                     .flex_col()
@@ -593,7 +642,7 @@ fn select_row(
                     .rounded(px(theme::radius::CARD))
                     .bg(theme::surface_elevated())
                     .border_1()
-                    .border_color(theme::border())
+                    .border_color(theme::rgba_alpha(theme::border(), 0.38))
                     .children(options),
             )
         })
@@ -647,11 +696,10 @@ fn slider_row(
     div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::SM))
-        .px(px(theme::space::SM))
+        .gap(px(6.0))
+        .px(px(theme::space::MD))
         .py(px(theme::space::SM))
-        .rounded(px(theme::radius::ROW))
-        .hover(|style| style.bg(theme::surface_hover()))
+        .rounded(px(10.0))
         .child(
             div()
                 .flex()
@@ -663,13 +711,7 @@ fn slider_row(
                 .child(
                     div()
                         .flex_none()
-                        .px(px(theme::space::SM))
-                        .py(px(3.0))
-                        .rounded(px(theme::radius::PILL))
-                        .bg(theme::surface_elevated())
-                        .border_1()
-                        .border_color(theme::border())
-                        .text_size(theme::Text::Tiny.size())
+                        .text_size(theme::Text::Small.size())
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(theme::accent())
                         .child(display),
@@ -959,7 +1001,6 @@ fn commit_compact_width(root: &mut Root, cx: &mut Context<Root>) {
 fn theme_preview_swatch(
     id: &'static str,
     title: String,
-    subtitle: String,
     pal: theme::Palette,
     split_day_night: bool,
     selected: bool,
@@ -973,11 +1014,11 @@ fn theme_preview_swatch(
             .flex()
             .flex_row()
             .w_full()
-            .h(px(52.0))
+            .h(px(50.0))
             .rounded(px(theme::radius::ROW))
             .overflow_hidden()
             .border_1()
-            .border_color(theme::border())
+            .border_color(theme::rgba_alpha(theme::border(), 0.35))
             .child(
                 div()
                     .flex_1()
@@ -989,14 +1030,14 @@ fn theme_preview_swatch(
                     .justify_between()
                     .child(
                         div()
-                            .h(px(6.0))
-                            .w(px(28.0))
+                            .h(px(5.0))
+                            .w(px(24.0))
                             .rounded_full()
                             .bg(light_pal.accent),
                     )
                     .child(
                         div()
-                            .h(px(14.0))
+                            .h(px(12.0))
                             .w_full()
                             .rounded(px(4.0))
                             .bg(light_pal.surface_elevated),
@@ -1013,14 +1054,14 @@ fn theme_preview_swatch(
                     .justify_between()
                     .child(
                         div()
-                            .h(px(6.0))
-                            .w(px(28.0))
+                            .h(px(5.0))
+                            .w(px(24.0))
                             .rounded_full()
                             .bg(dark_pal.accent),
                     )
                     .child(
                         div()
-                            .h(px(14.0))
+                            .h(px(12.0))
                             .w_full()
                             .rounded(px(4.0))
                             .bg(dark_pal.surface_elevated),
@@ -1032,17 +1073,16 @@ fn theme_preview_swatch(
             .flex()
             .flex_row()
             .w_full()
-            .h(px(52.0))
+            .h(px(50.0))
             .p(px(6.0))
-            .gap(px(6.0))
+            .gap(px(5.0))
             .rounded(px(theme::radius::ROW))
             .bg(pal.bg)
             .border_1()
             .border_color(pal.border)
             .child(
-                // 模拟左侧窄导航条
                 div()
-                    .w(px(22.0))
+                    .w(px(20.0))
                     .h_full()
                     .rounded(px(4.0))
                     .bg(pal.surface)
@@ -1054,20 +1094,19 @@ fn theme_preview_swatch(
                     .child(
                         div()
                             .h(px(3.0))
-                            .w(px(12.0))
+                            .w(px(10.0))
                             .rounded_full()
                             .bg(pal.text_faint),
                     )
                     .child(
                         div()
                             .h(px(3.0))
-                            .w(px(14.0))
+                            .w(px(12.0))
                             .rounded_full()
                             .bg(pal.text_faint),
                     ),
             )
             .child(
-                // 模拟右侧主卡片 + 主题点缀色
                 div()
                     .flex()
                     .flex_col()
@@ -1082,8 +1121,8 @@ fn theme_preview_swatch(
                             .flex_row()
                             .items_center()
                             .justify_between()
-                            .child(div().h(px(5.0)).w(px(44.0)).rounded_full().bg(pal.text))
-                            .child(div().size(px(7.0)).rounded_full().bg(pal.accent_secondary)),
+                            .child(div().h(px(5.0)).w(px(36.0)).rounded_full().bg(pal.text))
+                            .child(div().size(px(6.0)).rounded_full().bg(pal.accent_secondary)),
                     )
                     .child(
                         div()
@@ -1091,11 +1130,11 @@ fn theme_preview_swatch(
                             .flex_row()
                             .items_center()
                             .gap(px(4.0))
-                            .child(div().h(px(8.0)).w(px(28.0)).rounded_full().bg(pal.accent))
+                            .child(div().h(px(7.0)).w(px(24.0)).rounded_full().bg(pal.accent))
                             .child(
                                 div()
-                                    .h(px(8.0))
-                                    .w(px(18.0))
+                                    .h(px(7.0))
+                                    .w(px(14.0))
                                     .rounded_full()
                                     .bg(pal.surface_hover),
                             ),
@@ -1109,15 +1148,15 @@ fn theme_preview_swatch(
         .flex()
         .flex_col()
         .gap(px(theme::space::SM))
-        .w(px(186.0))
+        .w(px(154.0))
         .p(px(theme::space::SM))
-        .rounded(px(theme::radius::CARD))
-        .bg(theme::surface_elevated())
+        .rounded(px(12.0))
+        .bg(theme::rgba_alpha(theme::surface_elevated(), 0.56))
         .border_1()
         .border_color(if selected {
             theme::accent()
         } else {
-            theme::border()
+            theme::rgba_alpha(theme::border(), 0.28)
         })
         .when(selected, |this| this.bg(theme::surface_selected()))
         .cursor_pointer()
@@ -1146,7 +1185,7 @@ fn theme_preview_swatch(
                 .when(selected, |this| {
                     this.child(
                         div()
-                            .size(px(18.0))
+                            .size(px(16.0))
                             .flex_none()
                             .flex()
                             .items_center()
@@ -1156,18 +1195,11 @@ fn theme_preview_swatch(
                             .child(
                                 svg()
                                     .path(icons::path("check"))
-                                    .size(px(11.0))
+                                    .size(px(10.0))
                                     .text_color(theme::accent_foreground()),
                             ),
                     )
                 }),
-        )
-        .child(
-            div()
-                .truncate()
-                .text_size(theme::Text::Tiny.size())
-                .text_color(theme::text_muted())
-                .child(subtitle),
         )
         .into_any_element()
 }
@@ -1204,8 +1236,8 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
     } else {
         text(
             root,
-            "使用汽水音乐 App 扫码登录，即可解锁搜索、收藏、歌单与无损权益。",
-            "Scan QR code with Qishui Music app to unlock search, playlists, and lossless audio.",
+            "使用汽水音乐 App 扫码登录",
+            "Scan QR code with Qishui Music app",
         )
     };
 
@@ -1215,11 +1247,7 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         .and_then(|info| root.cover_of(&info.avatar_url));
 
     let signer = if root.settings.signer_url.trim().is_empty() {
-        text(
-            root,
-            "未单独配置（使用内置设备签名链路）",
-            "Default (built-in device signing)",
-        )
+        text(root, "内置签名链路", "Built-in device signing")
     } else {
         root.settings.signer_url.trim().to_string()
     };
@@ -1228,25 +1256,6 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         && !root.settings.iid.trim().is_empty()
         && !root.settings.fp.trim().is_empty();
     let vip_ready = root.settings.is_ready_for_vip();
-    let signing_status = if vip_ready && device_ready {
-        text(
-            root,
-            "登录 Cookie、外部签名服务与设备指纹均已就绪。",
-            "Account cookie, signer service, and device fingerprint are all ready.",
-        )
-    } else if device_ready {
-        text(
-            root,
-            "内置设备签名已就绪；若仍显示试听，说明该曲目服务端未下发完整整曲流。",
-            "Built-in device signing is ready; preview status means no full stream returned by server.",
-        )
-    } else {
-        text(
-            root,
-            "设备签名尚不完整；部分 VIP 歌曲可能仅可试听，建议扫码重新登录后重试。",
-            "Device signing incomplete; VIP songs may play as preview clips. Try signing in again.",
-        )
-    };
 
     let account_action = if logged_in {
         action_button(
@@ -1269,6 +1278,17 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         )
     };
 
+    let qishui_avatar_el = match account_avatar.filter(|p| p.exists()) {
+        Some(path) => crate::ui::artwork::cover(Some(path), 60.0, theme::radius::PILL),
+        None => div()
+            .flex_none()
+            .size(px(60.0))
+            .rounded(px(16.0))
+            .overflow_hidden()
+            .child(img("icons/sodam-logo.svg").size(px(60.0)))
+            .into_any_element(),
+    };
+
     let hero_card = div()
         .flex()
         .flex_row()
@@ -1277,13 +1297,13 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         .justify_between()
         .gap(px(theme::space::LG))
         .p(px(theme::space::LG))
-        .rounded(px(theme::radius::CARD))
-        .bg(theme::surface_elevated())
+        .rounded(px(14.0))
+        .bg(theme::rgba_alpha(theme::surface_elevated(), 0.56))
         .border_1()
         .border_color(if is_vip {
-            pal.accent_secondary
+            theme::rgba_alpha(pal.accent_secondary, 0.55)
         } else {
-            theme::border()
+            theme::rgba_alpha(theme::border(), 0.30)
         })
         .child(
             div()
@@ -1293,18 +1313,14 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                 .flex_1()
                 .min_w(px(220.0))
                 .gap(px(theme::space::LG))
-                .child(crate::ui::artwork::cover(
-                    account_avatar,
-                    68.0,
-                    theme::radius::PILL,
-                ))
+                .child(qishui_avatar_el)
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .flex_1()
                         .min_w(px(0.0))
-                        .gap(px(6.0))
+                        .gap(px(4.0))
                         .child(
                             div()
                                 .flex()
@@ -1333,7 +1349,7 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                                         .border_color(if is_vip {
                                             pal.accent_secondary
                                         } else {
-                                            theme::border()
+                                            theme::rgba_alpha(theme::border(), 0.35)
                                         })
                                         .text_size(theme::Text::Tiny.size())
                                         .font_weight(FontWeight::SEMIBOLD)
@@ -1364,106 +1380,61 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
 
     let diagnostics_row = div()
         .flex()
-        .flex_col()
-        .gap(px(theme::space::SM))
-        .p(px(theme::space::MD))
-        .rounded(px(theme::radius::ROW))
-        .bg(theme::surface_elevated())
-        .border_1()
-        .border_color(theme::border())
+        .flex_row()
+        .items_center()
+        .justify_between()
+        .gap(px(theme::space::MD))
+        .min_h(px(44.0))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
         .child(
             div()
                 .flex()
                 .flex_row()
                 .items_center()
-                .justify_between()
-                .gap(px(theme::space::MD))
+                .gap(px(theme::space::SM))
+                .child(div().size(px(8.0)).rounded_full().bg(status_dot_color))
                 .child(
                     div()
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .gap(px(theme::space::SM))
-                        .child(div().size(px(8.0)).rounded_full().bg(status_dot_color))
-                        .child(
-                            div()
-                                .text_size(theme::Text::Small.size())
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(theme::text())
-                                .child(text(root, "签名与播放链路", "Signing & Stream Pipeline")),
-                        ),
-                )
-                .child(
-                    div()
-                        .text_size(theme::Text::Tiny.size())
-                        .text_color(theme::text_muted())
-                        .child(if device_ready {
-                            text(root, "设备指纹就绪", "Device Ready")
-                        } else {
-                            text(root, "待激活", "Pending")
-                        }),
-                ),
-        )
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .gap(px(theme::space::MD))
-                .child(
-                    div()
-                        .text_size(theme::Text::Tiny.size())
-                        .text_color(theme::text_muted())
-                        .child(text(root, "签名服务地址", "Signer Endpoint")),
-                )
-                .child(
-                    div()
-                        .truncate()
-                        .text_size(theme::Text::Tiny.size())
+                        .text_size(theme::Text::Body.size())
                         .text_color(theme::text())
-                        .child(signer),
+                        .child(text(root, "签名服务", "Signing Pipeline")),
                 ),
         )
         .child(
             div()
+                .truncate()
                 .text_size(theme::Text::Tiny.size())
                 .text_color(theme::text_muted())
-                .child(signing_status),
+                .child(signer),
         )
         .into_any_element();
 
     let active_provider = root.active_provider();
-    let provider_card = card(
-        text(root, "当前音乐平台", "Active Music Platform"),
-        text(
-            root,
-            "也可随时点击左上角品牌标志在「汽水音乐」与「咪咕音乐」间无缝切换，当前播放不会中断。",
-            "Switch between Qishui Music and Migu Music anytime from the top-left header without interrupting playback.",
-        ),
-        vec![div()
-            .flex()
-            .flex_row()
-            .flex_wrap()
-            .gap(px(theme::space::SM))
-            .px(px(theme::space::XS))
-            .child(action_button(
-                "settings-provider-soda",
-                text(root, "汽水音乐", "Qishui Music"),
-                active_provider == sodam_core::MusicProvider::Soda,
-                cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.set_music_provider(sodam_core::MusicProvider::Soda, cx);
-                }),
-            ))
-            .child(action_button(
-                "settings-provider-migu",
-                text(root, "咪咕音乐", "Migu Music"),
-                active_provider == sodam_core::MusicProvider::Migu,
-                cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.set_music_provider(sodam_core::MusicProvider::Migu, cx);
-                }),
-            ))
-            .into_any_element()],
+    let provider_card = section_group(
+        text(root, "音源切换", "Music Source"),
+        vec![segmented_row(
+            text(root, "当前音乐平台", "Active Platform"),
+            "",
+            vec![
+                (
+                    "settings-provider-soda",
+                    text(root, "汽水音乐", "Qishui"),
+                    active_provider == sodam_core::MusicProvider::Soda,
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.set_music_provider(sodam_core::MusicProvider::Soda, cx);
+                    })),
+                ),
+                (
+                    "settings-provider-migu",
+                    text(root, "咪咕音乐", "Migu"),
+                    active_provider == sodam_core::MusicProvider::Migu,
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.set_music_provider(sodam_core::MusicProvider::Migu, cx);
+                    })),
+                ),
+            ],
+        )],
     );
 
     let migu_logged_in = !root.settings.migu_cookie.trim().is_empty();
@@ -1475,12 +1446,12 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
             .map(|info| info.nickname.clone())
             .unwrap_or_else(|| text(root, "咪咕音乐会员", "Migu Music User"))
     } else {
-        text(root, "咪咕音乐（未登录）", "Migu Music (Not Signed In)")
+        text(root, "咪咕音乐", "Migu Music")
     };
     let migu_badge = if !migu_logged_in {
         text(root, "免登录可用", "Guest Ready")
     } else if migu_vip {
-        text(root, "VIP 会员 · 24bit", "VIP · Hi-Res")
+        text(root, "VIP · 24bit", "VIP · Hi-Res")
     } else if root.migu_account.is_some() {
         text(root, "普通用户", "Standard")
     } else {
@@ -1488,9 +1459,9 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
     };
     let migu_detail = if let Some(info) = root.migu_account.as_ref().filter(|_| migu_logged_in) {
         if info.user_id.trim().is_empty() {
-            text(root, "咪咕协议直连已就绪", "Migu native session ready")
+            text(root, "咪咕直连就绪", "Migu session ready")
         } else {
-            format!("Migu UID: {}", info.user_id)
+            format!("UID: {}", info.user_id)
         }
     } else if migu_logged_in {
         text(
@@ -1501,14 +1472,24 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
     } else {
         text(
             root,
-            "已内置纯 Rust 咪咕协议：未登录即可听歌与搜索；登录后解锁 VIP 曲目、24bit 母带、个人歌单与红心收藏。",
-            "Built-in native Migu protocol: browse and play immediately, or sign in to unlock VIP tracks, 24-bit Hi-Res, playlists, and likes.",
+            "免登录即可搜索与听歌 · 登录解锁 VIP 与 24bit 无损",
+            "Stream free · Sign in for VIP & 24-bit Hi-Res",
         )
     };
     let migu_avatar = root
         .migu_account
         .as_ref()
         .and_then(|info| root.cover_of(&info.avatar_url));
+    let migu_avatar_el = match migu_avatar.filter(|p| p.exists()) {
+        Some(path) => crate::ui::artwork::cover(Some(path), 60.0, theme::radius::PILL),
+        None => div()
+            .flex_none()
+            .size(px(60.0))
+            .rounded(px(16.0))
+            .overflow_hidden()
+            .child(img("icons/migu-logo.svg").size(px(60.0)))
+            .into_any_element(),
+    };
 
     let migu_card = div()
         .flex()
@@ -1518,13 +1499,13 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         .justify_between()
         .gap(px(theme::space::LG))
         .p(px(theme::space::LG))
-        .rounded(px(theme::radius::CARD))
-        .bg(theme::surface_elevated())
+        .rounded(px(14.0))
+        .bg(theme::rgba_alpha(theme::surface_elevated(), 0.56))
         .border_1()
         .border_color(if migu_vip {
-            pal.accent_secondary
+            theme::rgba_alpha(pal.accent_secondary, 0.55)
         } else {
-            theme::border()
+            theme::rgba_alpha(theme::border(), 0.30)
         })
         .child(
             div()
@@ -1534,18 +1515,14 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                 .flex_1()
                 .min_w(px(220.0))
                 .gap(px(theme::space::LG))
-                .child(crate::ui::artwork::cover(
-                    migu_avatar,
-                    68.0,
-                    theme::radius::PILL,
-                ))
+                .child(migu_avatar_el)
                 .child(
                     div()
                         .flex()
                         .flex_col()
                         .flex_1()
                         .min_w(px(0.0))
-                        .gap(px(6.0))
+                        .gap(px(4.0))
                         .child(
                             div()
                                 .flex()
@@ -1574,7 +1551,7 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                                         .border_color(if migu_vip {
                                             pal.accent_secondary
                                         } else {
-                                            theme::border()
+                                            theme::rgba_alpha(theme::border(), 0.35)
                                         })
                                         .text_size(theme::Text::Tiny.size())
                                         .font_weight(FontWeight::SEMIBOLD)
@@ -1631,25 +1608,13 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "账号与会员", "Account & VIP"),
-            text(
-                root,
-                "管理多音乐源切换、双平台会员权益与播放签名服务状态。",
-                "Manage active music provider switching, dual-platform VIP status, and signing diagnostics.",
-            ),
-        ))
+        .gap(px(theme::space::XL))
+        .child(page_header(text(root, "账号与会员", "Account & VIP")))
         .child(provider_card)
         .child(hero_card)
         .child(migu_card)
-        .child(card(
-            text(root, "服务状态与诊断", "Service & Diagnostics"),
-            text(
-                root,
-                "本地隐私凭证（Cookie / 设备参数）不会在此明文展示。",
-                "Sensitive credentials (cookies and tokens) are kept private and never displayed here.",
-            ),
+        .child(section_group(
+            text(root, "连接状态", "Connection"),
             vec![diagnostics_row],
         ))
         .into_any_element();
@@ -1659,12 +1624,7 @@ fn account_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
 fn general_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElement {
     let mut theme_cards = vec![theme_preview_swatch(
         "theme-card-system",
-        text(root, "跟随系统", "Follow System"),
-        text(
-            root,
-            "自动随系统深浅外观切换黛墨夜色与宋韵青瓷",
-            "Auto-switch between Ink Night and Song Celadon",
-        ),
+        text(root, "跟随系统", "Auto"),
         root.theme.palette(),
         true,
         root.theme_follows_system,
@@ -1683,7 +1643,6 @@ fn general_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         theme_cards.push(theme_preview_swatch(
             card_id,
             root.tr(kind.name_zh()).to_string(),
-            root.tr(kind.subtitle_zh()).to_string(),
             kind.palette(),
             false,
             !root.theme_follows_system && root.theme == kind,
@@ -1698,16 +1657,12 @@ fn general_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         .flex_row()
         .flex_wrap()
         .gap(px(theme::space::MD))
-        .px(px(theme::space::XS))
-        .py(px(theme::space::XS))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
         .children(theme_cards)
         .into_any_element();
 
-    let mode_value = format!(
-        "{} · {}",
-        root.tr(root.window_mode.name_zh()),
-        root.tr(root.window_mode.subtitle_zh())
-    );
+    let mode_value = root.tr(root.window_mode.name_zh()).to_string();
     let mode_options = theme::WindowMode::ALL
         .iter()
         .copied()
@@ -1729,110 +1684,22 @@ fn general_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         })
         .collect::<Vec<_>>();
 
-    let playback_view_value = root.tr(root.playback_view_mode.name_zh()).to_string();
-    let playback_view_options = theme::PlaybackViewMode::ALL
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(index, view_mode)| {
-            option_row(
-                format!("playback-view-option-{index}"),
-                root.tr(view_mode.name_zh()).to_string(),
-                root.playback_view_mode == view_mode,
-                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                    root.set_playback_view_mode(view_mode, cx);
-                    OPEN_SELECT.store(0, Ordering::Relaxed);
-                }),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let density_value = root.tr(root.content_density.name_zh()).to_string();
-    let density_options = theme::ContentDensity::ALL
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(index, density)| {
-            option_row(
-                format!("density-option-{index}"),
-                root.tr(density.name_zh()).to_string(),
-                root.content_density == density,
-                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                    root.set_content_density(density, cx);
-                    OPEN_SELECT.store(0, Ordering::Relaxed);
-                }),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let language_value = if root.language_follows_system {
-        text(root, "跟随系统", "Follow system")
-    } else if root.language == Language::English {
-        "English".to_string()
-    } else {
-        "中文".to_string()
-    };
-    let language_options = [
-        (Language::System, text(root, "跟随系统", "Follow system")),
-        (Language::Chinese, "中文".to_string()),
-        (Language::English, "English".to_string()),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (value, label))| {
-        let selected = if root.language_follows_system {
-            value == Language::System
-        } else {
-            value != Language::System && root.language == value
-        };
-        option_row(
-            format!("language-option-{index}"),
-            label,
-            selected,
-            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                if value == Language::System {
-                    root.language = Language::system_locale();
-                    root.language_follows_system = true;
-                    root.settings.language = "auto".to_string();
-                    let _ = root.settings.save();
-                    cx.notify();
-                } else {
-                    root.set_language(value, cx);
-                }
-                OPEN_SELECT.store(0, Ordering::Relaxed);
-            }),
-        )
-    })
-    .collect::<Vec<_>>();
-
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "外观与主题", "Themes & Layout"),
-            text(
-                root,
-                "挑选东方传统色主题画廊、开启封面流光取色，并定制多形态窗口布局。",
-                "Explore Chinese aesthetic theme palettes, cover ambient tinting, and responsive window layouts.",
-            ),
-        ))
-        .child(card(
-            text(root, "中式美学主题画廊", "Chinese Aesthetic Theme Gallery"),
-            text(
-                root,
-                "五套原创中式主题共享一套设计令牌，常规界面保留高辨识度主题底色。",
-                "Five curated Chinese palettes built on shared design tokens with crisp contrast.",
-            ),
+        .gap(px(theme::space::XL))
+        .child(page_header(text(root, "外观与主题", "Themes & Layout")))
+        .child(section_group(
+            text(root, "视觉主题", "Appearance"),
             vec![
                 theme_gallery,
                 toggle_row(
                     "dynamic-cover-color",
-                    text(root, "封面动态流光染色", "Dynamic Cover Ambient Tinting"),
+                    text(root, "封面动态流光染色", "Dynamic Cover Ambient Tint"),
                     text(
                         root,
-                        "播放页背景、高亮歌词与沉浸进度条随当前专辑封面主色柔和过渡；关闭后保持纯正主题色。",
-                        "Softly adapts playback background and accents to the current album cover.",
+                        "播放舞台与高亮色随当前专辑封面主色柔和过渡",
+                        "Subtly tint stage accents from current album art",
                     ),
                     root.settings.dynamic_cover_color,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
@@ -1841,87 +1708,133 @@ fn general_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                 ),
             ],
         ))
-        .child(card(
-            text(root, "窗口模式与界面布局", "Window Mode & Layout"),
-            text(
-                root,
-                "适配宽屏桌面、半屏分屏、全屏沉浸与紧凑悬浮多种使用场景。",
-                "Adapt cleanly across widescreen, split-screen, fullscreen immersive, and mini windows.",
-            ),
+        .child(section_group(
+            text(root, "界面与布局", "Layout & Language"),
             vec![
                 select_row(
                     "window-mode-select",
                     1,
-                    text(root, "窗口与沉浸模式", "Window & immersive mode"),
-                    text(
-                        root,
-                        "支持普通窗口、半屏播放、全屏沉浸（Esc 退出）与紧凑小窗。",
-                        "Switch between Normal, Half-screen, Fullscreen (Esc), and Compact modes.",
-                    ),
+                    text(root, "窗口模式", "Window Mode"),
+                    String::new(),
                     mode_value,
                     mode_options,
                     cx,
                 ),
-                select_row(
-                    "playback-view-select",
-                    2,
-                    text(root, "播放页默认布局", "Playback page layout"),
-                    text(
-                        root,
-                        "选择进入播放页时的双栏（封面 + 歌词）、纯享歌词或内嵌队列视图。",
-                        "Choose split view, lyrics only, or inline queue when opening playback.",
-                    ),
-                    playback_view_value,
-                    playback_view_options,
-                    cx,
+                segmented_row(
+                    text(root, "播放页视图", "Playback View"),
+                    "",
+                    vec![
+                        (
+                            "playback-view-option-0",
+                            root.tr(theme::PlaybackViewMode::Split.name_zh())
+                                .to_string(),
+                            root.playback_view_mode == theme::PlaybackViewMode::Split,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_playback_view_mode(theme::PlaybackViewMode::Split, cx);
+                            })),
+                        ),
+                        (
+                            "playback-view-option-1",
+                            root.tr(theme::PlaybackViewMode::LyricsOnly.name_zh())
+                                .to_string(),
+                            root.playback_view_mode == theme::PlaybackViewMode::LyricsOnly,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_playback_view_mode(
+                                    theme::PlaybackViewMode::LyricsOnly,
+                                    cx,
+                                );
+                            })),
+                        ),
+                        (
+                            "playback-view-option-2",
+                            root.tr(theme::PlaybackViewMode::QueueOnly.name_zh())
+                                .to_string(),
+                            root.playback_view_mode == theme::PlaybackViewMode::QueueOnly,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_playback_view_mode(theme::PlaybackViewMode::QueueOnly, cx);
+                            })),
+                        ),
+                    ],
                 ),
-                select_row(
-                    "density-select",
-                    3,
-                    text(root, "内容视图密度", "Content density"),
-                    text(
-                        root,
-                        "统一调整首页、歌单与专辑页面的卡片与歌曲行疏密。",
-                        "Adjust card sizes and list row heights across content pages.",
-                    ),
-                    density_value,
-                    density_options,
-                    cx,
+                segmented_row(
+                    text(root, "内容视图密度", "Content Density"),
+                    "",
+                    vec![
+                        (
+                            "density-option-0",
+                            root.tr(theme::ContentDensity::LargeCard.name_zh())
+                                .to_string(),
+                            root.content_density == theme::ContentDensity::LargeCard,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_content_density(theme::ContentDensity::LargeCard, cx);
+                            })),
+                        ),
+                        (
+                            "density-option-1",
+                            root.tr(theme::ContentDensity::List.name_zh()).to_string(),
+                            root.content_density == theme::ContentDensity::List,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_content_density(theme::ContentDensity::List, cx);
+                            })),
+                        ),
+                        (
+                            "density-option-2",
+                            root.tr(theme::ContentDensity::Compact.name_zh())
+                                .to_string(),
+                            root.content_density == theme::ContentDensity::Compact,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_content_density(theme::ContentDensity::Compact, cx);
+                            })),
+                        ),
+                    ],
                 ),
                 toggle_row(
                     "sidebar-collapsed-toggle",
-                    text(root, "收起左侧功能栏", "Collapse Left Navigation Rail"),
-                    text(
-                        root,
-                        "在普通窗口下只显示图标轨，为封面、歌词和内容留出更大画布；也可点击侧栏顶部按钮切换。",
-                        "Show an icon-only rail in normal mode to maximize stage canvas width.",
-                    ),
+                    text(root, "收起左侧功能栏", "Compact Navigation Rail"),
+                    String::new(),
                     root.settings.sidebar_collapsed,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.set_sidebar_collapsed(!root.settings.sidebar_collapsed, cx);
                     }),
                 ),
-                select_row(
-                    "language-select",
-                    4,
-                    text(root, "界面语言", "Interface Language"),
-                    text(
-                        root,
-                        "切换中文 / English，立即刷新全应用文本。",
-                        "Switch between Chinese and English immediately.",
-                    ),
-                    language_value,
-                    language_options,
-                    cx,
+                segmented_row(
+                    text(root, "界面语言", "Language"),
+                    "",
+                    vec![
+                        (
+                            "language-option-0",
+                            text(root, "跟随系统", "Auto"),
+                            root.language_follows_system,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.language = Language::system_locale();
+                                root.language_follows_system = true;
+                                root.settings.language = "auto".to_string();
+                                let _ = root.settings.save();
+                                cx.notify();
+                            })),
+                        ),
+                        (
+                            "language-option-1",
+                            "中文".to_string(),
+                            !root.language_follows_system && root.language == Language::Chinese,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_language(Language::Chinese, cx);
+                            })),
+                        ),
+                        (
+                            "language-option-2",
+                            "EN".to_string(),
+                            !root.language_follows_system && root.language == Language::English,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_language(Language::English, cx);
+                            })),
+                        ),
+                    ],
                 ),
                 slider_row(
                     "ui-font-size",
-                    text(root, "软件字体大小", "Interface Font Size"),
-                    text(
-                        root,
-                        "全局调整侧栏、导航、卡片与列表的基础字号（12–20 px）。",
-                        "Adjust the base font size across chrome and content lists (12–20 px).",
-                    ),
+                    text(root, "界面字体大小", "UI Font Size"),
+                    String::new(),
                     root.settings.ui_font_size as f32,
                     12.0,
                     20.0,
@@ -2018,32 +1931,16 @@ fn playback_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEle
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "播放与音质", "Playback & Audio"),
-            text(
-                root,
-                "配置在线播放码率、音频输出设备与听感过渡效果。",
-                "Configure streaming audio quality, output devices, and playback DSP transitions.",
-            ),
-        ))
-        .child(card(
-            text(root, "音质与输出设备", "Quality & Output Device"),
-            text(
-                root,
-                "自动档会根据账号会员权益与单曲可用最高音质智能匹配。",
-                "Auto selects the highest quality available for your account and each track.",
-            ),
+        .gap(px(theme::space::XL))
+        .child(page_header(text(root, "播放与音质", "Playback & Audio")))
+        .child(section_group(
+            text(root, "音质与输出", "Audio & Output"),
             vec![
                 select_row(
                     "quality-select",
                     5,
                     text(root, "在线播放音质", "Streaming Quality"),
-                    text(
-                        root,
-                        "切换后从下一首或重新拉流时生效；离线模式仅读取已缓存音质。",
-                        "Applies to upcoming streams; offline mode uses cached audio only.",
-                    ),
+                    String::new(),
                     quality_value,
                     quality_options,
                     cx,
@@ -2051,33 +1948,24 @@ fn playback_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEle
                 select_row(
                     "audio-device-select",
                     6,
-                    text(root, "音频输出设备", "Audio Output Device"),
-                    text(
-                        root,
-                        "在 Linux / PipeWire / Pulse 下可指定扬声器、耳机、HDMI 或蓝牙设备。",
-                        "Route audio to system default, speakers, headphones, HDMI, or Bluetooth.",
-                    ),
+                    text(root, "音频输出设备", "Output Device"),
+                    String::new(),
                     current_device,
                     device_options,
                     cx,
                 ),
             ],
         ))
-        .child(card(
-            text(root, "听感增强与平滑过渡", "Enhancement & Transitions"),
-            text(
-                root,
-                "减少曲目切换时的响度落差与边界卡顿。",
-                "Smooth out loudness jumps and boundaries between tracks.",
-            ),
+        .child(section_group(
+            text(root, "听感调校", "Transitions & DSP"),
             vec![
                 toggle_row(
                     "normalize-volume",
                     text(root, "响度标准化", "Loudness Normalization"),
                     text(
                         root,
-                        "分析歌曲响度并自动平衡音量，避免切歌时忽大忽小。",
-                        "Balance perceived loudness across tracks to avoid sudden volume spikes.",
+                        "平衡不同曲目间的音量落差",
+                        "Match perceived loudness across tracks",
                     ),
                     root.settings.normalize_volume,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
@@ -2087,11 +1975,7 @@ fn playback_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEle
                 toggle_row(
                     "gapless-playback",
                     text(root, "无缝衔接播放", "Gapless Playback"),
-                    text(
-                        root,
-                        "提前准备下一首音频管线，尽量消除现场专辑或连奏曲目间的停顿。",
-                        "Prepare the next track early to minimize silence between consecutive tracks.",
-                    ),
+                    String::new(),
                     root.settings.gapless_playback,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_gapless(!root.settings.gapless_playback, cx);
@@ -2099,12 +1983,8 @@ fn playback_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEle
                 ),
                 slider_row(
                     "crossfade-slider",
-                    text(root, "曲目交叉淡化", "Crossfade Duration"),
-                    text(
-                        root,
-                        "令上一首淡出的同时下一首淡入；设为 0 秒即关闭交叉淡化。",
-                        "Blend the end of one track into the next; 0 s disables crossfade.",
-                    ),
+                    text(root, "曲目交叉淡化", "Crossfade"),
+                    String::new(),
                     root.settings.crossfade_seconds as f32,
                     0.0,
                     8.0,
@@ -2147,21 +2027,18 @@ fn lyrics_preview_card(root: &Root) -> AnyElement {
         aligned.child(txt).into_any_element()
     };
 
-    card(
-        text(root, "实时歌词排版预览", "Live Lyrics Typography Preview"),
-        text(
-            root,
-            "调整下方字体、字号、行距与对齐方式后此处即时呈现舞台效果。",
-            "Adjust font, size, line spacing, and alignment below to preview live stage styling.",
-        ),
+    section_group(
+        text(root, "舞台排版预览", "Stage Preview"),
         vec![div()
             .flex()
             .flex_col()
             .gap(px(4.0))
+            .mx(px(theme::space::SM))
+            .my(px(theme::space::XS))
             .px(px(theme::space::LG))
             .py(px(theme::space::MD))
-            .rounded(px(theme::radius::CARD))
-            .bg(theme::rgba_alpha(theme::surface(), 0.30))
+            .rounded(px(12.0))
+            .bg(theme::rgba_alpha(theme::surface(), 0.42))
             .child(line(
                 text(
                     root,
@@ -2198,147 +2075,7 @@ fn lyrics_preview_card(root: &Root) -> AnyElement {
 
 fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElement {
     let font_family = theme::LyricsFontFamily::from_key(&root.settings.lyrics_font_family);
-    let font_family_value = root.tr(font_family.name_zh()).to_string();
-    let font_family_options = theme::LyricsFontFamily::ALL
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(index, item)| {
-            option_row(
-                format!("lyrics-font-family-{index}"),
-                root.tr(item.name_zh()).to_string(),
-                font_family == item,
-                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                    root.set_lyrics_font_family(item, cx);
-                    OPEN_SELECT.store(0, Ordering::Relaxed);
-                }),
-            )
-        })
-        .collect::<Vec<_>>();
-
     let align = theme::LyricsAlign::from_key(&root.settings.lyrics_align);
-    let align_value = root.tr(align.name_zh()).to_string();
-    let align_options = theme::LyricsAlign::ALL
-        .iter()
-        .copied()
-        .enumerate()
-        .map(|(index, item)| {
-            option_row(
-                format!("lyrics-align-{index}"),
-                root.tr(item.name_zh()).to_string(),
-                align == item,
-                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                    root.set_lyrics_align(item, cx);
-                    OPEN_SELECT.store(0, Ordering::Relaxed);
-                }),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let color_value = if root.settings.desktop_lyrics_color == "text" {
-        text(root, "主题文字色", "Theme text color")
-    } else {
-        text(root, "强调色", "Accent color")
-    };
-    let color_options = [
-        ("accent", text(root, "强调色", "Accent color")),
-        ("text", text(root, "主题文字色", "Theme text color")),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (value, label))| {
-        option_row(
-            format!("desktop-color-{index}"),
-            label,
-            root.settings.desktop_lyrics_color == value,
-            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                root.e3_set_desktop_color(value, cx);
-                OPEN_SELECT.store(0, Ordering::Relaxed);
-            }),
-        )
-    })
-    .collect::<Vec<_>>();
-
-    let desktop_align_value = match root.settings.desktop_lyrics_align.as_str() {
-        "left" => text(root, "左对齐", "Left"),
-        "right" => text(root, "右对齐", "Right"),
-        _ => text(root, "居中", "Center"),
-    };
-    let desktop_align_options = [
-        ("left", text(root, "左对齐", "Left")),
-        ("center", text(root, "居中", "Center")),
-        ("right", text(root, "右对齐", "Right")),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (value, label))| {
-        option_row(
-            format!("desktop-align-{index}"),
-            label,
-            root.settings.desktop_lyrics_align == value,
-            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                root.e3_set_desktop_align(value, cx);
-                OPEN_SELECT.store(0, Ordering::Relaxed);
-            }),
-        )
-    })
-    .collect::<Vec<_>>();
-
-    let panel_value = match root.settings.panel_lyrics_position.as_str() {
-        "left" => text(root, "左侧", "Left"),
-        "center-right" => text(root, "日期右侧", "Right of clock"),
-        "right" => text(root, "右侧状态区", "Right status area"),
-        _ => text(root, "日期左侧", "Left of clock"),
-    };
-    let panel_options = [
-        ("left", text(root, "左侧", "Left")),
-        ("center-left", text(root, "日期左侧", "Left of clock")),
-        ("center-right", text(root, "日期右侧", "Right of clock")),
-        ("right", text(root, "右侧状态区", "Right status area")),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (value, label))| {
-        option_row(
-            format!("panel-position-{index}"),
-            label,
-            root.settings.panel_lyrics_position == value,
-            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                root.settings.panel_lyrics_position = value.to_string();
-                let _ = root.settings.save();
-                OPEN_SELECT.store(0, Ordering::Relaxed);
-                cx.notify();
-            }),
-        )
-    })
-    .collect::<Vec<_>>();
-
-    let panel_color_value = match root.settings.panel_lyrics_color.as_str() {
-        "text" => text(root, "主题文字色", "Theme text color"),
-        "white" => text(root, "白色", "White"),
-        _ => text(root, "歌曲主题色", "Track theme color"),
-    };
-    let panel_color_options = [
-        ("accent", text(root, "歌曲主题色", "Track theme color")),
-        ("text", text(root, "主题文字色", "Theme text color")),
-        ("white", text(root, "白色", "White")),
-    ]
-    .into_iter()
-    .enumerate()
-    .map(|(index, (value, label))| {
-        option_row(
-            format!("panel-color-{index}"),
-            label,
-            root.settings.panel_lyrics_color == value,
-            cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                root.settings.panel_lyrics_color = value.to_string();
-                let _ = root.settings.save();
-                OPEN_SELECT.store(0, Ordering::Relaxed);
-                cx.notify();
-            }),
-        )
-    })
-    .collect::<Vec<_>>();
 
     let quick_offset_controls = div()
         .flex()
@@ -2346,7 +2083,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
         .flex_wrap()
         .items_center()
         .gap(px(theme::space::SM))
-        .px(px(theme::space::SM))
+        .px(px(theme::space::MD))
+        .py(px(theme::space::SM))
         .child(action_button(
             "lyrics-offset-earlier",
             text(root, "提前 250 ms", "250 ms Earlier"),
@@ -2375,61 +2113,223 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
         ))
         .into_any_element();
 
+    let panel_mode_off = !root.settings.panel_lyrics_enabled;
+    let panel_mode_lyrics =
+        root.settings.panel_lyrics_enabled && root.settings.panel_lyrics_style == "lyrics";
+    let panel_mode_island =
+        root.settings.panel_lyrics_enabled && root.settings.panel_lyrics_style != "lyrics";
+
+    let mut panel_rows = vec![segmented_row(
+        text(root, "顶栏形态", "Top Bar Mode"),
+        "",
+        vec![
+            (
+                "panel-mode-off",
+                text(root, "关闭", "Off"),
+                panel_mode_off,
+                Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.settings.panel_lyrics_enabled = false;
+                    let _ = root.settings.save();
+                    cx.notify();
+                })),
+            ),
+            (
+                "panel-mode-lyrics",
+                text(root, "纯歌词", "Lyrics"),
+                panel_mode_lyrics,
+                Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.settings.panel_lyrics_enabled = true;
+                    root.settings.panel_lyrics_style = "lyrics".to_string();
+                    let _ = root.settings.save();
+                    cx.notify();
+                })),
+            ),
+            (
+                "panel-mode-island",
+                text(root, "灵动岛", "Dynamic Island"),
+                panel_mode_island,
+                Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.settings.panel_lyrics_enabled = true;
+                    root.settings.panel_lyrics_style = "island".to_string();
+                    let _ = root.settings.save();
+                    cx.notify();
+                })),
+            ),
+        ],
+    )];
+
+    if root.settings.panel_lyrics_enabled {
+        panel_rows.push(segmented_row(
+            text(root, "显示位置", "Placement"),
+            "",
+            vec![
+                (
+                    "panel-position-center-replace",
+                    text(root, "居中独占", "Center Island"),
+                    !matches!(
+                        root.settings.panel_lyrics_position.as_str(),
+                        "left" | "center-left" | "center-right" | "right"
+                    ),
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_position = "center-replace".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+                (
+                    "panel-position-0",
+                    text(root, "左侧", "Left"),
+                    root.settings.panel_lyrics_position == "left",
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_position = "left".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+                (
+                    "panel-position-1",
+                    text(root, "日期左侧", "Left of Clock"),
+                    root.settings.panel_lyrics_position == "center-left",
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_position = "center-left".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+                (
+                    "panel-position-2",
+                    text(root, "日期右侧", "Right of Clock"),
+                    root.settings.panel_lyrics_position == "center-right",
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_position = "center-right".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+                (
+                    "panel-position-3",
+                    text(root, "右侧", "Right"),
+                    root.settings.panel_lyrics_position == "right",
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_position = "right".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+            ],
+        ));
+        panel_rows.push(segmented_row(
+            text(root, "强调色", "Accent Color"),
+            "",
+            vec![
+                (
+                    "panel-color-0",
+                    text(root, "主题色", "Accent"),
+                    !matches!(root.settings.panel_lyrics_color.as_str(), "text" | "white"),
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_color = "accent".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+                (
+                    "panel-color-1",
+                    text(root, "文字色", "Text"),
+                    root.settings.panel_lyrics_color == "text",
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_color = "text".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+                (
+                    "panel-color-2",
+                    text(root, "纯白", "White"),
+                    root.settings.panel_lyrics_color == "white",
+                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                        root.settings.panel_lyrics_color = "white".to_string();
+                        let _ = root.settings.save();
+                        cx.notify();
+                    })),
+                ),
+            ],
+        ));
+    }
+
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "歌词体验", "Lyrics Experience"),
-            text(
-                root,
-                "统一管理播放页歌词排版、时间同步、桌面悬浮歌词与系统顶栏歌词。",
-                "Configure playback lyrics typography, timing offset, floating desktop overlay, and GNOME panel lyrics.",
-            ),
-        ))
+        .gap(px(theme::space::XL))
+        .child(page_header(text(root, "歌词体验", "Lyrics Experience")))
         .child(lyrics_preview_card(root))
-        .child(card(
-            text(root, "播放页歌词与同步", "Playback Lyrics & Timing"),
-            text(
-                root,
-                "支持思源黑体 / 宋韵衬线切换、字号行距微调及 ±3 秒时间校准。",
-                "Customize font family, spacing, alignment, inline player lyrics, and ±3 s timing calibration.",
-            ),
+        .child(section_group(
+            text(root, "播放页歌词", "Stage Lyrics"),
             vec![
-                select_row(
-                    "lyrics-font-family-select",
-                    7,
-                    text(root, "歌词字体", "Lyrics Font Family"),
-                    text(
-                        root,
-                        "支持思源黑体、宋韵衬线或等宽韵律字体。",
-                        "Choose sans-serif, Song-style serif, or monospace.",
-                    ),
-                    font_family_value,
-                    font_family_options,
-                    cx,
+                segmented_row(
+                    text(root, "歌词字体", "Font"),
+                    "",
+                    vec![
+                        (
+                            "lyrics-font-family-0",
+                            root.tr(theme::LyricsFontFamily::Sans.name_zh()).to_string(),
+                            font_family == theme::LyricsFontFamily::Sans,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_lyrics_font_family(theme::LyricsFontFamily::Sans, cx);
+                            })),
+                        ),
+                        (
+                            "lyrics-font-family-1",
+                            root.tr(theme::LyricsFontFamily::Serif.name_zh())
+                                .to_string(),
+                            font_family == theme::LyricsFontFamily::Serif,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_lyrics_font_family(theme::LyricsFontFamily::Serif, cx);
+                            })),
+                        ),
+                        (
+                            "lyrics-font-family-2",
+                            root.tr(theme::LyricsFontFamily::Mono.name_zh()).to_string(),
+                            font_family == theme::LyricsFontFamily::Mono,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_lyrics_font_family(theme::LyricsFontFamily::Mono, cx);
+                            })),
+                        ),
+                    ],
                 ),
-                select_row(
-                    "lyrics-align-select",
-                    8,
-                    text(root, "歌词对齐方式", "Lyrics Alignment"),
-                    text(
-                        root,
-                        "控制双栏、纯享歌词与全屏沉浸舞台的水平对齐方式。",
-                        "Horizontal alignment across split, lyrics-only, and fullscreen views.",
-                    ),
-                    align_value,
-                    align_options,
-                    cx,
+                segmented_row(
+                    text(root, "对齐方式", "Alignment"),
+                    "",
+                    vec![
+                        (
+                            "lyrics-align-0",
+                            root.tr(theme::LyricsAlign::Left.name_zh()).to_string(),
+                            align == theme::LyricsAlign::Left,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_lyrics_align(theme::LyricsAlign::Left, cx);
+                            })),
+                        ),
+                        (
+                            "lyrics-align-1",
+                            root.tr(theme::LyricsAlign::Center.name_zh()).to_string(),
+                            align == theme::LyricsAlign::Center,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_lyrics_align(theme::LyricsAlign::Center, cx);
+                            })),
+                        ),
+                        (
+                            "lyrics-align-2",
+                            root.tr(theme::LyricsAlign::Right.name_zh()).to_string(),
+                            align == theme::LyricsAlign::Right,
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_lyrics_align(theme::LyricsAlign::Right, cx);
+                            })),
+                        ),
+                    ],
                 ),
                 slider_row(
                     "lyrics-font-slider",
-                    text(root, "歌词字号", "Lyrics Font Size"),
-                    text(
-                        root,
-                        "基础字号（14–30 px），全屏沉浸与大窗口会自动按比例温和放大。",
-                        "Base size (14–30 px); fullscreen and large windows scale proportionally.",
-                    ),
+                    text(root, "歌词字号", "Font Size"),
+                    String::new(),
                     root.settings.lyrics_font_size as f32,
                     14.0,
                     30.0,
@@ -2441,12 +2341,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 ),
                 slider_row(
                     "lyrics-line-slider",
-                    text(root, "歌词行距", "Lyrics Line Spacing"),
-                    text(
-                        root,
-                        "增大后留白更雅致舒展，减小后同一视野可容纳更多歌词行。",
-                        "Increase for more breathing room or reduce to show more lines at once.",
-                    ),
+                    text(root, "歌词行距", "Line Spacing"),
+                    String::new(),
                     root.settings.lyrics_line_height as f32,
                     24.0,
                     52.0,
@@ -2458,12 +2354,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 ),
                 slider_row(
                     "lyrics-offset-slider",
-                    text(root, "歌词时间偏移", "Lyrics Timing Offset"),
-                    text(
-                        root,
-                        "负值让歌词更早出现，正值更晚出现，播放页与桌面歌词共用此偏移。",
-                        "Negative shows lyrics earlier; positive delays them across all lyrics surfaces.",
-                    ),
+                    text(root, "时间偏移", "Timing Offset"),
+                    String::new(),
                     root.settings.lyrics_offset_ms as f32,
                     -3000.0,
                     3000.0,
@@ -2476,12 +2368,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 quick_offset_controls,
                 toggle_row(
                     "bottom-lyrics-toggle",
-                    text(root, "底部播放栏内联歌词", "Bottom Player Inline Lyrics"),
-                    text(
-                        root,
-                        "在普通与半屏窗口的底部播放栏上方展示单行实时歌词条。",
-                        "Display a compact live lyric line above the bottom player bar.",
-                    ),
+                    text(root, "底部播放栏内联歌词", "Bottom Bar Inline Lyrics"),
+                    String::new(),
                     root.settings.bottom_lyrics_enabled,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.set_bottom_lyrics_enabled(!root.settings.bottom_lyrics_enabled, cx);
@@ -2489,35 +2377,31 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 ),
             ],
         ))
-        .child(card(
-            text(root, "桌面悬浮歌词窗口", "Floating Desktop Lyrics"),
-            text(
-                root,
-                "独立于主窗口悬浮展示，可在任意页面快速开关。",
-                "Float lyrics in an independent translucent window above your desktop.",
-            ),
+        .child(section_group(
+            text(root, "系统顶栏与灵动岛", "Top Bar & Dynamic Island"),
+            panel_rows,
+        ))
+        .child(section_group(
+            text(root, "桌面悬浮歌词", "Floating Desktop Lyrics"),
             vec![
                 div()
                     .flex()
                     .flex_row()
                     .items_center()
                     .justify_between()
-                    .px(px(theme::space::SM))
-                    .py(px(theme::space::XS))
+                    .min_h(px(44.0))
+                    .px(px(theme::space::MD))
+                    .py(px(theme::space::SM))
                     .child(row_label(
-                        text(root, "桌面歌词窗口开关", "Desktop Lyrics Window"),
-                        if root.desktop_lyrics_open {
-                            text(root, "桌面歌词当前正在显示中。", "Desktop lyrics window is currently open.")
-                        } else {
-                            text(root, "点击右侧按钮立即打开悬浮桌面歌词。", "Open the floating lyrics overlay immediately.")
-                        },
+                        text(root, "悬浮窗口", "Overlay Window"),
+                        String::new(),
                     ))
                     .child(action_button(
                         "toggle-desktop-lyrics-btn",
                         if root.desktop_lyrics_open {
-                            text(root, "关闭桌面歌词", "Close Desktop Lyrics")
+                            text(root, "关闭桌面歌词", "Close")
                         } else {
-                            text(root, "开启桌面歌词", "Open Desktop Lyrics")
+                            text(root, "开启桌面歌词", "Open")
                         },
                         !root.desktop_lyrics_open,
                         cx.listener(|root, _event: &ClickEvent, _window, cx| {
@@ -2527,12 +2411,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                     .into_any_element(),
                 toggle_row(
                     "desktop-single-line",
-                    text(root, "单行歌词", "Single-line Lyrics"),
-                    text(
-                        root,
-                        "关闭时同时显示当前行与下一行预告。",
-                        "Show both current and next line when disabled.",
-                    ),
+                    text(root, "单行显示", "Single Line"),
+                    String::new(),
                     root.settings.desktop_lyrics_single_line,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_single_line(
@@ -2544,11 +2424,7 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 toggle_row(
                     "desktop-always-top",
                     text(root, "始终置顶", "Always on Top"),
-                    text(
-                        root,
-                        "让桌面歌词窗口保持在其他常规应用窗口上方。",
-                        "Keep the floating lyrics window above normal windows.",
-                    ),
+                    String::new(),
                     root.settings.desktop_lyrics_always_on_top,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_always_on_top(
@@ -2560,11 +2436,7 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 toggle_row(
                     "desktop-lock",
                     text(root, "锁定位置", "Lock Position"),
-                    text(
-                        root,
-                        "锁定后禁止拖动位置和调整桌面歌词窗口尺寸。",
-                        "Prevent moving or resizing the overlay window while locked.",
-                    ),
+                    String::new(),
                     root.settings.desktop_lyrics_locked,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_locked(!root.settings.desktop_lyrics_locked, cx);
@@ -2573,11 +2445,7 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 toggle_row(
                     "desktop-click-through",
                     text(root, "鼠标穿透", "Click-Through"),
-                    text(
-                        root,
-                        "允许鼠标点击穿透悬浮歌词（取决于当前桌面合成器支持）。",
-                        "Pass pointer clicks through to windows below where supported.",
-                    ),
+                    String::new(),
                     root.settings.desktop_lyrics_click_through,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_desktop_click_through(
@@ -2588,12 +2456,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 ),
                 slider_row(
                     "desktop-opacity-slider",
-                    text(root, "背景透明度", "Background Opacity"),
-                    text(
-                        root,
-                        "在 30%–100% 之间平滑调节悬浮窗口背景不透明度。",
-                        "Adjust backdrop opacity continuously from 30% to 100%.",
-                    ),
+                    text(root, "背景透明度", "Opacity"),
+                    String::new(),
                     root.settings.desktop_lyrics_opacity as f32,
                     30.0,
                     100.0,
@@ -2605,12 +2469,8 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                 ),
                 slider_row(
                     "desktop-font-slider",
-                    text(root, "桌面歌词字号", "Desktop Lyrics Font Size"),
-                    text(
-                        root,
-                        "独立于播放页字号，适合远距离或高分屏桌面悬浮阅读。",
-                        "Independent font scale tailored for desktop floating readability.",
-                    ),
+                    text(root, "悬浮字号", "Font Size"),
+                    String::new(),
                     root.settings.desktop_lyrics_font_size as f32,
                     20.0,
                     44.0,
@@ -2620,86 +2480,60 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
                     commit_desktop_font,
                     cx,
                 ),
-                select_row(
-                    "desktop-color-select",
-                    9,
-                    text(root, "桌面歌词颜色", "Desktop Lyrics Color"),
-                    text(
-                        root,
-                        "使用封面/主题强调色，或跟随主题默认主文字色。",
-                        "Highlight with theme/cover accent or follow standard text color.",
-                    ),
-                    color_value,
-                    color_options,
-                    cx,
+                segmented_row(
+                    text(root, "文字颜色", "Text Color"),
+                    "",
+                    vec![
+                        (
+                            "desktop-color-0",
+                            text(root, "强调色", "Accent"),
+                            root.settings.desktop_lyrics_color != "text",
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_set_desktop_color("accent", cx);
+                            })),
+                        ),
+                        (
+                            "desktop-color-1",
+                            text(root, "文字色", "Text"),
+                            root.settings.desktop_lyrics_color == "text",
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_set_desktop_color("text", cx);
+                            })),
+                        ),
+                    ],
                 ),
-                select_row(
-                    "desktop-align-select",
-                    10,
-                    text(root, "桌面歌词对齐", "Desktop Lyrics Alignment"),
-                    text(
-                        root,
-                        "控制悬浮窗口内部文字左对齐、居中或右对齐。",
-                        "Align text left, center, or right inside the floating overlay.",
-                    ),
-                    desktop_align_value,
-                    desktop_align_options,
-                    cx,
-                ),
-            ],
-        ))
-        .child(card(
-            text(
-                root,
-                "Ubuntu / GNOME 顶栏歌词",
-                "Ubuntu / GNOME Panel Lyrics",
-            ),
-            text(
-                root,
-                "将当前歌词推送至 GNOME Shell 顶部状态栏伴奏扩展。",
-                "Stream the active lyric line into the GNOME Shell top bar extension.",
-            ),
-            vec![
-                toggle_row(
-                    "panel-lyrics-enabled",
-                    text(root, "显示顶栏歌词", "Show Panel Lyrics"),
-                    text(
-                        root,
-                        "关闭后 GNOME 扩展将自动隐藏顶部歌词文本。",
-                        "Hide the GNOME Shell panel lyric widget when disabled.",
-                    ),
-                    root.settings.panel_lyrics_enabled,
-                    cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.settings.panel_lyrics_enabled = !root.settings.panel_lyrics_enabled;
-                        let _ = root.settings.save();
-                        cx.notify();
-                    }),
-                ),
-                select_row(
-                    "panel-position-select",
-                    11,
-                    text(root, "顶栏位置", "Panel Position"),
-                    text(
-                        root,
-                        "设置歌词在系统顶栏中相对于时间或状态图标的位置。",
-                        "Place panel lyrics relative to the clock and status area.",
-                    ),
-                    panel_value,
-                    panel_options,
-                    cx,
-                ),
-                select_row(
-                    "panel-color-select",
-                    12,
-                    text(root, "顶栏歌词颜色", "Panel Lyrics Color"),
-                    text(
-                        root,
-                        "默认跟随当前曲目主题强调色，也可切换主题文字色或纯白。",
-                        "Follow track accent by default, or lock to theme text / white.",
-                    ),
-                    panel_color_value,
-                    panel_color_options,
-                    cx,
+                segmented_row(
+                    text(root, "水平对齐", "Alignment"),
+                    "",
+                    vec![
+                        (
+                            "desktop-align-0",
+                            text(root, "左对齐", "Left"),
+                            root.settings.desktop_lyrics_align == "left",
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_set_desktop_align("left", cx);
+                            })),
+                        ),
+                        (
+                            "desktop-align-1",
+                            text(root, "居中", "Center"),
+                            !matches!(
+                                root.settings.desktop_lyrics_align.as_str(),
+                                "left" | "right"
+                            ),
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_set_desktop_align("center", cx);
+                            })),
+                        ),
+                        (
+                            "desktop-align-2",
+                            text(root, "右对齐", "Right"),
+                            root.settings.desktop_lyrics_align == "right",
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.e3_set_desktop_align("right", cx);
+                            })),
+                        ),
+                    ],
                 ),
             ],
         ))
@@ -2785,31 +2619,6 @@ fn storage_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
         })
         .collect::<Vec<_>>();
 
-    let format_items = [
-        ("source", text(root, "原始容器格式", "Original Format")),
-        ("mp3", "MP3".to_string()),
-        ("flac", "FLAC".to_string()),
-    ];
-    let format_value = format_items
-        .iter()
-        .find(|(value, _)| *value == root.settings.download_format)
-        .map(|(_, label)| label.clone())
-        .unwrap_or_else(|| text(root, "原始容器格式", "Original Format"));
-    let format_options = format_items
-        .into_iter()
-        .enumerate()
-        .map(|(index, (value, label))| {
-            option_row(
-                format!("download-format-{index}"),
-                label,
-                root.settings.download_format == value,
-                cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                    root.set_download_format(value, cx);
-                    OPEN_SELECT.store(0, Ordering::Relaxed);
-                }),
-            )
-        })
-        .collect::<Vec<_>>();
     let download_path = sodam_core::downloads::download_dir().display().to_string();
 
     let (audio_bytes, audio_files, cover_bytes, cover_files) = root.cache_summary;
@@ -2996,121 +2805,134 @@ fn storage_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "下载与存储", "Downloads & Storage"),
-            text(
-                root,
-                "管理本地导出音乐目录与格式、磁盘缓存配额及离线预加载策略。",
-                "Manage music export paths, cache storage quotas, and offline prefetch rules.",
-            ),
-        ))
-        .child(card(
-            text(root, "音乐下载与导出", "Music Downloads & Export"),
-            text(
-                root,
-                "导出的歌曲自动写入标题、歌手、专辑元数据标签，并在封面可用时内嵌封面。",
-                "Exported songs embed title, artist, album metadata, and cover art when cached.",
-            ),
+        .gap(px(theme::space::XL))
+        .child(page_header(text(root, "下载与存储", "Downloads & Storage")))
+        .child(section_group(
+            text(root, "下载与导出", "Downloads"),
             vec![
                 select_row(
                     "download-quality-select",
                     13,
                     text(root, "下载音质", "Download Quality"),
-                    text(
-                        root,
-                        "可独立设定导出档位，或直接跟随当前在线播放音质。",
-                        "Set independently from streaming quality or follow playback quality.",
-                    ),
+                    String::new(),
                     quality_value,
                     quality_options,
                     cx,
                 ),
-                select_row(
-                    "download-format-select",
-                    14,
+                segmented_row(
                     text(root, "下载格式", "Download Format"),
-                    text(
-                        root,
-                        "原始容器速度最快无损转换；MP3 与 FLAC 使用本地 ffmpeg 转码。",
-                        "Original skips re-encoding; MP3 and FLAC transcode via local ffmpeg.",
-                    ),
-                    format_value,
-                    format_options,
-                    cx,
+                    "",
+                    vec![
+                        (
+                            "download-format-0",
+                            text(root, "原始容器", "Original"),
+                            !matches!(root.settings.download_format.as_str(), "mp3" | "flac"),
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_download_format("source", cx);
+                            })),
+                        ),
+                        (
+                            "download-format-1",
+                            "MP3".to_string(),
+                            root.settings.download_format == "mp3",
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_download_format("mp3", cx);
+                            })),
+                        ),
+                        (
+                            "download-format-2",
+                            "FLAC".to_string(),
+                            root.settings.download_format == "flac",
+                            Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                root.set_download_format("flac", cx);
+                            })),
+                        ),
+                    ],
                 ),
                 div()
                     .flex()
                     .flex_col()
                     .gap(px(theme::space::SM))
                     .p(px(theme::space::MD))
-                    .rounded(px(theme::radius::ROW))
-                    .bg(theme::surface_elevated())
-                    .border_1()
-                    .border_color(theme::border())
-                    .child(
-                        div()
-                            .text_size(theme::Text::Tiny.size())
-                            .text_color(theme::text_muted())
-                            .child(text(root, "当前保存目录", "Save Directory")),
-                    )
-                    .child(
-                        div()
-                            .text_size(theme::Text::Small.size())
-                            .text_color(theme::text())
-                            .child(download_path),
-                    )
                     .child(
                         div()
                             .flex()
                             .flex_row()
                             .flex_wrap()
-                            .gap(px(theme::space::SM))
-                            .pt(px(theme::space::XS))
-                            .child(action_button(
-                                "choose-download-dir",
-                                text(root, "更改目录", "Change Folder"),
-                                true,
-                                cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                                    root.choose_download_directory(cx);
-                                }),
-                            ))
-                            .child(action_button(
-                                "open-download-dir",
-                                text(root, "打开目录", "Open Folder"),
-                                false,
-                                cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                                    root.open_download_folder(cx);
-                                }),
-                            ))
-                            .child(action_button(
-                                "reset-download-dir",
-                                text(root, "恢复默认", "Reset Default"),
-                                false,
-                                cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                                    root.reset_download_directory(cx);
-                                }),
-                            )),
+                            .items_center()
+                            .justify_between()
+                            .gap(px(theme::space::MD))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .flex_1()
+                                    .min_w(px(180.0))
+                                    .gap(px(2.0))
+                                    .child(
+                                        div()
+                                            .text_size(theme::Text::Body.size())
+                                            .text_color(theme::text())
+                                            .child(text(root, "保存目录", "Save Directory")),
+                                    )
+                                    .child(
+                                        div()
+                                            .truncate()
+                                            .text_size(theme::Text::Tiny.size())
+                                            .text_color(theme::text_muted())
+                                            .child(download_path),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .gap(px(theme::space::SM))
+                                    .child(action_button(
+                                        "choose-download-dir",
+                                        text(root, "更改", "Change"),
+                                        true,
+                                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                            root.choose_download_directory(cx);
+                                        }),
+                                    ))
+                                    .child(action_button(
+                                        "open-download-dir",
+                                        text(root, "打开", "Open"),
+                                        false,
+                                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                            root.open_download_folder(cx);
+                                        }),
+                                    ))
+                                    .child(action_button(
+                                        "reset-download-dir",
+                                        text(root, "默认", "Reset"),
+                                        false,
+                                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                                            root.reset_download_directory(cx);
+                                        }),
+                                    )),
+                            ),
                     )
                     .into_any_element(),
             ],
         ))
-        .child(card(
-            text(root, "缓存空间仪表盘", "Cache Storage Meter"),
-            text(
-                root,
-                "音频与封面缓存共用滚动清理机制：达到上限后按最近使用顺序自动腾出安全水位，不影响已导出的下载歌曲。",
-                "Audio and cover caches share rolling LRU eviction up to a safe watermark; exported downloads stay safe.",
-            ),
+        .child(section_group(
+            text(root, "缓存空间", "Cache Storage"),
             vec![
-                storage_meter,
+                div()
+                    .px(px(theme::space::MD))
+                    .py(px(theme::space::SM))
+                    .child(storage_meter)
+                    .into_any_element(),
                 slider_row(
                     "cache-limit-slider",
-                    text(root, "播放缓存上限", "Playback Cache Limit"),
+                    text(root, "缓存上限", "Cache Limit"),
                     text(
                         root,
-                        "设为 0 GB 表示不限制；建议设置 3–8 GB 兼顾无感切歌与硬盘空间。",
-                        "0 GB means unlimited; 3–8 GB balances seamless switching and disk space.",
+                        "超出上限后按最近使用顺序自动滚动清理，0 GB 不限制",
+                        "Rolling LRU eviction above limit (0 GB for unlimited)",
                     ),
                     root.settings.cache_limit_gb as f32,
                     0.0,
@@ -3126,7 +2948,8 @@ fn storage_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                     .flex_row()
                     .flex_wrap()
                     .gap(px(theme::space::SM))
-                    .px(px(theme::space::SM))
+                    .px(px(theme::space::MD))
+                    .py(px(theme::space::SM))
                     .child(action_button(
                         "refresh-cache-stats",
                         text(root, "刷新统计", "Refresh Stats"),
@@ -3152,13 +2975,8 @@ fn storage_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElem
                     .into_any_element(),
             ],
         ))
-        .child(card(
-            text(root, "离线与智能预加载", "Offline & Smart Prefetch"),
-            text(
-                root,
-                "控制切歌提前准备策略，弱网或高码率无损下建议适当调高缓冲。",
-                "Configure background pre-caching for upcoming queue tracks.",
-            ),
+        .child(section_group(
+            text(root, "离线与预加载", "Offline & Prefetch"),
             prefetch_controls,
         ))
         .into_any_element();
@@ -3198,158 +3016,84 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
         UpdateState::Error(err) => format!("{} {err}", text(root, "更新失败：", "Update failed:")),
     };
 
-    let mut update_children: Vec<AnyElement> = vec![div()
-        .px(px(theme::space::SM))
-        .py(px(theme::space::XS))
-        .text_size(theme::Text::Small.size())
-        .text_color(theme::text_muted())
-        .child(update_status)
-        .into_any_element()];
-    if !in_progress {
-        update_children.push(
-            div()
-                .flex()
-                .flex_row()
-                .px(px(theme::space::SM))
-                .child(action_button(
-                    "about-check-update",
-                    if can_install {
-                        text(root, "下载并安装更新", "Download & Install")
-                    } else {
-                        text(root, "检查更新", "Check for Updates")
-                    },
-                    can_install,
-                    cx.listener(move |root, _event: &ClickEvent, _window, cx| {
-                        if can_install {
-                            root.install_available_update(cx);
-                        } else {
-                            root.check_for_updates(cx);
-                        }
-                    }),
-                ))
-                .into_any_element(),
-        );
-    }
-
-    let brand_card = card(
-        text(root, "关于流光音乐 · Lumina", "About Lumina"),
-        text(
-            root,
-            "基于 Rust + GPUI 构建的跨平台原生中式美学多音源音乐播放器，原生内置汽水音乐与咪咕音乐引擎。",
-            "Native multi-source lossless desktop music player built with Rust, GPUI, and Chinese aesthetic design (Qishui & Migu).",
-        ),
+    let brand_card = section_group(
+        text(root, "关于应用", "About"),
         vec![div()
             .flex()
-            .flex_col()
+            .flex_row()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
             .gap(px(theme::space::MD))
             .p(px(theme::space::MD))
-            .rounded(px(theme::radius::ROW))
-            .bg(theme::surface_elevated())
-            .border_1()
-            .border_color(theme::border())
             .child(
                 div()
                     .flex()
                     .flex_row()
-                    .flex_wrap()
                     .items_center()
-                    .justify_between()
                     .gap(px(theme::space::MD))
+                    .child(img("icons/sodam-logo.svg").size(px(44.0)))
                     .child(
                         div()
                             .flex()
-                            .flex_row()
-                            .items_center()
-                            .gap(px(theme::space::MD))
-                            .child(img("icons/sodam-logo.svg").size(px(44.0)))
+                            .flex_col()
+                            .gap(px(4.0))
                             .child(
                                 div()
                                     .flex()
-                                    .flex_col()
-                                    .gap(px(4.0))
+                                    .flex_row()
+                                    .items_center()
+                                    .gap(px(theme::space::SM))
                                     .child(
                                         div()
-                                            .flex()
-                                            .flex_row()
-                                            .items_center()
-                                            .gap(px(theme::space::SM))
-                                            .child(
-                                                div()
-                                                    .text_size(theme::Text::Large.size())
-                                                    .font_weight(FontWeight::BOLD)
-                                                    .text_color(theme::text())
-                                                    .child(text(
-                                                        root,
-                                                        "流光音乐 · Lumina",
-                                                        "Lumina",
-                                                    )),
-                                            )
-                                            .child(
-                                                div()
-                                                    .px(px(theme::space::SM))
-                                                    .py(px(1.0))
-                                                    .rounded(px(theme::radius::PILL))
-                                                    .bg(theme::accent_soft())
-                                                    .text_size(theme::Text::Tiny.size())
-                                                    .font_weight(FontWeight::SEMIBOLD)
-                                                    .text_color(theme::accent())
-                                                    .child(format!("v{version}")),
-                                            ),
+                                            .text_size(theme::Text::Large.size())
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(theme::text())
+                                            .child(text(root, "流光音乐 · Lumina", "Lumina")),
                                     )
                                     .child(
                                         div()
+                                            .px(px(theme::space::SM))
+                                            .py(px(1.0))
+                                            .rounded(px(theme::radius::PILL))
+                                            .bg(theme::accent_soft())
                                             .text_size(theme::Text::Tiny.size())
-                                            .text_color(theme::text_muted())
-                                            .child("Rust + GPUI + libresoda · AGPL-3.0-or-later"),
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .text_color(theme::accent())
+                                            .child(format!("v{version}")),
                                     ),
+                            )
+                            .child(
+                                div()
+                                    .text_size(theme::Text::Tiny.size())
+                                    .text_color(theme::text_muted())
+                                    .child("https://github.com/lbg2002/sodam · AGPL-3.0"),
                             ),
-                    )
-                    .child(action_button(
-                        "about-open-github",
-                        text(root, "访问 GitHub 仓库", "Open GitHub"),
-                        false,
-                        cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                            root.open_github_repo(cx);
-                        }),
-                    )),
+                    ),
             )
-            .child(
-                div()
-                    .text_size(theme::Text::Tiny.size())
-                    .text_color(theme::text_faint())
-                    .child("https://github.com/lbg2002/sodam"),
-            )
+            .child(action_button(
+                "about-open-github",
+                text(root, "访问 GitHub", "GitHub"),
+                false,
+                cx.listener(|root, _event: &ClickEvent, _window, cx| {
+                    root.open_github_repo(cx);
+                }),
+            ))
             .into_any_element()],
     );
 
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(theme::space::LG))
-        .child(page_header(
-            text(root, "系统与关于", "System & About"),
-            text(
-                root,
-                "配置系统通知、性能降级策略、软件在线更新与版本详情。",
-                "Configure system notifications, motion performance, updates, and version info.",
-            ),
-        ))
-        .child(card(
-            text(root, "通知与性能调优", "Notifications & Performance"),
-            text(
-                root,
-                "针对不同配置主机调整启动加载策略、动效强度与响应式阈值。",
-                "Tune startup loading, animation intensity, and responsive player-bar folding.",
-            ),
+        .gap(px(theme::space::XL))
+        .child(page_header(text(root, "系统与关于", "System & About")))
+        .child(section_group(
+            text(root, "系统与性能", "System & Performance"),
             vec![
                 toggle_row(
                     "system-notifications",
                     text(root, "切歌系统通知", "Track-Change Notifications"),
-                    text(
-                        root,
-                        "在后台切换曲目时发送桌面通知展示当前歌曲与歌手。",
-                        "Show song title and artist in system notifications on track change.",
-                    ),
+                    String::new(),
                     root.settings.system_notifications,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_notifications(!root.settings.system_notifications, cx);
@@ -3357,12 +3101,8 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
                 ),
                 toggle_row(
                     "lazy-startup",
-                    text(root, "延迟加载非首屏内容", "Lazy-Load Secondary Content"),
-                    text(
-                        root,
-                        "优先呈现窗口并恢复上次队列，再于后台加载收藏与统计信息。",
-                        "Present the UI and restore playback first, loading library metadata afterward.",
-                    ),
+                    text(root, "延迟加载非首屏内容", "Lazy-Load Startup"),
+                    String::new(),
                     root.settings.lazy_startup,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.e3_set_lazy_startup(!root.settings.lazy_startup, cx);
@@ -3370,16 +3110,8 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
                 ),
                 toggle_row(
                     "reduced-motion",
-                    text(
-                        root,
-                        "减弱动效（低性能模式）",
-                        "Reduced Motion (Low-Power Mode)",
-                    ),
-                    text(
-                        root,
-                        "关闭页面淡入位移、卡片缩放及高强度光晕过渡，保障低负载流畅度。",
-                        "Disable fade/slide and card-scale transitions to conserve GPU/CPU.",
-                    ),
+                    text(root, "减弱动效（低性能模式）", "Reduced Motion"),
+                    String::new(),
                     root.settings.reduced_motion,
                     cx.listener(|root, _event: &ClickEvent, _window, cx| {
                         root.set_reduced_motion(!root.settings.reduced_motion, cx);
@@ -3388,11 +3120,7 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
                 slider_row(
                     "compact-width-slider",
                     text(root, "播放栏折叠阈值", "Player Compact Threshold"),
-                    text(
-                        root,
-                        "窗口宽度低于该像素阈值时自动收起次要按钮以保核心控制。",
-                        "Hide secondary player-bar buttons when the window is narrower than this width.",
-                    ),
+                    String::new(),
                     root.settings.player_bar_compact_width as f32,
                     720.0,
                     1200.0,
@@ -3404,14 +3132,42 @@ fn about_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyElemen
                 ),
             ],
         ))
-        .child(card(
+        .child(section_group(
             text(root, "软件更新", "Software Updates"),
-            text(
-                root,
-                "检查并安装此仓库发布的经过 SHA-256 校验的新版本。",
-                "Check and install SHA-256 verified updates from this repository.",
-            ),
-            update_children,
+            vec![div()
+                .flex()
+                .flex_row()
+                .flex_wrap()
+                .items_center()
+                .justify_between()
+                .gap(px(theme::space::MD))
+                .px(px(theme::space::MD))
+                .py(px(theme::space::SM))
+                .child(
+                    div()
+                        .text_size(theme::Text::Small.size())
+                        .text_color(theme::text_muted())
+                        .child(update_status),
+                )
+                .when(!in_progress, |this| {
+                    this.child(action_button(
+                        "about-check-update",
+                        if can_install {
+                            text(root, "下载并安装更新", "Download & Install")
+                        } else {
+                            text(root, "检查更新", "Check for Updates")
+                        },
+                        can_install,
+                        cx.listener(move |root, _event: &ClickEvent, _window, cx| {
+                            if can_install {
+                                root.install_available_update(cx);
+                            } else {
+                                root.check_for_updates(cx);
+                            }
+                        }),
+                    ))
+                })
+                .into_any_element()],
         ))
         .child(brand_card)
         .into_any_element();

@@ -861,6 +861,11 @@ impl Language {
             "小窗" => "Mini",
             "双栏" => "Split",
             "纯歌词" => "Lyrics",
+            "灵动岛" => "Dynamic Island",
+            "系统顶栏与灵动岛" => "Top Bar & Dynamic Island",
+            "顶栏形态" => "Top Bar Mode",
+            "日期左侧" => "Left of Clock",
+            "日期右侧" => "Right of Clock",
             "试听" => "Preview",
             "试听片段 · 非完整曲目" => "Preview Clip · Not Full Track",
             "校准" => "Reset",
@@ -994,6 +999,7 @@ impl Language {
             "已退出咪咕账号，但保存配置失败：{err}" => {
                 "Signed out of Migu, but saving failed: {err}"
             }
+            "居中独占" => "Center Island",
             _ => key,
         }
     }

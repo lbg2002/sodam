@@ -83,12 +83,16 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .gap(px(theme::space::SM))
                 .w(px(card_box_w))
                 .p(px(theme::space::SM))
-                .rounded(px(theme::radius::CARD))
-                .bg(theme::surface_elevated())
+                .rounded(px(14.0))
+                .bg(theme::rgba_alpha(theme::surface_elevated(), 0.52))
                 .border_1()
-                .border_color(theme::border())
+                .border_color(theme::rgba_alpha(theme::border(), 0.24))
                 .cursor_pointer()
-                .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.018))
+                .hover(|style| {
+                    style
+                        .bg(theme::rgba_alpha(theme::surface_hover(), 0.85))
+                        .layer_scale(1.018)
+                })
                 .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
                     root.start_scene_card(click_card.clone(), cx);
                 }))
@@ -129,10 +133,10 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .gap(px(theme::space::MD))
                 .w(px(270.0))
                 .p(px(theme::space::SM))
-                .rounded(px(theme::radius::CARD))
-                .bg(theme::surface_elevated())
+                .rounded(px(12.0))
+                .bg(theme::rgba_alpha(theme::surface_elevated(), 0.50))
                 .border_1()
-                .border_color(theme::border())
+                .border_color(theme::rgba_alpha(theme::border(), 0.22))
                 .cursor_pointer()
                 .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.012))
                 .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
@@ -192,10 +196,10 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .gap(px(theme::space::SM))
                 .px(px(theme::space::MD))
                 .py(px(theme::space::SM))
-                .rounded(px(theme::radius::CARD))
-                .bg(theme::surface_elevated())
+                .rounded(px(theme::radius::PILL))
+                .bg(theme::rgba_alpha(theme::surface_elevated(), 0.52))
                 .border_1()
-                .border_color(theme::border())
+                .border_color(theme::rgba_alpha(theme::border(), 0.24))
                 .cursor_pointer()
                 .hover(|style| style.bg(theme::surface_hover()).layer_scale(1.02))
                 .on_click(cx.listener(move |root, _event: &ClickEvent, _window, cx| {
@@ -284,11 +288,11 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                 .items_center()
                 .gap(px(theme::space::XL))
                 .p(px(theme::space::XL))
-                .rounded(px(theme::radius::CARD))
-                .bg(theme::surface_elevated())
+                .rounded(px(16.0))
+                .bg(theme::rgba_alpha(theme::surface_elevated(), 0.56))
                 .border_1()
-                .border_color(theme::border())
-                .child(cover(featured_cover, 176.0, theme::radius::CARD))
+                .border_color(theme::rgba_alpha(theme::border(), 0.28))
+                .child(cover(featured_cover, 168.0, theme::radius::CARD))
                 .child(
                     div()
                         .flex()
@@ -296,30 +300,6 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         .gap(px(theme::space::SM))
                         .flex_1()
                         .min_w(px(220.0))
-                        .child(
-                            div()
-                                .flex()
-                                .flex_row()
-                                .items_center()
-                                .gap(px(theme::space::SM))
-                                .child(
-                                    div()
-                                        .px(px(theme::space::SM))
-                                        .py(px(2.0))
-                                        .rounded(px(theme::radius::PILL))
-                                        .bg(theme::accent_soft())
-                                        .text_size(theme::Text::Tiny.size())
-                                        .font_weight(gpui::FontWeight::BOLD)
-                                        .text_color(theme::accent())
-                                        .child(root.tr("今日雅荐")),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(theme::Text::Small.size())
-                                        .text_color(theme::text_muted())
-                                        .child(root.tr(theme::current_theme().name_zh())),
-                                ),
-                        )
                         .child(
                             div()
                                 .text_size(px(26.0))
@@ -330,14 +310,9 @@ pub(crate) fn home_view(root: &Root, cx: &mut Context<Root>) -> AnyElement {
                         )
                         .child(
                             div()
-                                .text_size(theme::Text::Body.size())
+                                .text_size(theme::Text::Small.size())
                                 .text_color(theme::text_muted())
-                                .child(
-                                    root.localized(
-                                        "{} 首歌曲，按你的听歌习惯整理",
-                                        &[featured_count],
-                                    ),
-                                ),
+                                .child(root.localized("{} 首歌曲", &[featured_count])),
                         )
                         .child(
                             div()

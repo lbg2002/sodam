@@ -12,3 +12,4 @@ Terminal=false
 Categories=AudioVideo;Audio;Music;Player;
 Keywords=music;lumina;qishui;migu;soda;sodam;
 StartupWMClass=SodaM
+SingleMainWindow=true

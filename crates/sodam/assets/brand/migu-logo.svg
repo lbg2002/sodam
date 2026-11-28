@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="miguBg" x1="24" y1="16" x2="236" y2="244" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF2970"/>
+      <stop offset="52%" stop-color="#FF4757"/>
+      <stop offset="100%" stop-color="#8C2EFF"/>
+    </linearGradient>
+    <radialGradient id="miguGlow" cx="32%" cy="22%" r="65%">
+      <stop offset="0%" stop-color="#FF99B8" stop-opacity="0.48"/>
+      <stop offset="100%" stop-color="#FF2970" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="miguNote" x1="64" y1="68" x2="196" y2="192" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FFF0F5"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#miguBg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#miguGlow)"/>
+  <!-- Decorative sound wave aura -->
+  <path d="M48 164 C66 204, 184 216, 212 162" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="10" stroke-linecap="round"/>
+  <!-- Main white stylized 'M' musical ribbon emblem -->
+  <path d="M62 178 V104 C62 84, 86 78, 98 94 L128 134 L158 94 C170 78, 194 84, 194 104 V156"
+        fill="none" stroke="url(#miguNote)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Warm gold accent note dot completing the right stem -->
+  <circle cx="194" cy="182" r="14" fill="#FFE66D"/>
+  <!-- Soft floating pearl highlight bubble -->
+  <circle cx="128" cy="70" r="9.5" fill="#FFFFFF" fill-opacity="0.92"/>
+</svg>

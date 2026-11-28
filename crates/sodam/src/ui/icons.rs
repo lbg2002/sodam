@@ -10,6 +10,7 @@ use gpui::{AssetSource, Result, SharedString};
 pub mod scene_icons;
 
 const BRAND_LOGO_SVG: &[u8] = include_bytes!("../../assets/brand/sodam-logo.svg");
+const MIGU_LOGO_SVG: &[u8] = include_bytes!("../../assets/brand/migu-logo.svg");
 
 const IMAGES: &[(&str, &[u8])] = &[
     (
@@ -52,6 +53,9 @@ macro_rules! icon_set {
             fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
                 if path == "icons/sodam-logo.svg" {
                     return Ok(Some(Cow::Borrowed(BRAND_LOGO_SVG)));
+                }
+                if path == "icons/migu-logo.svg" {
+                    return Ok(Some(Cow::Borrowed(MIGU_LOGO_SVG)));
                 }
 
                 let name = if path.starts_with("icons/") && path.ends_with(".png") {
@@ -196,6 +200,15 @@ mod tests {
             .load("icons/sodam-logo.svg")
             .expect("brand SVG asset load")
             .expect("brand SVG bytes");
+        assert!(bytes.starts_with(b"<?xml"));
+    }
+
+    #[test]
+    fn asset_source_loads_migu_brand_svg() {
+        let bytes = Assets
+            .load("icons/migu-logo.svg")
+            .expect("migu SVG asset load")
+            .expect("migu SVG bytes");
         assert!(bytes.starts_with(b"<?xml"));
     }
 

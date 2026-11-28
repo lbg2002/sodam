@@ -16,7 +16,8 @@ for path in \
   ./usr/bin/sodam \
   ./usr/share/applications/sodam.desktop \
   ./usr/share/icons/hicolor/256x256/apps/sodam.png \
-  ./usr/share/gnome-shell/extensions/sodam-panel-lyrics@lbg2002/metadata.json; do
+  ./usr/share/gnome-shell/extensions/sodam-panel-lyrics@lbg2002/metadata.json \
+  ./usr/share/gnome-shell/extensions/sodam-panel-lyrics@lbg2002/stylesheet.css; do
   dpkg-deb -c "$pkg" | awk '{print $NF}' | grep -Fx "$path" >/dev/null || {
     echo "missing package path: $path" >&2
     exit 1

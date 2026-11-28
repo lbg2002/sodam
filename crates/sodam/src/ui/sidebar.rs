@@ -63,33 +63,20 @@ fn handle_nav_click(root: &mut Root, nav: Nav, cx: &mut Context<Root>) {
 }
 
 fn provider_badge(provider: MusicProvider, size_px: f32) -> AnyElement {
-    match provider {
-        MusicProvider::Soda => div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(size_px))
-            .rounded(px(theme::radius::ROW))
-            .overflow_hidden()
-            .child(img("icons/sodam-logo.svg").size(px(size_px)))
-            .into_any_element(),
-        MusicProvider::Migu => div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .size(px(size_px))
-            .rounded(px(theme::radius::ROW))
-            .bg(theme::accent())
-            .child(
-                svg()
-                    .path(icons::path("music"))
-                    .size(px((size_px * 0.56).round()))
-                    .text_color(theme::accent_foreground()),
-            )
-            .into_any_element(),
-    }
+    let asset = match provider {
+        MusicProvider::Soda => "icons/sodam-logo.svg",
+        MusicProvider::Migu => "icons/migu-logo.svg",
+    };
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(size_px))
+        .rounded(px(theme::radius::ROW))
+        .overflow_hidden()
+        .child(img(asset).size(px(size_px)))
+        .into_any_element()
 }
 
 fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> AnyElement {
@@ -114,7 +101,8 @@ fn nav_row(nav: Nav, label: String, selected: bool, cx: &mut Context<Root>) -> A
         .rounded(px(theme::radius::ROW))
         .cursor_pointer()
         .when(selected, |this| {
-            this.font_weight(gpui::FontWeight::SEMIBOLD)
+            this.bg(theme::rgba_alpha(theme::accent(), 0.12))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
         })
         .when(!selected, |this| {
             this.hover(|style| style.bg(theme::surface_hover()).layer_scale(1.012))

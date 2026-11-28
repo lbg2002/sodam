@@ -116,16 +116,6 @@ impl ThemeKind {
         }
     }
 
-    pub fn subtitle_zh(self) -> &'static str {
-        match self {
-            Self::Dark => "墨黑 · 黛蓝 · 暗青 · 朱砂",
-            Self::Light => "青瓷绿 · 米白 · 浅灰 · 淡青",
-            Self::DanQing => "宣纸白 · 墨灰 · 松石绿 · 山水蓝",
-            Self::ZhuSha => "深棕 · 朱砂红 · 暖金 · 米色",
-            Self::ZhuYing => "竹青 · 月白 · 浅墨 · 灰绿",
-        }
-    }
-
     pub fn next(self) -> Self {
         match self {
             Self::Dark => Self::Light,
@@ -322,8 +312,6 @@ pub enum PlaybackViewMode {
 }
 
 impl PlaybackViewMode {
-    pub const ALL: [Self; 3] = [Self::Split, Self::LyricsOnly, Self::QueueOnly];
-
     pub fn from_key(key: &str) -> Self {
         match key.trim().to_ascii_lowercase().as_str() {
             "lyrics" => Self::LyricsOnly,
@@ -420,8 +408,6 @@ pub enum LyricsFontFamily {
 }
 
 impl LyricsFontFamily {
-    pub const ALL: [Self; 3] = [Self::Sans, Self::Serif, Self::Mono];
-
     pub fn from_key(key: &str) -> Self {
         match key.trim().to_ascii_lowercase().as_str() {
             "serif" | "song" => Self::Serif,
@@ -468,8 +454,6 @@ pub enum LyricsAlign {
 }
 
 impl LyricsAlign {
-    pub const ALL: [Self; 3] = [Self::Center, Self::Left, Self::Right];
-
     pub fn from_key(key: &str) -> Self {
         match key.trim().to_ascii_lowercase().as_str() {
             "left" => Self::Left,

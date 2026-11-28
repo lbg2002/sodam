@@ -134,8 +134,205 @@ fn panel_color_hex(color: gpui::Rgba) -> String {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IpcCommand {
+    Show,
+    Toggle,
+    Play,
+    Pause,
+    Next,
+    Previous,
+    Quit,
+}
+
+#[cfg(target_os = "linux")]
+struct SingleInstanceGuard {
+    path: std::path::PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for SingleInstanceGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let state_path = sodam_core::Settings::config_path().with_file_name("panel-lyrics-state");
+        let tmp = state_path.with_extension("tmp");
+        if std::fs::write(&tmp, b"{\"enabled\":false}\n").is_ok() {
+            let _ = std::fs::rename(&tmp, &state_path);
+        } else {
+            let _ = std::fs::write(&state_path, b"{\"enabled\":false}\n");
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn instance_socket_path() -> std::path::PathBuf {
+    if let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR") {
+        return std::path::PathBuf::from(runtime).join("sodam-instance.sock");
+    }
+    let user = std::env::var("USER").unwrap_or_else(|_| "user".to_string());
+    std::env::temp_dir().join(format!("sodam-instance-{user}.sock"))
+}
+
+#[cfg(target_os = "linux")]
+fn parse_ipc_arg() -> &'static str {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--ipc" {
+            if let Some(cmd) = args.next() {
+                return match cmd.trim().to_ascii_lowercase().as_str() {
+                    "toggle" => "toggle",
+                    "play" => "play",
+                    "pause" => "pause",
+                    "next" => "next",
+                    "prev" | "previous" => "prev",
+                    "quit" => "quit",
+                    _ => "show",
+                };
+            }
+        }
+    }
+    "show"
+}
+
+#[cfg(target_os = "linux")]
+enum InstanceLock {
+    Primary(
+        #[allow(dead_code)] SingleInstanceGuard,
+        std::sync::mpsc::Receiver<IpcCommand>,
+    ),
+    Bypassed,
+    ForwardedToExisting,
+}
+
+#[cfg(target_os = "linux")]
+fn acquire_single_instance() -> InstanceLock {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::net::{UnixListener, UnixStream};
+
+    if std::env::var_os("SODAM_ALLOW_MULTI").is_some() {
+        return InstanceLock::Bypassed;
+    }
+
+    let sock_path = instance_socket_path();
+    if let Ok(mut stream) = UnixStream::connect(&sock_path) {
+        let cmd = parse_ipc_arg();
+        let _ = writeln!(stream, "{cmd}");
+        let _ = stream.flush();
+        return InstanceLock::ForwardedToExisting;
+    }
+
+    let _ = std::fs::remove_file(&sock_path);
+    if let Some(parent) = sock_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let Ok(listener) = UnixListener::bind(&sock_path) else {
+        return InstanceLock::Bypassed;
+    };
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("sodam-ipc".into())
+        .spawn(move || {
+            for incoming in listener.incoming().flatten() {
+                let reader = BufReader::new(incoming);
+                for line in reader.lines().map_while(std::result::Result::ok) {
+                    let cmd = match line.trim().to_ascii_lowercase().as_str() {
+                        "toggle" => IpcCommand::Toggle,
+                        "play" => IpcCommand::Play,
+                        "pause" => IpcCommand::Pause,
+                        "next" => IpcCommand::Next,
+                        "prev" | "previous" => IpcCommand::Previous,
+                        "quit" => IpcCommand::Quit,
+                        _ => IpcCommand::Show,
+                    };
+                    if tx.send(cmd).is_err() {
+                        return;
+                    }
+                }
+            }
+        })
+        .ok();
+
+    InstanceLock::Primary(SingleInstanceGuard { path: sock_path }, rx)
+}
+
+#[cfg(target_os = "linux")]
+fn start_ipc_service(
+    rx: std::sync::mpsc::Receiver<IpcCommand>,
+    app: Entity<app::Root>,
+    cx: &mut App,
+) {
+    cx.spawn(async move |cx| loop {
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(40))
+            .await;
+        while let Ok(command) = rx.try_recv() {
+            match command {
+                IpcCommand::Show => cx.update(|cx| show_window(cx, &app)),
+                IpcCommand::Toggle => {
+                    cx.update(|cx| app.update(cx, |root, cx| root.toggle_play(cx)))
+                }
+                IpcCommand::Play => cx.update(|cx| app.update(cx, |root, cx| root.play(cx))),
+                IpcCommand::Pause => cx.update(|cx| app.update(cx, |root, cx| root.pause(cx))),
+                IpcCommand::Next => cx.update(|cx| app.update(cx, |root, cx| root.next_track(cx))),
+                IpcCommand::Previous => {
+                    cx.update(|cx| app.update(cx, |root, cx| root.prev_track(cx)))
+                }
+                IpcCommand::Quit => cx.update(|cx| {
+                    app.update(cx, |root, _cx| root.save_playback_state_now());
+                    cx.quit();
+                }),
+            }
+        }
+    })
+    .detach();
+}
+
+#[cfg(target_os = "linux")]
+fn sync_local_gnome_extension() {
+    let sys_dir =
+        std::path::PathBuf::from("/usr/share/gnome-shell/extensions/sodam-panel-lyrics@lbg2002");
+    let Some(data_local) = std::env::var_os("XDG_DATA_HOME")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .map(|home| std::path::PathBuf::from(home).join(".local/share"))
+        })
+    else {
+        return;
+    };
+    let local_dir = data_local
+        .join("gnome-shell")
+        .join("extensions")
+        .join("sodam-panel-lyrics@lbg2002");
+    let sys_meta_path = sys_dir.join("metadata.json");
+    let local_meta_path = local_dir.join("metadata.json");
+    if !sys_meta_path.exists() || !local_meta_path.exists() {
+        return;
+    }
+    let read_ver = |p: &std::path::Path| -> u64 {
+        std::fs::read_to_string(p)
+            .ok()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| v["version"].as_u64())
+            .unwrap_or(0)
+    };
+    if read_ver(&sys_meta_path) <= read_ver(&local_meta_path) {
+        return;
+    }
+    for file in ["extension.js", "stylesheet.css", "metadata.json"] {
+        let src = sys_dir.join(file);
+        if src.exists() {
+            let _ = std::fs::copy(&src, local_dir.join(file));
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
-    // GNOME Shell 扩展不能直接读取应用内存，因此用一个很小的状态文件做桥接。
+    // GNOME Shell 扩展不能直接读取应用内存，因此用一个很小的 JSON 状态文件做桥接。
     // 文件写入放在独立线程，避免任何磁盘 IO 卡住 GPUI 渲染线程。
     let state_path = sodam_core::Settings::config_path().with_file_name("panel-lyrics-state");
     let (tx, rx) = std::sync::mpsc::channel::<String>();
@@ -154,58 +351,148 @@ fn start_panel_lyrics_service(app: Entity<app::Root>, cx: &mut App) {
         })
         .ok();
 
+    let pid = std::process::id();
     cx.spawn(async move |cx| {
-        let mut last_state = String::new();
+        let mut last_key = String::new();
+        let mut last_anchor: Option<(std::time::Instant, u64, bool)> = None;
+        let mut last_playing = true;
         loop {
+            let sleep_ms = if last_playing { 250 } else { 600 };
             cx.background_executor()
-                .timer(std::time::Duration::from_millis(200))
+                .timer(std::time::Duration::from_millis(sleep_ms))
                 .await;
-            let state = cx.update(|cx| {
+            let (payload_opt, playing_now) = cx.update(|cx| {
                 let root = app.read(cx);
                 let snapshot = root.engine.snapshot();
-                let lyric = if root.lyrics_track_id == snapshot.track_id {
+                let current = root.queue.current();
+                let lyrics_ready =
+                    !snapshot.track_id.is_empty() && root.lyrics_track_id == snapshot.track_id;
+                let active_idx = if lyrics_ready {
                     root.synced_lyrics_active()
-                        .and_then(|index| root.lyrics.get(index))
-                        .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
-                        .unwrap_or_default()
                 } else {
-                    String::new()
+                    None
                 };
+                let lyric = active_idx
+                    .and_then(|index| root.lyrics.get(index))
+                    .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
+                    .unwrap_or_default();
+                let next_lyric = active_idx
+                    .and_then(|index| root.lyrics.get(index.saturating_add(1)))
+                    .map(|line| line.text.trim().replace(['\n', '\r', '\t'], " "))
+                    .unwrap_or_default();
                 let position = match root.settings.panel_lyrics_position.as_str() {
-                    "left" | "center-right" | "right" => {
+                    "left" | "center-left" | "center-right" | "right" => {
                         root.settings.panel_lyrics_position.as_str()
                     }
-                    _ => "center-left",
+                    _ => "center-replace",
+                };
+                let style = if root.settings.panel_lyrics_style == "lyrics" {
+                    "lyrics"
+                } else {
+                    "island"
                 };
 
                 // 顶栏颜色与应用当前主题/封面强调色保持一致。
                 ui::theme::set_theme(root.theme);
-                let ambient = root
-                    .queue
-                    .current()
-                    .and_then(|track| root.ambient_colors.get(&track.cover).copied());
+                let ambient =
+                    current.and_then(|track| root.ambient_colors.get(&track.cover).copied());
                 ui::theme::set_ambient_rgb(ambient);
+                let is_dark = ui::theme::current_theme().is_dark();
+                let accent = ui::theme::accent();
+                let chan = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+                let accent_rgb = [chan(accent.r), chan(accent.g), chan(accent.b)];
                 let color = match root.settings.panel_lyrics_color.as_str() {
                     "text" => panel_color_hex(ui::theme::text()),
                     "white" => "#FFFFFF".to_string(),
                     // 默认：与桌面歌词默认模式一致，跟随当前歌曲封面主题强调色。
-                    _ => panel_color_hex(ui::theme::accent()),
+                    _ => panel_color_hex(accent),
                 };
 
-                format!(
-                    "{}\n{}\n{}\n{}\n",
-                    if root.settings.panel_lyrics_enabled {
-                        "1"
-                    } else {
-                        "0"
-                    },
-                    position,
-                    lyric,
-                    color
-                )
+                let title = current
+                    .map(|track| track.title.clone())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(snapshot.title.clone());
+                let artist = current
+                    .map(|track| track.artist.clone())
+                    .unwrap_or_default();
+                let cover_path = current
+                    .and_then(|track| root.cover_of(&track.cover))
+                    .filter(|path| path.exists())
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default();
+                let provider = current
+                    .map(|track| sodam_core::MusicProvider::from_track_id(&track.id).key())
+                    .unwrap_or_else(|| root.active_provider().key());
+                let position_ms =
+                    (snapshot.interpolated_position_seconds().max(0.0) * 1000.0).round() as u64;
+                let duration_ms = (snapshot.duration_seconds.max(0.0) * 1000.0).round() as u64;
+
+                let key = serde_json::json!({
+                    "enabled": root.settings.panel_lyrics_enabled,
+                    "style": style,
+                    "position": position,
+                    "lyric": &lyric,
+                    "next_lyric": &next_lyric,
+                    "color": &color,
+                    "is_dark": is_dark,
+                    "accent_rgb": accent_rgb,
+                    "playing": snapshot.playing,
+                    "title": &title,
+                    "artist": &artist,
+                    "cover_path": &cover_path,
+                    "provider": provider,
+                    "duration_ms": duration_ms,
+                    "pid": pid,
+                })
+                .to_string();
+
+                let seeked = match last_anchor {
+                    Some((t0, p0, was_playing)) => {
+                        let elapsed = if was_playing {
+                            t0.elapsed().as_millis() as u64
+                        } else {
+                            0
+                        };
+                        let expected = p0.saturating_add(elapsed);
+                        position_ms.abs_diff(expected) > 1500
+                    }
+                    None => false,
+                };
+
+                if key != last_key || seeked {
+                    last_key = key;
+                    last_anchor = Some((std::time::Instant::now(), position_ms, snapshot.playing));
+                    let updated_at_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    let json = serde_json::json!({
+                        "enabled": root.settings.panel_lyrics_enabled,
+                        "style": style,
+                        "position": position,
+                        "lyric": lyric,
+                        "next_lyric": next_lyric,
+                        "color": color,
+                        "is_dark": is_dark,
+                        "accent_rgb": accent_rgb,
+                        "playing": snapshot.playing,
+                        "title": title,
+                        "artist": artist,
+                        "cover_path": cover_path,
+                        "position_ms": position_ms,
+                        "duration_ms": duration_ms,
+                        "updated_at_ms": updated_at_ms,
+                        "provider": provider,
+                        "pid": pid,
+                    })
+                    .to_string();
+                    (Some(json), snapshot.playing)
+                } else {
+                    (None, snapshot.playing)
+                }
             });
-            if state != last_state {
-                last_state = state.clone();
+            last_playing = playing_now;
+            if let Some(state) = payload_opt {
                 if tx.send(state).is_err() {
                     break;
                 }
@@ -408,15 +695,30 @@ fn main() {
         return;
     }
 
+    #[cfg(target_os = "linux")]
+    let (_instance_guard, ipc_rx) = match acquire_single_instance() {
+        InstanceLock::ForwardedToExisting => return,
+        InstanceLock::Primary(guard, rx) => (Some(guard), Some(rx)),
+        InstanceLock::Bypassed => (None, None),
+    };
+
+    #[cfg(target_os = "linux")]
+    std::thread::spawn(sync_local_gnome_extension);
+
     gpui_platform::application()
         .with_assets(ui::icons::Assets)
         .with_quit_mode(gpui::QuitMode::Explicit)
-        .run(|cx: &mut App| {
+        .run(move |cx: &mut App| {
             #[allow(clippy::redundant_closure)]
             let app = cx.new(|cx| app::Root::new(cx));
             let options = main_window_options(cx);
             cx.open_window(options, |_window, _cx| app.clone())
                 .expect("打开主窗口失败");
+
+            #[cfg(target_os = "linux")]
+            if let Some(rx) = ipc_rx {
+                start_ipc_service(rx, app.clone(), cx);
+            }
 
             #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
             if desktop_integration_available() {

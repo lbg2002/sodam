@@ -5805,7 +5805,7 @@ dependencies = [
 
 [[package]]
 name = "sodam"
-version = "0.1.25"
+version = "0.1.26"
 dependencies = [
  "anyhow",
  "dbus",
@@ -5826,7 +5826,7 @@ dependencies = [
 
 [[package]]
 name = "sodam-core"
-version = "0.1.25"
+version = "0.1.26"
 dependencies = [
  "anyhow",
  "dirs 6.0.0",

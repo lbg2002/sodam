@@ -21,6 +21,7 @@ ext_src="packaging/gnome-extension/$ext_uuid"
 if [[ -d "$ext_src" ]]; then
   install -Dm644 "$ext_src/metadata.json" "$stage/usr/share/gnome-shell/extensions/$ext_uuid/metadata.json"
   install -Dm644 "$ext_src/extension.js" "$stage/usr/share/gnome-shell/extensions/$ext_uuid/extension.js"
+  install -Dm644 "$ext_src/stylesheet.css" "$stage/usr/share/gnome-shell/extensions/$ext_uuid/stylesheet.css"
 fi
 mkdir -p "$stage/DEBIAN"
 cat > "$stage/DEBIAN/control" <<CONTROL

@@ -615,10 +615,25 @@ pub fn migu_login_modal(root: &Root, window: &Window, cx: &mut Context<Root>) ->
                 .justify_between()
                 .child(
                     div()
-                        .text_size(theme::Text::Title.size())
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(theme::text())
-                        .child(root.tr("登录咪咕音乐会员")),
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(theme::space::SM))
+                        .child(
+                            div()
+                                .flex_none()
+                                .size(px(28.0))
+                                .rounded(px(theme::radius::ROW))
+                                .overflow_hidden()
+                                .child(gpui::img("icons/migu-logo.svg").size(px(28.0))),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::Text::Title.size())
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(theme::text())
+                                .child(root.tr("登录咪咕音乐会员")),
+                        ),
                 )
                 .child(
                     div()

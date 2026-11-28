@@ -1000,6 +1000,11 @@ impl Language {
                 "Signed out of Migu, but saving failed: {err}"
             }
             "居中独占" => "Center Island",
+            "Liquid Shell 灵动岛联动" => "Liquid Shell Dynamic Island",
+            "向 Liquid Shell 推送实时歌词" => "Push Live Lyrics to Liquid Shell",
+            "通过 D-Bus 推送歌词与主题色，位置与外观请在 Liquid Shell 管理器调整" => {
+                "Send lyrics & accent color over D-Bus; configure layout in Liquid Shell Manager."
+            }
             _ => key,
         }
     }

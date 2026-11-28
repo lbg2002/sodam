@@ -2113,111 +2113,27 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
         ))
         .into_any_element();
 
-    let panel_mode_off = !root.settings.panel_lyrics_enabled;
-    let panel_mode_lyrics =
-        root.settings.panel_lyrics_enabled && root.settings.panel_lyrics_style == "lyrics";
-    let panel_mode_island =
-        root.settings.panel_lyrics_enabled && root.settings.panel_lyrics_style != "lyrics";
-
-    let mut panel_rows = vec![segmented_row(
-        text(root, "顶栏形态", "Top Bar Mode"),
-        "",
-        vec![
-            (
-                "panel-mode-off",
-                text(root, "关闭", "Off"),
-                panel_mode_off,
-                Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.settings.panel_lyrics_enabled = false;
-                    let _ = root.settings.save();
-                    cx.notify();
-                })),
-            ),
-            (
-                "panel-mode-lyrics",
-                text(root, "纯歌词", "Lyrics"),
-                panel_mode_lyrics,
-                Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.settings.panel_lyrics_enabled = true;
-                    root.settings.panel_lyrics_style = "lyrics".to_string();
-                    let _ = root.settings.save();
-                    cx.notify();
-                })),
-            ),
-            (
-                "panel-mode-island",
-                text(root, "灵动岛", "Dynamic Island"),
-                panel_mode_island,
-                Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                    root.settings.panel_lyrics_enabled = true;
-                    root.settings.panel_lyrics_style = "island".to_string();
-                    let _ = root.settings.save();
-                    cx.notify();
-                })),
-            ),
-        ],
+    let mut panel_rows = vec![toggle_row(
+        "panel-lyrics-enabled-toggle",
+        text(
+            root,
+            "向 Liquid Shell 推送实时歌词",
+            "Push Live Lyrics to Liquid Shell",
+        ),
+        text(
+            root,
+            "通过 D-Bus 推送歌词与主题色，位置与外观请在 Liquid Shell 管理器调整",
+            "Send lyrics & accent color over D-Bus; configure layout in Liquid Shell Manager.",
+        ),
+        root.settings.panel_lyrics_enabled,
+        cx.listener(|root, _event: &ClickEvent, _window, cx| {
+            root.settings.panel_lyrics_enabled = !root.settings.panel_lyrics_enabled;
+            let _ = root.settings.save();
+            cx.notify();
+        }),
     )];
 
     if root.settings.panel_lyrics_enabled {
-        panel_rows.push(segmented_row(
-            text(root, "显示位置", "Placement"),
-            "",
-            vec![
-                (
-                    "panel-position-center-replace",
-                    text(root, "居中独占", "Center Island"),
-                    !matches!(
-                        root.settings.panel_lyrics_position.as_str(),
-                        "left" | "center-left" | "center-right" | "right"
-                    ),
-                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.settings.panel_lyrics_position = "center-replace".to_string();
-                        let _ = root.settings.save();
-                        cx.notify();
-                    })),
-                ),
-                (
-                    "panel-position-0",
-                    text(root, "左侧", "Left"),
-                    root.settings.panel_lyrics_position == "left",
-                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.settings.panel_lyrics_position = "left".to_string();
-                        let _ = root.settings.save();
-                        cx.notify();
-                    })),
-                ),
-                (
-                    "panel-position-1",
-                    text(root, "日期左侧", "Left of Clock"),
-                    root.settings.panel_lyrics_position == "center-left",
-                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.settings.panel_lyrics_position = "center-left".to_string();
-                        let _ = root.settings.save();
-                        cx.notify();
-                    })),
-                ),
-                (
-                    "panel-position-2",
-                    text(root, "日期右侧", "Right of Clock"),
-                    root.settings.panel_lyrics_position == "center-right",
-                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.settings.panel_lyrics_position = "center-right".to_string();
-                        let _ = root.settings.save();
-                        cx.notify();
-                    })),
-                ),
-                (
-                    "panel-position-3",
-                    text(root, "右侧", "Right"),
-                    root.settings.panel_lyrics_position == "right",
-                    Box::new(cx.listener(|root, _event: &ClickEvent, _window, cx| {
-                        root.settings.panel_lyrics_position = "right".to_string();
-                        let _ = root.settings.save();
-                        cx.notify();
-                    })),
-                ),
-            ],
-        ));
         panel_rows.push(segmented_row(
             text(root, "强调色", "Accent Color"),
             "",
@@ -2378,7 +2294,11 @@ fn lyrics_view(root: &Root, viewport_w: f32, cx: &mut Context<Root>) -> AnyEleme
             ],
         ))
         .child(section_group(
-            text(root, "系统顶栏与灵动岛", "Top Bar & Dynamic Island"),
+            text(
+                root,
+                "Liquid Shell 灵动岛联动",
+                "Liquid Shell Dynamic Island",
+            ),
             panel_rows,
         ))
         .child(section_group(

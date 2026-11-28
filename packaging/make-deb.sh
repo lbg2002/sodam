@@ -16,13 +16,6 @@ install -Dm755 target/release/sodam "$stage/usr/bin/sodam"
 install -Dm644 packaging/arch/sodam.desktop "$stage/usr/share/applications/sodam.desktop"
 install -Dm644 crates/sodam/assets/brand/sodam-logo.png "$stage/usr/share/icons/hicolor/256x256/apps/sodam.png"
 install -Dm644 LICENSE "$stage/usr/share/doc/sodam/copyright"
-ext_uuid="sodam-panel-lyrics@lbg2002"
-ext_src="packaging/gnome-extension/$ext_uuid"
-if [[ -d "$ext_src" ]]; then
-  install -Dm644 "$ext_src/metadata.json" "$stage/usr/share/gnome-shell/extensions/$ext_uuid/metadata.json"
-  install -Dm644 "$ext_src/extension.js" "$stage/usr/share/gnome-shell/extensions/$ext_uuid/extension.js"
-  install -Dm644 "$ext_src/stylesheet.css" "$stage/usr/share/gnome-shell/extensions/$ext_uuid/stylesheet.css"
-fi
 mkdir -p "$stage/DEBIAN"
 cat > "$stage/DEBIAN/control" <<CONTROL
 Package: sodam
